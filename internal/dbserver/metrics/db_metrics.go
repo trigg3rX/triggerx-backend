@@ -31,10 +31,25 @@ func TrackDBOperation(operation string, table string) func(error) {
 			DatabaseOperationDuration.WithLabelValues(operation, table).Record(ctx, duration)
 		}
 
-		// Track slow queries
-		if duration > 1.0 { // Consider queries taking more than 1 second as slow
+		// Track slow queries with multiple thresholds
+		if duration > 0.1 { // 100ms
+			if DBSlowQueriesTotal != nil {
+				DBSlowQueriesTotal.WithLabelValues("100ms").Inc(ctx)
+			}
+		}
+		if duration > 0.5 { // 500ms
+			if DBSlowQueriesTotal != nil {
+				DBSlowQueriesTotal.WithLabelValues("500ms").Inc(ctx)
+			}
+		}
+		if duration > 1.0 { // 1 second
 			if DBSlowQueriesTotal != nil {
 				DBSlowQueriesTotal.WithLabelValues("1s").Inc(ctx)
+			}
+		}
+		if duration > 5.0 { // 5 seconds - very slow
+			if DBSlowQueriesTotal != nil {
+				DBSlowQueriesTotal.WithLabelValues("5s").Inc(ctx)
 			}
 		}
 	}
@@ -46,20 +61,52 @@ func TrackDBError(err error) {
 		return
 	}
 
-	errorType := "unknown"
-	switch {
-	case err == gocql.ErrTimeoutNoResponse:
-		errorType = "timeout"
-	case err == gocql.ErrConnectionClosed:
-		errorType = "connection"
-	case strings.Contains(err.Error(), "query"):
-		errorType = "query"
-	case strings.Contains(err.Error(), "constraint"):
-		errorType = "constraint"
-	}
+	errorType := classifyDBError(err)
 
 	if DatabaseErrorsTotal != nil {
 		DatabaseErrorsTotal.WithLabelValues(errorType).Inc(context.Background())
+	}
+}
+
+// classifyDBError classifies a database error into a category
+func classifyDBError(err error) string {
+	if err == nil {
+		return "none"
+	}
+
+	errStr := strings.ToLower(err.Error())
+
+	switch {
+	case err == gocql.ErrTimeoutNoResponse:
+		return "timeout"
+	case err == gocql.ErrConnectionClosed:
+		return "connection_closed"
+	case err == gocql.ErrNoConnections:
+		return "no_connections"
+	case err == gocql.ErrNotFound:
+		return "not_found"
+	case err == gocql.ErrUnavailable:
+		return "unavailable"
+	case err == gocql.ErrTooManyTimeouts:
+		return "too_many_timeouts"
+	case err == gocql.ErrSessionClosed:
+		return "session_closed"
+	case strings.Contains(errStr, "timeout"):
+		return "timeout"
+	case strings.Contains(errStr, "connection"):
+		return "connection"
+	case strings.Contains(errStr, "constraint"):
+		return "constraint"
+	case strings.Contains(errStr, "syntax"):
+		return "syntax"
+	case strings.Contains(errStr, "unauthorized"):
+		return "unauthorized"
+	case strings.Contains(errStr, "invalid"):
+		return "invalid"
+	case strings.Contains(errStr, "already exists"):
+		return "already_exists"
+	default:
+		return "unknown"
 	}
 }
 
@@ -67,7 +114,7 @@ func TrackDBError(err error) {
 func TrackRetry(endpoint string, attempt int, success bool) {
 	ctx := context.Background()
 	if RetryAttemptsTotal != nil {
-		RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprint(rune(attempt))).Inc(ctx)
+		RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprintf("%d", attempt)).Inc(ctx)
 	}
 	if success {
 		if RetrySuccessesTotal != nil {

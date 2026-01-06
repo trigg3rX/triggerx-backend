@@ -24,7 +24,7 @@ var (
 
 	// Performance Metrics
 	tasksPerMinute       observability.Gauge
-	tasksCreatedTotal    observability.Gauge
+	tasksInCurrentBatch  observability.Gauge
 	tasksDispatchedTotal *observability.CounterVec
 	taskBatchSize        observability.Gauge
 
@@ -87,9 +87,9 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		observability.WithDescription("Number of jobs processed per batch"),
 	)
 
-	tasksCreatedTotal = obsMetrics.Gauge(
-		"triggerx.time_scheduler.tasks_created_total",
-		observability.WithDescription("Total number of tasks created"),
+	tasksInCurrentBatch = obsMetrics.Gauge(
+		"triggerx.time_scheduler.tasks_in_current_batch",
+		observability.WithDescription("Number of tasks found in the current polling batch"),
 	)
 
 	tasksDispatchedTotal = observability.NewCounterVec(
@@ -257,10 +257,10 @@ func TrackDBConnectionError() {
 	TrackDBRequestError("connection", "database")
 }
 
-// UpdateTasksCreated updates the total number of tasks created
+// UpdateTasksCreated updates the number of tasks in the current batch
 func UpdateTasksCreated(count float64) {
-	if tasksCreatedTotal != nil {
-		tasksCreatedTotal.Set(ctx, count)
+	if tasksInCurrentBatch != nil {
+		tasksInCurrentBatch.Set(ctx, count)
 	}
 }
 

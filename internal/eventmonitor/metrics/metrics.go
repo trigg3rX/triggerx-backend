@@ -19,16 +19,28 @@ var (
 	requestCountsLock sync.Mutex
 	lastRPSUpdate     = time.Now()
 
-	// Metrics instances
-	uptimeSeconds    observability.Gauge
-	memoryUsageBytes observability.Gauge
-	cpuUsagePercent  observability.Gauge
-	goroutinesActive observability.Gauge
+	// System Metrics
+	uptimeSeconds     observability.Gauge
+	memoryUsageBytes  observability.Gauge
+	cpuUsagePercent   observability.Gauge
+	goroutinesActive  observability.Gauge
 	gcDurationSeconds observability.Gauge
 
+	// HTTP Metrics
 	httpRequestsTotal   *observability.CounterVec
 	httpRequestDuration *observability.HistogramVec
 	requestsPerSecond   *observability.GaugeVec
+
+	// Event Monitoring Core Metrics
+	activeWorkersTotal     observability.Gauge
+	blocksPolledTotal      *observability.CounterVec
+	eventsDetectedTotal    *observability.CounterVec
+	eventsProcessedTotal   *observability.CounterVec
+	blockLag               *observability.GaugeVec
+	pollDurationSeconds    *observability.HistogramVec
+	pollErrorsTotal        *observability.CounterVec
+	subscribersTotal       observability.Gauge
+	notificationsSentTotal *observability.CounterVec
 )
 
 // StartMetricsCollection starts collecting metrics
@@ -171,6 +183,67 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		observability.WithDescription("Garbage collection time"),
 		observability.WithUnit("s"),
 	)
+
+	// Event Monitoring Core Metrics
+	activeWorkersTotal = obsMetrics.Gauge(
+		"triggerx.eventmonitor_service.active_workers_total",
+		observability.WithDescription("Number of active event polling workers"),
+	)
+
+	blocksPolledTotal = observability.NewCounterVec(
+		obsMetrics,
+		"triggerx.eventmonitor_service.blocks_polled_total",
+		[]string{"chain_id"},
+		observability.WithDescription("Total number of blocks polled for events"),
+	)
+
+	eventsDetectedTotal = observability.NewCounterVec(
+		obsMetrics,
+		"triggerx.eventmonitor_service.events_detected_total",
+		[]string{"chain_id", "event_type"},
+		observability.WithDescription("Total number of blockchain events detected"),
+	)
+
+	eventsProcessedTotal = observability.NewCounterVec(
+		obsMetrics,
+		"triggerx.eventmonitor_service.events_processed_total",
+		[]string{"chain_id", "status"},
+		observability.WithDescription("Total number of events processed (success/error)"),
+	)
+
+	blockLag = observability.NewGaugeVec(
+		obsMetrics,
+		"triggerx.eventmonitor_service.block_lag",
+		[]string{"chain_id"},
+		observability.WithDescription("Number of blocks behind the chain head"),
+	)
+
+	pollDurationSeconds = observability.NewHistogramVec(
+		obsMetrics,
+		"triggerx.eventmonitor_service.poll_duration_seconds",
+		[]string{"chain_id"},
+		observability.WithDescription("Duration of event polling operations"),
+		observability.WithUnit("s"),
+	)
+
+	pollErrorsTotal = observability.NewCounterVec(
+		obsMetrics,
+		"triggerx.eventmonitor_service.poll_errors_total",
+		[]string{"chain_id", "error_type"},
+		observability.WithDescription("Total number of polling errors"),
+	)
+
+	subscribersTotal = obsMetrics.Gauge(
+		"triggerx.eventmonitor_service.subscribers_total",
+		observability.WithDescription("Total number of event subscribers"),
+	)
+
+	notificationsSentTotal = observability.NewCounterVec(
+		obsMetrics,
+		"triggerx.eventmonitor_service.notifications_sent_total",
+		[]string{"chain_id", "status"},
+		observability.WithDescription("Total number of event notifications sent"),
+	)
 }
 
 // RecordHTTPRequest records HTTP request metrics
@@ -195,3 +268,73 @@ func RecordRequestsPerSecond(ctx context.Context, endpoint string, rps float64) 
 	}
 }
 
+// UpdateActiveWorkers updates the count of active event polling workers
+func UpdateActiveWorkers(count int) {
+	if activeWorkersTotal != nil {
+		activeWorkersTotal.Set(ctx, float64(count))
+	}
+}
+
+// TrackBlocksPolled tracks blocks polled for a chain
+func TrackBlocksPolled(chainID string, count int) {
+	if blocksPolledTotal != nil {
+		blocksPolledTotal.WithLabelValues(chainID).Add(ctx, float64(count))
+	}
+}
+
+// TrackEventDetected tracks a detected blockchain event
+func TrackEventDetected(chainID, eventType string) {
+	if eventsDetectedTotal != nil {
+		eventsDetectedTotal.WithLabelValues(chainID, eventType).Inc(ctx)
+	}
+}
+
+// TrackEventProcessed tracks a processed event with status
+func TrackEventProcessed(chainID string, success bool) {
+	status := "success"
+	if !success {
+		status = "error"
+	}
+	if eventsProcessedTotal != nil {
+		eventsProcessedTotal.WithLabelValues(chainID, status).Inc(ctx)
+	}
+}
+
+// UpdateBlockLag updates the block lag for a chain
+func UpdateBlockLag(chainID string, lag uint64) {
+	if blockLag != nil {
+		blockLag.WithLabelValues(chainID).Set(ctx, float64(lag))
+	}
+}
+
+// TrackPollDuration tracks the duration of a poll operation
+func TrackPollDuration(chainID string, duration time.Duration) {
+	if pollDurationSeconds != nil {
+		pollDurationSeconds.WithLabelValues(chainID).Record(ctx, duration.Seconds())
+	}
+}
+
+// TrackPollError tracks a polling error
+func TrackPollError(chainID, errorType string) {
+	if pollErrorsTotal != nil {
+		pollErrorsTotal.WithLabelValues(chainID, errorType).Inc(ctx)
+	}
+}
+
+// UpdateSubscribersTotal updates the total number of subscribers
+func UpdateSubscribersTotal(count int) {
+	if subscribersTotal != nil {
+		subscribersTotal.Set(ctx, float64(count))
+	}
+}
+
+// TrackNotificationSent tracks a sent notification
+func TrackNotificationSent(chainID string, success bool) {
+	status := "success"
+	if !success {
+		status = "error"
+	}
+	if notificationsSentTotal != nil {
+		notificationsSentTotal.WithLabelValues(chainID, status).Inc(ctx)
+	}
+}

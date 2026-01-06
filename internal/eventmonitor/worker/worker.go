@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
@@ -101,10 +102,18 @@ func (w *Worker) Stop() {
 
 // pollEvents polls for new events
 func (w *Worker) pollEvents() error {
+	pollStart := time.Now()
+
 	// Get current block number
 	currentBlock, err := w.getCurrentBlock()
 	if err != nil {
+		metrics.TrackPollError(w.entry.ChainID, "get_block_number")
 		return fmt.Errorf("failed to get current block number: %w", err)
+	}
+
+	// Track block lag
+	if currentBlock > w.entry.LastBlock {
+		metrics.UpdateBlockLag(w.entry.ChainID, currentBlock-w.entry.LastBlock)
 	}
 
 	// Check if there are new blocks to process
@@ -115,6 +124,7 @@ func (w *Worker) pollEvents() error {
 	// Query logs in chunks
 	maxBlockRange := config.GetMaxBlockRange()
 	fromBlock := w.entry.LastBlock + 1
+	blocksPolled := uint64(0)
 
 	for fromBlock <= currentBlock {
 		toBlock := fromBlock + maxBlockRange - 1
@@ -125,6 +135,7 @@ func (w *Worker) pollEvents() error {
 		// Query logs for this range
 		logs, err := w.queryLogs(fromBlock, toBlock)
 		if err != nil {
+			metrics.TrackPollError(w.entry.ChainID, "query_logs")
 			w.logger.Error(w.ctx, "Failed to query logs",
 				observability.String("key", w.entry.Key),
 				observability.Uint64("from_block", fromBlock),
@@ -135,14 +146,25 @@ func (w *Worker) pollEvents() error {
 			continue
 		}
 
+		// Track blocks polled
+		blocksPolled += toBlock - fromBlock + 1
+
+		// Track events detected
+		for range logs {
+			metrics.TrackEventDetected(w.entry.ChainID, w.entry.EventSig.Hex())
+		}
+
 		// Process logs and notify subscribers
 		for _, log := range logs {
 			if err := w.processLog(log); err != nil {
+				metrics.TrackEventProcessed(w.entry.ChainID, false)
 				w.logger.Error(w.ctx, "Failed to process log",
 					observability.String("key", w.entry.Key),
 					observability.String("tx_hash", log.TransactionHash),
 					observability.String("log_index", log.LogIndex),
 					observability.Error(err))
+			} else {
+				metrics.TrackEventProcessed(w.entry.ChainID, true)
 			}
 		}
 
@@ -150,6 +172,10 @@ func (w *Worker) pollEvents() error {
 		w.entry.LastBlock = toBlock
 		fromBlock = toBlock + 1
 	}
+
+	// Track metrics
+	metrics.TrackBlocksPolled(w.entry.ChainID, int(blocksPolled))
+	metrics.TrackPollDuration(w.entry.ChainID, time.Since(pollStart))
 
 	return nil
 }

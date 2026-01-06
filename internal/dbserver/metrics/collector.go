@@ -84,5 +84,6 @@ func (c *Collector) Handler() http.Handler {
 // Start starts metrics collection
 func (c *Collector) Start() {
 	StartSystemMetricsCollection()
+	StartRequestMetricsCollection()
 	TrackDBConnections()
 }
