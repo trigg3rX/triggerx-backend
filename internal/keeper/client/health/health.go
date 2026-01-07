@@ -54,6 +54,7 @@ type Config struct {
 	KeeperAddress    string
 	PeerID           string
 	Version          string
+	Network          string
 	RequestTimeout   time.Duration
 }
 
@@ -140,6 +141,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		Signature:        signature,
 		PeerID:           c.config.PeerID,
 		IsImua:           config.IsImua(),
+		Network:          c.config.Network,
 	}
 
 	// c.logger.Info(ctx, "Payload", observability.Any("payload", payload))

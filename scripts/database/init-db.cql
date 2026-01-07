@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     registered boolean,
     online boolean,
     version text,
+    network text,
     no_executed_tasks bigint,
     no_attested_tasks bigint,
     chat_id bigint,

@@ -239,11 +239,17 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 			attribute.Int64("keeper.id", keeperID),
 		),
 	)
+	// Default network to "mainnet" if not provided (backward compatibility)
+	network := keeperHealth.Network
+	if network == "" {
+		network = "mainnet"
+	}
+
 	err = dm.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
-		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? 
+		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ?, network = ? 
 		WHERE keeper_id = ?`,
-		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec()
+		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, network, keeperID).Exec()
 	updateActiveSpan.End()
 	metrics.RecordDBOperationDuration(updateActiveCtx, "update", time.Since(updateActiveStart))
 	if err != nil {

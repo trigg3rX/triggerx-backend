@@ -2,6 +2,8 @@
 # This file contains non-sensitive configuration settings
 # Sensitive values (API keys, passwords, etc.) are loaded from .env
 
+network: "mainnet"                  # Network: mainnet, imua, or sepolia
+
 api:
   read_timeout: "10s"              # API server read timeout
   write_timeout: "10s"              # API server write timeout

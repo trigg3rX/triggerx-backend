@@ -79,6 +79,7 @@ func main() {
 		KeeperAddress:    config.GetKeeperAddress(),
 		PeerID:           config.GetPeerID(),
 		Version:          config.GetVersion(),
+		Network:          config.GetNetwork(),
 		RequestTimeout:   config.GetHealthRequestTimeout(),
 	}
 	healthClient, err := health.NewClient(logger, tracer, healthCfg)
