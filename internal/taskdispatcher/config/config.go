@@ -21,6 +21,9 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
+	// Service ID for OpenTelemetry
+	serviceID string
+
 	// Health RPC URL
 	healthRPCUrl string
 	// Aggregator RPC URL
@@ -86,6 +89,7 @@ func Init(configPath string) error {
 		httpPort:              env.GetEnvString("TASK_DISPATCHER_HTTP_PORT", "9007"),
 		grpcPort:              env.GetEnvString("TASK_DISPATCHER_GRPC_PORT", "9017"),
 		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
+		serviceID:             env.GetEnvString("TASK_DISPATCHER_SERVICE_ID", "1"),
 		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "localhost:9014"),
 		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "localhost:9001"),
 		testAggregatorRPCUrl:  env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "localhost:9001"),
@@ -167,6 +171,10 @@ func GetGRPCPort() string {
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
+}
+
+func GetServiceID() string {
+	return cfg.serviceID
 }
 
 func GetHealthRPCUrl() string {

@@ -23,6 +23,9 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
+	// Service ID for OpenTelemetry
+	serviceID string
+
 	// Bot token for Telegram notifications
 	botToken string
 	// Email user for notifications
@@ -114,6 +117,7 @@ func Init(configPath string) error {
 		grpcPort:                 env.GetEnvString("HEALTH_GRPC_PORT", "9014"),
 		dbConnection:             env.GetDatabaseConfig(),
 		otelExporterEndpoint:     env.GetOTELExporterEndpoint(),
+		serviceID:                env.GetEnvString("HEALTH_SERVICE_ID", "1"),
 		botToken:                 env.GetEnvString("BOT_TOKEN", ""),
 		emailUser:                env.GetEnvString("EMAIL_USER", ""),
 		emailPassword:            env.GetEnvString("EMAIL_PASS", ""),
@@ -212,6 +216,10 @@ func GetGRPCPort() string {
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
+}
+
+func GetServiceID() string {
+	return cfg.serviceID
 }
 
 func GetDatabaseHostAddress() string {

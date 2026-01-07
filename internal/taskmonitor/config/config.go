@@ -24,6 +24,9 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
+	// Service ID for OpenTelemetry
+	serviceID string
+
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
 	upstashRedisRestToken string
@@ -104,6 +107,7 @@ func Init(configPath string) error {
 		grpcPort:              env.GetEnvString("TASK_MONITOR_GRPC_PORT", "9013"),
 		dbConnection:          env.GetDatabaseConfig(),
 		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
+		serviceID:             env.GetEnvString("TASK_MONITOR_SERVICE_ID", "1"),
 		upstashRedisUrl:       env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken: env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		pinataJWT:             env.GetEnvString("PINATA_JWT", ""),
@@ -180,6 +184,10 @@ func GetGRPCPort() string {
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
+}
+
+func GetServiceID() string {
+	return cfg.serviceID
 }
 
 func GetDatabaseHostAddress() string {

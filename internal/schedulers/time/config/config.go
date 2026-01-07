@@ -23,11 +23,11 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
+	// Service ID for OpenTelemetry
+	serviceID string
+
 	// Task Dispatcher RPC URL
 	taskDispatcherRPCUrl string
-
-	// Scheduler ID
-	timeSchedulerID int
 
 	// YAML-loaded settings	
 	polling PollingConfig
@@ -72,7 +72,7 @@ func Init(configPath string) error {
 		dbConnection:         env.GetDatabaseConfig(),
 		otelExporterEndpoint: env.GetOTELExporterEndpoint(),
 		taskDispatcherRPCUrl: env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
-		timeSchedulerID:      env.GetEnvInt("TIME_SCHEDULER_ID", 1234),
+		serviceID:            env.GetEnvString("TIME_SCHEDULER_SERVICE_ID", "1"),
 		polling:              yamlConfig.Polling,
 		metrics:              yamlConfig.Metrics,
 		shutdown:             yamlConfig.Shutdown,
@@ -103,9 +103,6 @@ func validateConfig() error {
 	if !env.IsValidHostPort(cfg.taskDispatcherRPCUrl) {
 		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
 	}
-	if !env.IsValidInt(cfg.timeSchedulerID) {
-		return fmt.Errorf("invalid time scheduler ID: %d", cfg.timeSchedulerID)
-	}
 	return nil
 }
 
@@ -127,6 +124,10 @@ func GetGRPCPort() string {
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
+}
+
+func GetServiceID() string {
+	return cfg.serviceID
 }
 
 func GetDatabaseHostAddress() string {
@@ -167,10 +168,6 @@ func GetDatabaseSSLInsecureSkipVerify() bool {
 
 func GetTaskDispatcherRPCUrl() string {
 	return cfg.taskDispatcherRPCUrl
-}
-
-func GetSchedulerID() int {
-	return cfg.timeSchedulerID
 }
 
 func GetPollingInterval() time.Duration {

@@ -24,12 +24,12 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
+	// Service ID for OpenTelemetry
+	serviceID string
+
 	// Service RPC URL
 	taskDispatcherRPCUrl string
 	eventMonitorRPCUrl   string
-
-	// Scheduler ID for consumer groups
-	conditionSchedulerID int
 
 	// YAML-loaded settings
 	workers WorkersConfig
@@ -73,7 +73,7 @@ func Init(configPath string) error {
 		otelExporterEndpoint:      env.GetOTELExporterEndpoint(),
 		taskDispatcherRPCUrl:      env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
 		eventMonitorRPCUrl:        env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9018"),
-		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 1234),
+		serviceID:                 env.GetEnvString("CONDITION_SCHEDULER_SERVICE_ID", "1"),
 		workers:                   yamlConfig.Workers,
 		databaseOperations:        yamlConfig.DatabaseOperations,
 		metrics:                   yamlConfig.Metrics,
@@ -110,9 +110,6 @@ func validateConfig() error {
 	}
 	if !env.IsValidHostPort(cfg.eventMonitorRPCUrl) {
 		return fmt.Errorf("invalid event monitor RPC URL: %s", cfg.eventMonitorRPCUrl)
-	}
-	if !env.IsValidInt(cfg.conditionSchedulerID) {
-		return fmt.Errorf("invalid condition scheduler ID: %d", cfg.conditionSchedulerID)
 	}
 	return nil
 }
@@ -193,8 +190,8 @@ func GetEventMonitorRPCUrl() string {
 	return cfg.eventMonitorRPCUrl
 }
 
-func GetSchedulerID() int {
-	return cfg.conditionSchedulerID
+func GetServiceID() string {
+	return cfg.serviceID
 }
 
 func GetMaxWorkers() int {

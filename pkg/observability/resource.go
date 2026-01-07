@@ -14,7 +14,7 @@ func NewResource(cfg Config) (*resource.Resource, error) {
 		// Required service attributes
 		semconv.ServiceName(string(cfg.ServiceName)),
 		semconv.ServiceVersion(cfg.ServiceVersion),
-		semconv.ServiceInstanceID(cfg.InstanceID),
+		semconv.ServiceInstanceID(cfg.ServiceID),
 	}
 
 	// Create resource with default detection (host, OS, etc.)
