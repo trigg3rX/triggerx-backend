@@ -165,33 +165,51 @@ func (c *ipfsClient) Fetch(ctx context.Context, cid string) (types.IPFSData, err
 		return types.IPFSData{}, fmt.Errorf("error fetching IPFS content: CID cannot be empty")
 	}
 
-	ipfsURL := "https://" + c.config.PinataHost + "/ipfs/" + cid
-
-	resp, err := c.httpClient.Get(ctx, ipfsURL)
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("error fetching IPFS content: %v", err)
+	tryHosts := []string{
+		c.config.PinataHost,
+		"ipfs.io",
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
+
+	var lastErr error
+	for _, host := range tryHosts {
+		ipfsURL := "https://" + host + "/ipfs/" + cid
+		resp, err := c.httpClient.Get(ctx, ipfsURL)
+		if err != nil {
+			lastErr = fmt.Errorf("error fetching IPFS content from host %s: %v", host, err)
+			continue
 		}
-	}()
 
-	if resp.StatusCode != http.StatusOK {
-		return types.IPFSData{}, fmt.Errorf("error fetching IPFS content: http error: status code %d", resp.StatusCode)
+		// Check status code before reading body
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("error fetching IPFS content from host %s: http error: status code %d", host, resp.StatusCode)
+			continue
+		}
+
+		// Read response body
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("error fetching IPFS content from host %s: failed to read response body: %v", host, err)
+			continue
+		}
+
+		// Parse JSON response
+		var ipfsData types.IPFSData
+		if err := json.Unmarshal(body, &ipfsData); err != nil {
+			lastErr = fmt.Errorf("error fetching IPFS content from host %s: failed to unmarshal IPFS data: %v", host, err)
+			continue
+		}
+
+		// Success - return immediately
+		return ipfsData, nil
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("error fetching IPFS content: failed to read response body: %v", err)
+	// All hosts failed
+	if lastErr != nil {
+		return types.IPFSData{}, lastErr
 	}
-
-	var ipfsData types.IPFSData
-	if err := json.Unmarshal(body, &ipfsData); err != nil {
-		return types.IPFSData{}, fmt.Errorf("error fetching IPFS content: failed to unmarshal IPFS data: %v", err)
-	}
-
-	return ipfsData, nil
+	return types.IPFSData{}, fmt.Errorf("error fetching IPFS content: unknown error")
 }
 
 // Delete file by ID using Pinata v3 API
