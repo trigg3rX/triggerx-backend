@@ -465,7 +465,7 @@ func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.Keep
 // GetKeeperUptimes retrieves uptime for all keepers from the database
 func (dm *DatabaseManager) GetKeeperUptimes(ctx context.Context) (map[string]int64, error) {
 	// Start a span for the database query operation
-	ctx, span := dm.tracer.Start(ctx, "db.get_keeper_uptimes",
+	_, span := dm.tracer.Start(ctx, "db.get_keeper_uptimes",
 		observability.WithSpanKind(trace.SpanKindClient),
 		observability.WithAttributes(
 			attribute.String("db.system", "cassandra"),

@@ -194,6 +194,10 @@ func GetServiceID() string {
 	return cfg.serviceID
 }
 
+func GetSchedulerID() string {
+	return cfg.serviceID
+}
+
 func GetMaxWorkers() int {
 	return cfg.workers.MaxWorkers
 }

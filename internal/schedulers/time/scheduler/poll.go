@@ -20,13 +20,13 @@ import (
 func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 	// Create trace with format "time-{scheduler_id}-{timestamp}"
 	// This trace will be propagated through task creation and gRPC calls
-	traceName := fmt.Sprintf("time-%d-%d", s.schedulerID, time.Now().Unix())
+	traceName := fmt.Sprintf("time-%s-%d", s.schedulerID, time.Now().Unix())
 
 	// Create root span for polling cycle BEFORE polling DB
 	ctx, pollSpan := s.tracer.Start(ctx, traceName,
 		observability.WithSpanKind(trace.SpanKindProducer),
 		observability.WithAttributes(
-			attribute.Int("scheduler.id", s.schedulerID),
+			attribute.String("scheduler.id", s.schedulerID),
 			attribute.String("scheduler.type", "time"),
 			attribute.String("poll.look_ahead", s.pollingLookAhead.String()),
 			attribute.String("trace.name", traceName),

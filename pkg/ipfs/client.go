@@ -181,14 +181,20 @@ func (c *ipfsClient) Fetch(ctx context.Context, cid string) (types.IPFSData, err
 
 		// Check status code before reading body
 		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("error fetching IPFS content from host %s: http error: status code %d", host, resp.StatusCode)
 			continue
 		}
 
 		// Read response body
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			// Log close error but don't fail if read was successful
+			if err == nil {
+				lastErr = fmt.Errorf("error closing response body from host %s: %v", host, closeErr)
+				continue
+			}
+		}
 		if err != nil {
 			lastErr = fmt.Errorf("error fetching IPFS content from host %s: failed to read response body: %v", host, err)
 			continue

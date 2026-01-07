@@ -95,14 +95,14 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 		attribute.Bool("task.is_mainnet", isMainnet),
 		attribute.Bool("task.is_imua", isImua),
 		attribute.Int("task.count", taskCount),
-		attribute.Int("scheduler.id", req.SendTaskDataToKeeper.SchedulerID),
+		attribute.String("scheduler.id", req.SendTaskDataToKeeper.SchedulerID),
 		attribute.String("source", req.Source),
 	)
 
 	d.logger.Info(ctx, "Receiving task from scheduler",
 		observability.Int64("task_ids", req.SendTaskDataToKeeper.TaskID[0]),
 		observability.Int("task_count", taskCount),
-		observability.Int("scheduler_id", req.SendTaskDataToKeeper.SchedulerID),
+		observability.String("scheduler_id", req.SendTaskDataToKeeper.SchedulerID),
 		observability.String("source", req.Source))
 
 	// Use dynamic performer selection instead of hardcoded selection

@@ -112,7 +112,7 @@ type SendTaskDataToKeeper struct {
 	PerformerData    PerformerData     `json:"performer_data"`
 	TargetData       []TaskTargetData  `json:"target_data"`
 	TriggerData      []TaskTriggerData `json:"trigger_data"`
-	SchedulerID      int               `json:"scheduler_id"`
+	SchedulerID      string            `json:"scheduler_id"`
 	ManagerSignature string            `json:"manager_signature"`
 }
 

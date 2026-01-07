@@ -130,6 +130,10 @@ func GetServiceID() string {
 	return cfg.serviceID
 }
 
+func GetSchedulerID() string {
+	return cfg.serviceID
+}
+
 func GetDatabaseHostAddress() string {
 	return cfg.dbConnection.HostAddress
 }

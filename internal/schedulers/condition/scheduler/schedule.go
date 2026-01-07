@@ -21,13 +21,13 @@ import (
 // ScheduleJob creates and starts a new condition worker for monitoring
 func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *types.ScheduleConditionJobData) error {
 	// Create trace with format "condition-{scheduler_id}-{timestamp}"
-	traceName := fmt.Sprintf("condition-%d-%d", s.schedulerID, time.Now().Unix())
+	traceName := fmt.Sprintf("condition-%s-%d", s.schedulerID, time.Now().Unix())
 
 	// Create root span for scheduling operation
 	ctx, scheduleSpan := s.tracer.Start(ctx, traceName,
 		observability.WithSpanKind(trace.SpanKindProducer),
 		observability.WithAttributes(
-			attribute.Int("scheduler.id", s.schedulerID),
+			attribute.String("scheduler.id", s.schedulerID),
 			attribute.String("scheduler.type", "condition"),
 			attribute.String("job.id", jobData.JobID.String()),
 			attribute.Int("task_definition_id", jobData.TaskDefinitionID),
@@ -309,13 +309,13 @@ func (s *ConditionBasedScheduler) UnregisterEventJob(ctx context.Context, jobID 
 // UnscheduleJob stops and removes a condition worker
 func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.Int) error {
 	// Create trace with format "condition-{scheduler_id}-{timestamp}"
-	traceName := fmt.Sprintf("condition-%d-%d", s.schedulerID, time.Now().Unix())
+	traceName := fmt.Sprintf("condition-%s-%d", s.schedulerID, time.Now().Unix())
 
 	// Create root span for unscheduling operation
 	ctx, unscheduleSpan := s.tracer.Start(ctx, traceName,
 		observability.WithSpanKind(trace.SpanKindProducer),
 		observability.WithAttributes(
-			attribute.Int("scheduler.id", s.schedulerID),
+			attribute.String("scheduler.id", s.schedulerID),
 			attribute.String("scheduler.type", "condition"),
 			attribute.String("job.id", jobID.String()),
 			attribute.String("trace.name", traceName),
