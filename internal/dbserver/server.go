@@ -46,16 +46,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	// Add tracing middleware before all others
-	// This middleware requires X-Trace-ID header and rejects requests without it
-	router.Use(middleware.TraceMiddleware(tracer))
-
-	// Apply middleware in the correct order
-	router.Use(middleware.RecoveryMiddleware(logger))           // First, to catch panics
-	router.Use(middleware.TimeoutMiddleware(100 * time.Second)) // Set appropriate timeout
-	router.Use(middleware.MetricsMiddleware())                  // Track HTTP metrics
-
-	// Configure CORS
+	// Configure CORS - MUST be first middleware to handle preflight OPTIONS requests
 	router.Use(func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 		if origin != "" {
@@ -64,7 +55,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key, ngrok-skip-browser-warning")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key, X-Trace-ID, ngrok-skip-browser-warning")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
 
 		if c.Request.Method == "OPTIONS" {
@@ -74,6 +65,14 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 
 		c.Next()
 	})
+
+	// Add tracing middleware after CORS
+	router.Use(middleware.TraceMiddleware(tracer))
+
+	// Apply other middleware in the correct order
+	router.Use(middleware.RecoveryMiddleware(logger))           // To catch panics
+	router.Use(middleware.TimeoutMiddleware(100 * time.Second)) // Set appropriate timeout
+	router.Use(middleware.MetricsMiddleware())                  // Track HTTP metrics
 
 	// Add retry middleware with custom configuration
 	retryConfig := &middleware.RetryConfig{
