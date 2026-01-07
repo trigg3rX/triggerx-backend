@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (sm *StateManager) startCleanupRoutine(ctx context.Context) {
@@ -46,5 +47,15 @@ func (sm *StateManager) checkInactiveKeepers(ctx context.Context) {
 				observability.String("keeper", address),
 			)
 		}
+	}
+
+	// Update keeper counts metrics after marking keepers as inactive
+	if len(inactiveKeepers) > 0 {
+		total, active := sm.GetKeeperCount(ctx)
+		metrics.UpdateKeeperCounts(ctx, total, active)
+
+		// Update keepers online by version metric
+		keepersByVersion := sm.GetKeepersByVersion(ctx)
+		metrics.UpdateKeepersOnlineByVersion(ctx, keepersByVersion)
 	}
 }

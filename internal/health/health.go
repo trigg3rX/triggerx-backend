@@ -116,9 +116,6 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		keeperHealth.Version = "0.1.0"
 	}
 
-	// Record check-in by version metric
-	metrics.RecordKeeperCheckIn(ctx, keeperHealth.Version)
-
 	// Verify signature for all versions
 	ok, _ := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 	if !ok {
@@ -151,6 +148,14 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
 		return
 	}
+
+	// Update keeper counts metrics after successful check-in
+	total, active := h.stateManager.GetKeeperCount(ctx)
+	metrics.UpdateKeeperCounts(ctx, total, active)
+
+	// Update keepers online by version metric
+	keepersByVersion := h.stateManager.GetKeepersByVersion(ctx)
+	metrics.UpdateKeepersOnlineByVersion(ctx, keepersByVersion)
 
 	h.logger.Debug(ctx, "CheckIn Successful",
 		observability.String("keeper", keeperHealth.KeeperAddress),
@@ -240,25 +245,21 @@ func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 	// Update keeper metrics
 	metrics.UpdateKeeperCounts(ctx, total, active)
 
-	// Update keeper uptime metrics for each keeper
-	now := time.Now().UTC()
-	var maxUptime float64
-	var mostActiveKeeper string
-	for _, keeper := range detailedInfo {
-		if keeper.IsActive && !keeper.LastCheckedIn.IsZero() {
-			// Calculate uptime from last check-in (for active keepers)
-			uptime := now.Sub(keeper.LastCheckedIn).Seconds()
-			metrics.UpdateKeeperUptime(ctx, keeper.KeeperAddress, uptime)
-			if uptime > maxUptime {
-				maxUptime = uptime
-				mostActiveKeeper = keeper.KeeperAddress
+	// Get keeper uptimes from database and update metrics
+	// This uses the cumulative uptime stored in the database, which is more accurate
+	// than calculating from last check-in time
+	uptimes, err := h.stateManager.GetKeeperUptimes(ctx)
+	if err != nil {
+		h.logger.Warn(ctx, "Failed to get keeper uptimes from database",
+			observability.Error(err),
+		)
+	} else {
+		// Update uptime metrics for all keepers (both active and inactive)
+		for _, keeper := range detailedInfo {
+			if uptime, exists := uptimes[strings.ToLower(keeper.KeeperAddress)]; exists {
+				metrics.UpdateKeeperUptime(ctx, keeper.KeeperAddress, float64(uptime))
 			}
 		}
-	}
-
-	// Record the most active keeper uptime
-	if mostActiveKeeper != "" {
-		metrics.RecordMostActiveKeeperUptime(ctx, mostActiveKeeper, maxUptime)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
