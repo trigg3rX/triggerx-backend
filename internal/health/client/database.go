@@ -185,6 +185,12 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 			return err
 		}
 		uptimeSpan.SetStatus(codes.Ok, "")
+		// Update metric with the new uptime
+		metrics.UpdateKeeperUptime(ctx, keeperHealth.KeeperAddress, float64(newUptime))
+	} else {
+		// If keeper wasn't previously online, still update metric with current uptime
+		// This ensures the metric is always up-to-date
+		metrics.UpdateKeeperUptime(ctx, keeperHealth.KeeperAddress, float64(prevUptime))
 	}
 	// --- END UPTIME LOGIC ---
 
@@ -233,11 +239,17 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 			attribute.Int64("keeper.id", keeperID),
 		),
 	)
+	// Default network to "mainnet" if not provided (backward compatibility)
+	network := keeperHealth.Network
+	if network == "" {
+		network = "mainnet"
+	}
+
 	err = dm.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
-		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? 
+		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ?, network = ? 
 		WHERE keeper_id = ?`,
-		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec()
+		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, network, keeperID).Exec()
 	updateActiveSpan.End()
 	metrics.RecordDBOperationDuration(updateActiveCtx, "update", time.Since(updateActiveStart))
 	if err != nil {
@@ -454,4 +466,43 @@ func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.Keep
 		observability.Int("count", len(keepers)),
 	)
 	return keepers, nil
+}
+
+// GetKeeperUptimes retrieves uptime for all keepers from the database
+func (dm *DatabaseManager) GetKeeperUptimes(ctx context.Context) (map[string]int64, error) {
+	// Start a span for the database query operation
+	_, span := dm.tracer.Start(ctx, "db.get_keeper_uptimes",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("db.system", "cassandra"),
+			attribute.String("db.operation", "select"),
+			attribute.String("db.collection", "keeper_data"),
+		),
+	)
+	defer span.End()
+
+	uptimes := make(map[string]int64)
+
+	iter := dm.db.Session().Query(`
+		SELECT keeper_address, uptime
+		FROM triggerx.keeper_data 
+		WHERE registered = true AND whitelisted = true 
+		ALLOW FILTERING`).Iter()
+
+	var keeperAddress string
+	var uptime int64
+
+	for iter.Scan(&keeperAddress, &uptime) {
+		uptimes[strings.ToLower(keeperAddress)] = uptime
+	}
+
+	if err := iter.Close(); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("error closing iterator: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("db.rows_returned", len(uptimes)))
+	span.SetStatus(codes.Ok, "")
+
+	return uptimes, nil
 }

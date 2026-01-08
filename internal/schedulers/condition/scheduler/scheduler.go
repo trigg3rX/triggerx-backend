@@ -37,13 +37,14 @@ type ConditionBasedScheduler struct {
 	eventMonitorClient   *eventmonitor.GRPCClient // Event Monitor Service gRPC client
 	metrics              *metrics.Collector
 	maxWorkers           int
-	schedulerID          int
+	schedulerID          string
 	webhookURL           string        // Webhook URL for receiving event notifications
 	cooldownPeriod       time.Duration // Cooldown period between task creations for recurring jobs
+	jobStatusChecker     *JobStatusChecker
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
-func NewConditionBasedScheduler(logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, taskRepo repository.TaskRepository) (*ConditionBasedScheduler, error) {
+func NewConditionBasedScheduler(logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, taskRepo repository.TaskRepository, eventJobRepo repository.EventJobRepository, conditionJobRepo repository.ConditionJobRepository) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -98,9 +99,12 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 	// Start metrics collection
 	scheduler.metrics.Start()
 
+	// Initialize job status checker
+	scheduler.jobStatusChecker = NewJobStatusChecker(eventJobRepo, conditionJobRepo, logger)
+
 	scheduler.logger.Info(ctx, "Condition-based scheduler initialized",
 		observability.Int("max_workers", scheduler.maxWorkers),
-		observability.Int("scheduler_id", scheduler.schedulerID),
+		observability.String("scheduler_id", scheduler.schedulerID),
 		observability.String("task_dispatcher_url", config.GetTaskDispatcherRPCUrl()),
 		observability.Int("connected_chains", len(scheduler.chainClients)),
 	)
@@ -111,11 +115,14 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 // Start begins the scheduler's main loop (for compatibility)
 func (s *ConditionBasedScheduler) Start(ctx context.Context) {
 	s.logger.Info(ctx, "Condition-based scheduler ready for job scheduling",
-		observability.Int("scheduler_id", s.schedulerID),
+		observability.String("scheduler_id", s.schedulerID),
 	)
 
 	// Start background cleanup goroutine for expired event jobs
 	go s.cleanupExpiredEventJobs(ctx)
+
+	// Start job status checker in background
+	go s.jobStatusChecker.StartStatusCheckLoop(ctx)
 
 	// Keep the service alive
 	<-ctx.Done()
@@ -163,7 +170,7 @@ func (s *ConditionBasedScheduler) Stop(ctx context.Context) {
 }
 
 // GetSchedulerID returns the scheduler ID
-func (s *ConditionBasedScheduler) GetSchedulerID() int {
+func (s *ConditionBasedScheduler) GetSchedulerID() string {
 	return s.schedulerID
 }
 

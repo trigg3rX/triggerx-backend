@@ -38,7 +38,7 @@ func NewHandler(logger observability.Logger, tracer observability.Tracer, sched 
 func (h *Handler) Handle(ctx context.Context, method string, request interface{}) (interface{}, error) {
 	// Create trace with format "condition-{scheduler_id}-{timestamp}"
 	schedulerID := h.scheduler.GetSchedulerID()
-	traceName := fmt.Sprintf("condition-%d-%d", schedulerID, time.Now().Unix())
+	traceName := fmt.Sprintf("condition-%s-%d", schedulerID, time.Now().Unix())
 
 	// Create root span for RPC operation
 	ctx, span := h.tracer.Start(ctx, traceName,
@@ -46,7 +46,7 @@ func (h *Handler) Handle(ctx context.Context, method string, request interface{}
 		observability.WithAttributes(
 			attribute.String("rpc.method", method),
 			attribute.String("rpc.service", "condition_scheduler"),
-			attribute.Int("scheduler.id", schedulerID),
+			attribute.String("scheduler.id", schedulerID),
 			attribute.String("trace.name", traceName),
 		),
 	)

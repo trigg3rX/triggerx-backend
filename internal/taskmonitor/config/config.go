@@ -24,6 +24,9 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
+	// Service ID for OpenTelemetry
+	serviceID string
+
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
 	upstashRedisRestToken string
@@ -31,6 +34,9 @@ type Config struct {
 	// Pinata JWT and Host
 	pinataJWT  string
 	pinataHost string
+
+	// Performer API URL (for direct HTTP calls to keeper)
+	performerAPIUrl string
 
 	// Notification webhook
 	notifyWebhookURL   string
@@ -104,10 +110,12 @@ func Init(configPath string) error {
 		grpcPort:              env.GetEnvString("TASK_MONITOR_GRPC_PORT", "9013"),
 		dbConnection:          env.GetDatabaseConfig(),
 		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
+		serviceID:             env.GetEnvString("TASK_MONITOR_SERVICE_ID", "1"),
 		upstashRedisUrl:       env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken: env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		pinataJWT:             env.GetEnvString("PINATA_JWT", ""),
 		pinataHost:            env.GetEnvString("PINATA_HOST", ""),
+		performerAPIUrl:       env.GetEnvString("PERFORMER_API_URL", "localhost:9021"),
 		notifyWebhookURL:      env.GetEnvString("TASK_NOTIFY_WEBHOOK_URL", ""),
 		notifyWebhookToken:    env.GetEnvString("TASK_NOTIFY_WEBHOOK_TOKEN", ""),
 		smtpHost:              env.GetEnvString("SMTP_HOST", ""),
@@ -159,6 +167,9 @@ func validateConfig() error {
 	if env.IsEmpty(cfg.upstashRedisRestToken) {
 		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
 	}
+	if !env.IsValidURL(cfg.performerAPIUrl) {
+		return fmt.Errorf("invalid performer API URL: %s", cfg.performerAPIUrl)
+	}
 	return nil
 }
 
@@ -180,6 +191,10 @@ func GetGRPCPort() string {
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
+}
+
+func GetServiceID() string {
+	return cfg.serviceID
 }
 
 func GetDatabaseHostAddress() string {
@@ -288,6 +303,20 @@ func GetSMTPUser() string   { return cfg.smtpUser }
 func GetSMTPPass() string   { return cfg.smtpPass }
 func GetSMTPFrom() string   { return cfg.smtpFrom }
 func GetSMTPStartTLS() bool { return cfg.smtpStartTLS }
+
+func GetPerformerAPIUrl() string {
+	url := cfg.performerAPIUrl
+	// Auto-prepend http:// if scheme is missing (for backward compatibility)
+	if url != "" && !hasScheme(url) {
+		return "http://" + url
+	}
+	return url
+}
+
+// hasScheme checks if a URL has a scheme (http:// or https://)
+func hasScheme(url string) bool {
+	return len(url) > 7 && (url[:7] == "http://" || url[:8] == "https://")
+}
 
 // GetRedisClientConfig returns a RedisConfig for the new Redis client
 func GetRedisClientConfig() redisClient.RedisConfig {

@@ -20,23 +20,30 @@ var (
 	requestCountsLock sync.Mutex
 	lastRPSUpdate     = time.Now()
 
-	// Metrics instances
-	uptimeSeconds                        observability.Gauge
-	keepersTotal                         observability.Gauge
-	keepersActiveTotal                   observability.Gauge
-	httpRequestsTotal                    *observability.CounterVec
-	httpRequestDuration                  *observability.HistogramVec
-	requestsPerSecond                    *observability.GaugeVec
-	checkinsByVersionTotal               *observability.CounterVec
-	keeperUptimeSeconds                  *observability.GaugeVec
-	mostActiveKeeperSeconds              *observability.CounterVec
-	dbHostOperationDuration              *observability.HistogramVec
-	telegramKeeperNotificationsSentTotal *observability.CounterVec
-	memoryUsageBytes                     observability.Gauge
-	cpuUsagePercent                      observability.Gauge
-	goroutinesActive                     observability.Gauge
-	gcDurationSeconds                    observability.Gauge
-	networkConnectionsTotal              *observability.CounterVec
+	// Version tracking for keepers online by version metric
+	lastKnownVersions map[string]bool // Track versions we've seen to reset them to 0 when needed
+	versionsLock      sync.Mutex      // Protect lastKnownVersions map
+
+	// System Metrics
+	uptimeSeconds     observability.Gauge
+	memoryUsageBytes  observability.Gauge
+	cpuUsagePercent   observability.Gauge
+	goroutinesActive  observability.Gauge
+	gcDurationSeconds observability.Gauge
+
+	// Keeper Metrics
+	keepersTotal           observability.Gauge
+	keepersActiveTotal     observability.Gauge
+	keeperUptimeSeconds    *observability.GaugeVec
+	keepersOnlineByVersion *observability.GaugeVec
+
+	// HTTP Metrics
+	httpRequestsTotal *observability.CounterVec
+	requestsPerSecond *observability.GaugeVec
+	// telegramKeeperNotificationsSentTotal *observability.CounterVec // Not used yet
+
+	// Database Metrics
+	dbOperationDuration *observability.HistogramVec
 )
 
 // StartMetricsCollection starts collecting metrics
@@ -113,6 +120,9 @@ func calculateAndUpdateRPS(ctx context.Context) {
 // InitializeMetrics initializes all metrics using the observability metrics instance
 // This must be called before using any metrics
 func InitializeMetrics(obsMetrics observability.Metrics) {
+	// Initialize the lastKnownVersions map
+	lastKnownVersions = make(map[string]bool)
+
 	// Simple gauges
 	uptimeSeconds = obsMetrics.Gauge(
 		"triggerx.health_service.uptime_seconds",
@@ -138,27 +148,12 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		observability.WithDescription("Total HTTP requests received"),
 	)
 
-	httpRequestDuration = observability.NewHistogramVec(
-		obsMetrics,
-		"triggerx.health_service.http_request_duration_seconds",
-		[]string{"method", "endpoint"},
-		observability.WithDescription("HTTP request processing time"),
-		observability.WithUnit("s"),
-	)
-
 	requestsPerSecond = observability.NewGaugeVec(
 		obsMetrics,
 		"triggerx.health_service.requests_per_second",
 		[]string{"endpoint"},
 		observability.WithDescription("Request throughput rate"),
 		observability.WithUnit("1/s"),
-	)
-
-	checkinsByVersionTotal = observability.NewCounterVec(
-		obsMetrics,
-		"triggerx.health_service.checkins_by_version_total",
-		[]string{"version"},
-		observability.WithDescription("Check-ins by keeper version"),
 	)
 
 	keeperUptimeSeconds = observability.NewGaugeVec(
@@ -169,28 +164,19 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		observability.WithUnit("s"),
 	)
 
-	mostActiveKeeperSeconds = observability.NewCounterVec(
+	keepersOnlineByVersion = observability.NewGaugeVec(
 		obsMetrics,
-		"triggerx.health_service.most_active_keeper_uptime_seconds",
-		[]string{"keeper_address"},
-		observability.WithDescription("Most active keeper uptime since first check-in"),
-		observability.WithUnit("s"),
+		"triggerx.health_service.keepers_online_by_version",
+		[]string{"version"},
+		observability.WithDescription("Number of keepers online by version"),
 	)
 
-	dbHostOperationDuration = observability.NewHistogramVec(
-		obsMetrics,
-		"triggerx.health_service.db_host_operation_duration_seconds",
-		[]string{"operation"},
-		observability.WithDescription("Scylla Database operation execution time"),
-		observability.WithUnit("s"),
-	)
-
-	telegramKeeperNotificationsSentTotal = observability.NewCounterVec(
-		obsMetrics,
-		"triggerx.health_service.telegram_keeper_notifications_sent_total",
-		[]string{"keeper_address"},
-		observability.WithDescription("Notifications sent per keeper"),
-	)
+	// telegramKeeperNotificationsSentTotal = observability.NewCounterVec(
+	// 	obsMetrics,
+	// 	"triggerx.health_service.telegram_keeper_notifications_sent_total",
+	// 	[]string{"keeper_address"},
+	// 	observability.WithDescription("Notifications sent per keeper"),
+	// )
 
 	// Performance metrics
 	memoryUsageBytes = obsMetrics.Gauge(
@@ -216,21 +202,21 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		observability.WithUnit("s"),
 	)
 
-	networkConnectionsTotal = observability.NewCounterVec(
+	// Database operation duration metrics
+	dbOperationDuration = observability.NewHistogramVec(
 		obsMetrics,
-		"triggerx.health_service.network_connections_total",
-		[]string{"type"},
-		observability.WithDescription("Network connections (type=incoming/outgoing)"),
+		"triggerx.health_service.db_operation_duration_seconds",
+		[]string{"operation", "table"},
+		observability.WithDescription("Database operation duration in seconds"),
+		observability.WithUnit("s"),
 	)
 }
 
 // RecordHTTPRequest records HTTP request metrics
+// Note: Request duration is tracked via tracers/spans instead of metrics
 func RecordHTTPRequest(ctx context.Context, method, endpoint, statusCode string, duration time.Duration) {
 	if httpRequestsTotal != nil {
 		httpRequestsTotal.WithLabelValues(method, endpoint, statusCode).Inc(ctx)
-	}
-	if httpRequestDuration != nil {
-		httpRequestDuration.WithLabelValues(method, endpoint).Record(ctx, duration.Seconds())
 	}
 
 	// Track request count for RPS calculation
@@ -246,13 +232,6 @@ func RecordRequestsPerSecond(ctx context.Context, endpoint string, rps float64) 
 	}
 }
 
-// RecordKeeperCheckIn records a keeper check-in by version
-func RecordKeeperCheckIn(ctx context.Context, version string) {
-	if checkinsByVersionTotal != nil {
-		checkinsByVersionTotal.WithLabelValues(version).Inc(ctx)
-	}
-}
-
 // UpdateKeeperCounts updates the total and active keeper counts
 func UpdateKeeperCounts(ctx context.Context, total, active int) {
 	if keepersTotal != nil {
@@ -264,36 +243,58 @@ func UpdateKeeperCounts(ctx context.Context, total, active int) {
 }
 
 // UpdateKeeperUptime updates the uptime for a specific keeper
+// uptimeSeconds should be the cumulative uptime from the database (in seconds)
 func UpdateKeeperUptime(ctx context.Context, keeperAddress string, uptimeSeconds float64) {
 	if keeperUptimeSeconds != nil {
 		keeperUptimeSeconds.WithLabelValues(keeperAddress).Set(ctx, uptimeSeconds)
 	}
 }
 
-// RecordMostActiveKeeperUptime records the uptime for the most active keeper
-func RecordMostActiveKeeperUptime(ctx context.Context, keeperAddress string, uptimeSeconds float64) {
-	if mostActiveKeeperSeconds != nil {
-		mostActiveKeeperSeconds.WithLabelValues(keeperAddress).Add(ctx, uptimeSeconds)
-	}
-}
-
-// RecordDBOperationDuration records the duration of a database operation
+// RecordDBOperationDuration records database operation duration
 func RecordDBOperationDuration(ctx context.Context, operation string, duration time.Duration) {
-	if dbHostOperationDuration != nil {
-		dbHostOperationDuration.WithLabelValues(operation).Record(ctx, duration.Seconds())
+	if dbOperationDuration != nil {
+		// All operations in health service are on keeper_data table
+		dbOperationDuration.WithLabelValues(operation, "keeper_data").Record(ctx, duration.Seconds())
 	}
 }
 
 // RecordTelegramNotification records a telegram notification sent for a keeper
+// This is a stub function - telegram notification tracking can be added later if needed
 func RecordTelegramNotification(ctx context.Context, keeperAddress string) {
-	if telegramKeeperNotificationsSentTotal != nil {
-		telegramKeeperNotificationsSentTotal.WithLabelValues(keeperAddress).Inc(ctx)
-	}
+	// TODO: Implement telegram notification metrics if needed
+	// This is called from notification code but metrics are not currently defined
+	// if telegramKeeperNotificationsSentTotal != nil {
+	// 	telegramKeeperNotificationsSentTotal.WithLabelValues(keeperAddress).Inc(ctx)
+	// }
 }
 
-// RecordNetworkConnection records a network connection event
-func RecordNetworkConnection(ctx context.Context, connType string) {
-	if networkConnectionsTotal != nil {
-		networkConnectionsTotal.WithLabelValues(connType).Inc(ctx)
+// UpdateKeepersOnlineByVersion updates the count of keepers online by version
+// This should be called whenever keeper status changes (active/inactive)
+// It increases/decreases counts and removes versions that go to 0
+func UpdateKeepersOnlineByVersion(ctx context.Context, keepersByVersion map[string]int) {
+	if keepersOnlineByVersion == nil {
+		return
+	}
+
+	versionsLock.Lock()
+	defer versionsLock.Unlock()
+
+	// Track current versions
+	currentVersions := make(map[string]bool)
+
+	// Set the count for each version (increase or decrease as needed)
+	for version, count := range keepersByVersion {
+		currentVersions[version] = true
+		keepersOnlineByVersion.WithLabelValues(version).Set(ctx, float64(count))
+		lastKnownVersions[version] = true
+	}
+
+	// Reset versions that were previously tracked but now have 0 keepers
+	for version := range lastKnownVersions {
+		if !currentVersions[version] {
+			// This version had keepers before but now has 0, set it to 0
+			keepersOnlineByVersion.WithLabelValues(version).Set(ctx, 0)
+			delete(lastKnownVersions, version)
+		}
 	}
 }

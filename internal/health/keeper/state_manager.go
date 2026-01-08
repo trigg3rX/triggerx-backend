@@ -106,6 +106,21 @@ func (sm *StateManager) GetKeeperCount(ctx context.Context) (total int, active i
 	return total, active
 }
 
+// GetKeepersByVersion returns a map of version to count of active keepers
+func (sm *StateManager) GetKeepersByVersion(ctx context.Context) map[string]int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	keepersByVersion := make(map[string]int)
+	for _, state := range sm.keepers {
+		if state.IsActive && state.Version != "" {
+			keepersByVersion[state.Version]++
+		}
+	}
+
+	return keepersByVersion
+}
+
 // GetDetailedKeeperInfo returns detailed information about all keepers
 func (sm *StateManager) GetDetailedKeeperInfo(ctx context.Context) []types.KeeperInfo {
 	sm.mu.RLock()
@@ -133,4 +148,9 @@ func (sm *StateManager) GetDetailedKeeperInfo(ctx context.Context) []types.Keepe
 	// )
 
 	return keeperInfoList
+}
+
+// GetKeeperUptimes retrieves uptime for all keepers from the database
+func (sm *StateManager) GetKeeperUptimes(ctx context.Context) (map[string]int64, error) {
+	return sm.db.GetKeeperUptimes(ctx)
 }

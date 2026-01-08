@@ -10,8 +10,10 @@ datasources:
     type: tempo
     access: proxy
     url: http://tempo:3200
+    uid: P214B5B846CF3925F
 
   - name: Mimir
     type: prometheus
     access: proxy
     url: http://mimir:9090/prometheus
+    uid: PAE45454D0EDB9216

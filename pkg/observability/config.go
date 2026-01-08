@@ -12,7 +12,6 @@ import (
 
 var (
 	BaseDataDir = getBaseDataDir()
-	InstanceID  = generateInstanceID()
 )
 
 // ServiceName represents a service identifier
@@ -36,7 +35,7 @@ type Config struct {
 	// Service metadata (resource attributes)
 	ServiceName    ServiceName
 	ServiceVersion string
-	InstanceID     string
+	ServiceID      string
 
 	// OTel collector endpoint
 	OTELExporterEndpoint string
@@ -48,10 +47,6 @@ type Config struct {
 	BatchTimeout   time.Duration
 	ExportTimeout  time.Duration
 	MaxExportBatch int
-
-	// Prometheus export settings
-	// EnablePrometheusExport: if true, exposes metrics endpoint for Prometheus scraping
-	EnablePrometheusExport bool
 
 	// Trace sampling settings
 	// SuccessSamplingRate: sampling rate for successful traces (0.0 to 1.0)
@@ -68,8 +63,8 @@ func validateConfig(cfg Config) error {
 	if env.IsEmpty(cfg.ServiceVersion) {
 		return fmt.Errorf("ServiceVersion is required")
 	}
-	if env.IsEmpty(cfg.InstanceID) {
-		return fmt.Errorf("InstanceID is required")
+	if env.IsEmpty(cfg.ServiceID) {
+		return fmt.Errorf("ServiceID is required")
 	}
 	if !env.IsValidHostPort(cfg.OTELExporterEndpoint) {
 		return fmt.Errorf("invalid OTELExporterEndpoint: %s", cfg.OTELExporterEndpoint)
@@ -77,30 +72,19 @@ func validateConfig(cfg Config) error {
 	return nil
 }
 
-// generateInstanceID generates a unique instance ID
-func generateInstanceID() string {
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown"
-	}
-	pid := os.Getpid()
-	return fmt.Sprintf("%s-%d", hostname, pid)
-}
-
 // GenerateKeeperInstanceID generates a unique instance ID for keeper services
 // that includes the keeper address for better uniqueness and identification
 func GenerateKeeperInstanceID(keeperAddress string) string {
-	baseID := generateInstanceID()
-	// Use last 8 characters of keeper address (without 0x prefix) for brevity
+	// Use last 6 characters of keeper address (without 0x prefix) for brevity
 	addrSuffix := keeperAddress
 	if len(keeperAddress) > 2 && keeperAddress[:2] == "0x" {
 		addrSuffix = keeperAddress[2:]
 	}
 	// Take last 8 characters for a shorter, readable ID
-	if len(addrSuffix) > 8 {
+	if len(addrSuffix) > 6 {
 		addrSuffix = addrSuffix[len(addrSuffix)-8:]
 	}
-	return fmt.Sprintf("%s-%s", baseID, addrSuffix)
+	return fmt.Sprintf("keeper-%s", addrSuffix)
 }
 
 func getBaseDataDir() string {
@@ -138,7 +122,7 @@ func getBaseDataDir() string {
 //   - LogLevel: "info" (or "debug" if devMode is true)
 //   - SuccessSamplingRate: 0.03 (3%)
 //   - ErrorSamplingRate: 1.0 (100%)
-func NewConfig(serviceName ServiceName, serviceVersion, otelEndpoint string, devMode bool) Config {
+func NewConfig(serviceName ServiceName, serviceVersion, otelEndpoint string, devMode bool, serviceID string) Config {
 	logLevel := "info"
 	if devMode {
 		logLevel = "debug"
@@ -147,14 +131,13 @@ func NewConfig(serviceName ServiceName, serviceVersion, otelEndpoint string, dev
 	return Config{
 		ServiceName:            serviceName,
 		ServiceVersion:         serviceVersion,
-		InstanceID:             InstanceID,
+		ServiceID:              serviceID,
 		OTELExporterEndpoint:   otelEndpoint,
 		DevMode:                devMode,
 		LogLevel:               logLevel,
 		BatchTimeout:           5 * time.Second,
 		ExportTimeout:          30 * time.Second,
 		MaxExportBatch:         512,
-		EnablePrometheusExport: false, // Default: disabled
 		SuccessSamplingRate:    0.03,  // 3% for success
 		ErrorSamplingRate:      1.0,   // 100% for errors
 	}
@@ -162,8 +145,8 @@ func NewConfig(serviceName ServiceName, serviceVersion, otelEndpoint string, dev
 
 // NewConfigWithOptions creates a new Config with custom options.
 // Use this when you need to override default values.
-func NewConfigWithOptions(serviceName ServiceName, serviceVersion, otelEndpoint string, devMode bool, opts ...ConfigOption) Config {
-	cfg := NewConfig(serviceName, serviceVersion, otelEndpoint, devMode)
+func NewConfigWithOptions(serviceName ServiceName, serviceVersion, otelEndpoint string, devMode bool, serviceID string, opts ...ConfigOption) Config {
+	cfg := NewConfig(serviceName, serviceVersion, otelEndpoint, devMode, serviceID)
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -209,17 +192,12 @@ func WithSamplingRates(successRate, errorRate float64) ConfigOption {
 	}
 }
 
-// WithPrometheusExport enables Prometheus metrics export and sets the metrics path
-func WithPrometheusExport(enabled bool) ConfigOption {
+// WithServiceID sets the service ID (exported to OpenTelemetry as service.id)
+// For keeper services: last 5 characters of keeper address
+// For schedulers: scheduler ID from environment (e.g., CONDITION_SCHEDULER_ID)
+func WithServiceID(serviceID string) ConfigOption {
 	return func(cfg *Config) {
-		cfg.EnablePrometheusExport = enabled
-	}
-}
-
-// WithInstanceID sets a custom instance ID for the service
-func WithInstanceID(instanceID string) ConfigOption {
-	return func(cfg *Config) {
-		cfg.InstanceID = instanceID
+		cfg.ServiceID = serviceID
 	}
 }
 
@@ -228,13 +206,12 @@ func SetTestConfig() Config {
 	cfg := Config{
 		ServiceName:          TestService,
 		ServiceVersion:       "0.1.0",
-		InstanceID:           InstanceID,
+		ServiceID:            "test",
 		OTELExporterEndpoint: "http://localhost:4318",
 		BatchTimeout:         5 * time.Second,
 		ExportTimeout:        30 * time.Second,
 		MaxExportBatch:       512,
 		DevMode:              true,
-		EnablePrometheusExport: false,
 		LogLevel:             "debug",
 		SuccessSamplingRate:  0.03, // 3% for success
 		ErrorSamplingRate:    1.0,  // 100% for errors

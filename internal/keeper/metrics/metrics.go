@@ -36,7 +36,7 @@ var (
 	ipfsUploadSizeBytes   observability.Counter
 
 	// Health metrics
-	successfulHealthCheckinsTotal observability.Counter
+	failedHealthCheckinsTotal observability.Counter
 
 	// System metrics
 	memoryUsageBytes  observability.Gauge
@@ -68,7 +68,7 @@ var (
 	TransactionFeesTotal           *observability.CounterVec
 	IPFSDownloadSizeBytes          observability.Counter
 	IPFSUploadSizeBytes            observability.Counter
-	SuccessfulHealthCheckinsTotal  observability.Counter
+	FailedHealthCheckinsTotal      observability.Counter
 	MemoryUsageBytes               observability.Gauge
 	CPUUsagePercent                observability.Gauge
 	GoroutinesActive               observability.Gauge
@@ -166,11 +166,11 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 	IPFSUploadSizeBytes = ipfsUploadSizeBytes
 
 	// Health metrics
-	successfulHealthCheckinsTotal = obsMetrics.Counter(
-		"triggerx.keeper.successful_health_checkins_total",
-		observability.WithDescription("Total successful health checkins"),
+	failedHealthCheckinsTotal = obsMetrics.Counter(
+		"triggerx.keeper.failed_health_checkins_total",
+		observability.WithDescription("Total failed health checkins"),
 	)
-	SuccessfulHealthCheckinsTotal = successfulHealthCheckinsTotal
+	FailedHealthCheckinsTotal = failedHealthCheckinsTotal
 
 	// System metrics
 	memoryUsageBytes = obsMetrics.Gauge(

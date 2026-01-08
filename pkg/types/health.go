@@ -13,4 +13,5 @@ type KeeperInfo struct {
 	IsActive         bool      `json:"is_active"`
 	LastCheckedIn    time.Time `json:"last_checked_in"`
 	IsImua           bool      `json:"is_imua"`
+	Network          string    `json:"network"`
 }

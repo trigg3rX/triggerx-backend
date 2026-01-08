@@ -28,7 +28,26 @@ blocks_storage:
   tsdb:
     dir: /mimir/tsdb
 
+store_gateway:
+  sharding_ring:
+    kvstore:
+      store: inmemory
+
+compactor:
+  sharding_ring:
+    kvstore:
+      store: inmemory
+
+ruler:
+  ring:
+    kvstore:
+      store: inmemory
+  rule_path: /mimir/data-ruler
+
 limits:
   max_label_names_per_series: 50
   ingestion_rate: 10000
   ingestion_burst_size: 20000
+
+activity_tracker:
+  filepath: /mimir/metrics-activity.log

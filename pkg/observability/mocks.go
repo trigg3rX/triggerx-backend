@@ -4,6 +4,9 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/mock"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // MockLogger is a mock implementation of the Logger interface
@@ -87,4 +90,56 @@ func (l *noopLogger) Fatal(ctx context.Context, msg string, fields ...Field) {
 // With returns itself as no-op logger ignores fields
 func (l *noopLogger) With(fields ...Field) Logger {
 	return l
+}
+
+// noopTracer is a no-op implementation of Tracer that discards all trace calls
+type noopTracer struct{}
+
+// NewNoOpTracer creates a new no-op tracer that discards all trace calls
+// This is useful for testing when you don't want actual tracing to occur
+func NewNoOpTracer() Tracer {
+	return &noopTracer{}
+}
+
+// Start returns the context unchanged and a no-op span
+func (t *noopTracer) Start(ctx context.Context, name string, opts ...SpanOption) (context.Context, Span) {
+	return ctx, &noopSpan{}
+}
+
+// StartSpan returns a no-op span
+func (t *noopTracer) StartSpan(ctx context.Context, name string, opts ...SpanOption) Span {
+	return &noopSpan{}
+}
+
+// noopSpan is a no-op implementation of Span that discards all span operations
+type noopSpan struct{}
+
+// End is a no-op
+func (s *noopSpan) End() {
+	// No-op
+}
+
+// SetAttributes is a no-op
+func (s *noopSpan) SetAttributes(attrs ...attribute.KeyValue) {
+	// No-op
+}
+
+// AddEvent is a no-op
+func (s *noopSpan) AddEvent(name string, opts ...EventOption) {
+	// No-op
+}
+
+// RecordError is a no-op
+func (s *noopSpan) RecordError(err error, opts ...RecordErrorOption) {
+	// No-op
+}
+
+// SetStatus is a no-op
+func (s *noopSpan) SetStatus(code codes.Code, description string) {
+	// No-op
+}
+
+// SpanContext returns an empty span context
+func (s *noopSpan) SpanContext() trace.SpanContext {
+	return trace.SpanContext{}
 }

@@ -12,6 +12,7 @@ import (
 
 func TestNewClient_ValidConfig_ReturnsClient(t *testing.T) {
 	logger := observability.NewNoOpLogger()
+	tracer := observability.NewNoOpTracer()
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",
 		PrivateKey:       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -21,7 +22,7 @@ func TestNewClient_ValidConfig_ReturnsClient(t *testing.T) {
 		RequestTimeout:   5 * time.Second,
 	}
 
-	client, err := NewClient(logger, cfg)
+	client, err := NewClient(logger, tracer, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, cfg, client.config)
@@ -29,6 +30,7 @@ func TestNewClient_ValidConfig_ReturnsClient(t *testing.T) {
 
 func TestNewClient_EmptyTimeout_SetsDefaultTimeout(t *testing.T) {
 	logger := observability.NewNoOpLogger()
+	tracer := observability.NewNoOpTracer()
 
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",
@@ -39,7 +41,7 @@ func TestNewClient_EmptyTimeout_SetsDefaultTimeout(t *testing.T) {
 		RequestTimeout:   0,
 	}
 
-	client, err := NewClient(logger, cfg)
+	client, err := NewClient(logger, tracer, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, 10*time.Second, client.config.RequestTimeout)
@@ -48,6 +50,7 @@ func TestNewClient_EmptyTimeout_SetsDefaultTimeout(t *testing.T) {
 
 func TestNewClient_InvalidPrivateKey_ReturnsError(t *testing.T) {
 	logger := observability.NewNoOpLogger()
+	tracer := observability.NewNoOpTracer()
 
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",
@@ -58,7 +61,7 @@ func TestNewClient_InvalidPrivateKey_ReturnsError(t *testing.T) {
 		RequestTimeout:   5 * time.Second,
 	}
 
-	client, err := NewClient(logger, cfg)
+	client, err := NewClient(logger, tracer, cfg)
 	assert.NoError(t, err) // HTTP client creation should succeed
 	assert.NotNil(t, client)
 }
@@ -68,6 +71,7 @@ func TestClient_CheckIn_WithMockServer(t *testing.T) {
 	// For now, we'll just test that the client can be created and closed properly
 
 	logger := observability.NewNoOpLogger()
+	tracer := observability.NewNoOpTracer()
 
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",
@@ -78,7 +82,7 @@ func TestClient_CheckIn_WithMockServer(t *testing.T) {
 		RequestTimeout:   5 * time.Second,
 	}
 
-	client, err := NewClient(logger, cfg)
+	client, err := NewClient(logger, tracer, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, client)
 

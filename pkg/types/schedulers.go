@@ -1,6 +1,8 @@
 package types
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/big"
 	"time"
 )
@@ -8,7 +10,7 @@ import (
 // Target Data for all task types
 // DEVNOTE: I separated this from all schedule data types to accomodate multiple target calls on same trigger in future
 type TaskTargetData struct {
-	JobID                     *BigInt `json:"job_id"`
+	JobID                     *BigInt  `json:"job_id"`
 	TaskID                    int64    `json:"task_id"`
 	TaskDefinitionID          int      `json:"task_definition_id"`
 	TargetChainID             string   `json:"target_chain_id"`
@@ -20,13 +22,13 @@ type TaskTargetData struct {
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url"`
 	IsImua                    bool     `json:"is_imua"`
 	// Custom script fields (TaskDefinitionID = 7)
-	ScriptStorage             map[string]string `json:"script_storage,omitempty"`      // Storage passed from scheduler
-	ScriptLanguage            string            `json:"script_language,omitempty"`     // typescript, go, python
+	ScriptStorage  map[string]string `json:"script_storage,omitempty"`  // Storage passed from scheduler
+	ScriptLanguage string            `json:"script_language,omitempty"` // typescript, go, python
 }
 
 // Monitoring Data for even and condition workers
 type EventWorkerData struct {
-	JobID                  *BigInt  `json:"job_id"`
+	JobID                  *BigInt   `json:"job_id"`
 	ExpirationTime         time.Time `json:"expiration_time"`
 	Recurring              bool      `json:"recurring"`
 	TriggerChainID         string    `json:"trigger_chain_id"`
@@ -36,7 +38,7 @@ type EventWorkerData struct {
 	EventFilterValue       string    `json:"event_filter_value"`
 }
 type ConditionWorkerData struct {
-	JobID            *BigInt  `json:"job_id"`
+	JobID            *BigInt   `json:"job_id"`
 	ExpirationTime   time.Time `json:"expiration_time"`
 	Recurring        bool      `json:"recurring"`
 	ConditionType    string    `json:"condition_type"`
@@ -64,7 +66,7 @@ type ScheduleTimeTaskData struct {
 
 // Data to pass to condition scheduler
 type ScheduleConditionJobData struct {
-	JobID               *BigInt            `json:"job_id"`
+	JobID               *BigInt             `json:"job_id"`
 	TaskDefinitionID    int                 `json:"task_definition_id"`
 	LastExecutedAt      time.Time           `json:"last_executed_at"`
 	TaskTargetData      TaskTargetData      `json:"task_target_data"`
@@ -112,8 +114,43 @@ type SendTaskDataToKeeper struct {
 	PerformerData    PerformerData     `json:"performer_data"`
 	TargetData       []TaskTargetData  `json:"target_data"`
 	TriggerData      []TaskTriggerData `json:"trigger_data"`
-	SchedulerID      int               `json:"scheduler_id"`
+	SchedulerID      string            `json:"scheduler_id"`
 	ManagerSignature string            `json:"manager_signature"`
+}
+
+// UnmarshalJSON custom unmarshaler to handle scheduler_id as both string and number (for backward compatibility)
+func (s *SendTaskDataToKeeper) UnmarshalJSON(data []byte) error {
+	// Use an alias type to avoid infinite recursion
+	type Alias SendTaskDataToKeeper
+	aux := &struct {
+		SchedulerID interface{} `json:"scheduler_id"` // Accept any type
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Convert scheduler_id to string regardless of input type
+	switch v := aux.SchedulerID.(type) {
+	case string:
+		s.SchedulerID = v
+	case float64:
+		// JSON numbers are unmarshaled as float64
+		s.SchedulerID = fmt.Sprintf("%.0f", v)
+	case int:
+		s.SchedulerID = fmt.Sprintf("%d", v)
+	case int64:
+		s.SchedulerID = fmt.Sprintf("%d", v)
+	case nil:
+		s.SchedulerID = ""
+	default:
+		s.SchedulerID = fmt.Sprintf("%v", v)
+	}
+
+	return nil
 }
 
 // SchedulerTaskRequest represents the request format for TaskManager

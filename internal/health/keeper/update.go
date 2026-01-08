@@ -41,6 +41,7 @@ func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth typ
 	existingState.LastCheckedIn = now
 	existingState.IsActive = true
 	existingState.IsImua = keeperHealth.IsImua
+	existingState.Network = keeperHealth.Network
 
 	// Update database
 	if err := sm.retryWithBackoff(ctx, func() error {

@@ -26,9 +26,15 @@ type TaskStreamManager struct {
 	startTime         time.Time
 	taskIndex         *TaskIndexManager
 	expirationManager *ExpirationManager
+	keeperClient      KeeperClientInterface
 }
 
-func NewTaskStreamManager(ctx context.Context, redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger observability.Logger, tracer observability.Tracer) (*TaskStreamManager, error) {
+// KeeperClientInterface defines the interface for keeper client operations
+type KeeperClientInterface interface {
+	RebroadcastTask(ctx context.Context, taskID int64) error
+}
+
+func NewTaskStreamManager(ctx context.Context, redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger observability.Logger, tracer observability.Tracer, keeperClient KeeperClientInterface) (*TaskStreamManager, error) {
 	tsm := &TaskStreamManager{
 		redisClient:    redisClient,
 		dbClient:       dbClient,
@@ -37,6 +43,7 @@ func NewTaskStreamManager(ctx context.Context, redisClient redisClient.RedisClie
 		tracer:         tracer,
 		consumerGroups: make(map[string]bool),
 		startTime:      time.Now(),
+		keeperClient:   keeperClient,
 	}
 
 	// Initialize the task index manager
@@ -61,7 +68,8 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 	// Initialize task streams with specific expiration rules
 	streamConfigs := map[string]time.Duration{
 		StreamTaskDispatched: TasksProcessingTTL,
-		StreamTaskCompleted:  TasksCompletedTTL,
+		StreamTaskExecuted:   TasksExecutedTTL,
+		StreamTaskValidated:  TasksValidatedTTL,
 		StreamTaskFailed:     TasksFailedTTL,
 		StreamTaskRetry:      TasksRetryTTL,
 	}
@@ -83,9 +91,14 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
-	// Register consumer groups for task completion
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskCompleted, "task-processors"); err != nil {
-		return fmt.Errorf("failed to register task-processors group: %w", err)
+	// Register consumer groups for executed tasks (pending validation)
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskExecuted, "task-processors"); err != nil {
+		return fmt.Errorf("failed to register task-processors group for executed stream: %w", err)
+	}
+
+	// Register consumer groups for validated tasks
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskValidated, "task-processors"); err != nil {
+		return fmt.Errorf("failed to register task-processors group for validated stream: %w", err)
 	}
 
 	// Register consumer groups for task failure
@@ -98,14 +111,19 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
-	// Register consumer groups for timeout checking
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "timeout-checker"); err != nil {
+	// Register consumer groups for timeout checking on executed stream
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskExecuted, "timeout-checker"); err != nil {
 		return fmt.Errorf("failed to register timeout-checker group: %w", err)
 	}
 
 	// Register consumer groups for task finding
 	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "task-finder"); err != nil {
 		return fmt.Errorf("failed to register task-finder group: %w", err)
+	}
+
+	// Register consumer groups for task finding in executed stream
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskExecuted, "task-finder"); err != nil {
+		return fmt.Errorf("failed to register task-finder group for executed stream: %w", err)
 	}
 
 	// go tsm.StartStreamHealthMonitor(ctx)
@@ -152,7 +170,7 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 	defer cancel()
 
 	streamLengths := make(map[string]int64)
-	streams := []string{StreamTaskDispatched, StreamTaskRetry, StreamTaskCompleted, StreamTaskFailed}
+	streams := []string{StreamTaskDispatched, StreamTaskExecuted, StreamTaskValidated, StreamTaskRetry, StreamTaskFailed}
 
 	for _, stream := range streams {
 		length, err := tsm.redisClient.XLen(ctx, stream)
@@ -173,10 +191,6 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 		case StreamTaskRetry:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("retry").Set(ctx, float64(length))
-			}
-		case StreamTaskCompleted:
-			if metrics.TaskStreamLengths != nil {
-				metrics.TaskStreamLengths.WithLabelValues("completed").Set(ctx, float64(length))
 			}
 		case StreamTaskFailed:
 			if metrics.TaskStreamLengths != nil {
@@ -324,6 +338,21 @@ func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*TaskStreamDat
 	return task, nil
 }
 
+// FindTaskByIDInStream finds a task by ID in a specific stream
+func (tsm *TaskStreamManager) FindTaskByIDInStream(ctx context.Context, taskID int64, stream string) (*TaskStreamData, string, error) {
+	return tsm.taskIndex.FindTaskByIDInStream(ctx, taskID, stream)
+}
+
+// RemoveTaskIndex removes a task from the index
+func (tsm *TaskStreamManager) RemoveTaskIndex(ctx context.Context, taskID int64) error {
+	return tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
+}
+
+// RemoveExecutedTaskTimeout removes a task from executed timeout tracking
+func (tsm *TaskStreamManager) RemoveExecutedTaskTimeout(ctx context.Context, taskID int64) error {
+	return tsm.expirationManager.RemoveExecutedTaskTimeout(ctx, taskID)
+}
+
 // AddTaskToStream adds a task to a specific stream
 func (tsm *TaskStreamManager) AddTaskToStream(ctx context.Context, stream string, task *TaskStreamData) error {
 	return tsm.addTaskToStream(ctx, stream, task)
@@ -414,7 +443,6 @@ func (tsm *TaskStreamManager) TrimStreams(ctx context.Context) error {
 	// Define streams and their max lengths
 	streamConfigs := map[string]int64{
 		StreamTaskDispatched: 10000, // Keep max 10000 messages in dispatched stream
-		StreamTaskCompleted:  5000,  // Keep max 5000 messages in completed stream
 		StreamTaskFailed:     5000,  // Keep max 5000 messages in failed stream
 		StreamTaskRetry:      5000,  // Keep max 5000 messages in retry stream
 	}

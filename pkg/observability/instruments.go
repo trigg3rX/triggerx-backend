@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	otelmetric "go.opentelemetry.io/otel/metric"
@@ -138,6 +139,7 @@ type GaugeVec struct {
 	name      string
 	labelKeys []string
 	opts      []InstrumentOption
+	cache     map[string]Gauge // Cache gauge instances per label combination
 }
 
 // NewGaugeVec creates a new GaugeVec with the given label names
@@ -147,6 +149,7 @@ func NewGaugeVec(metrics Metrics, name string, labelKeys []string, opts ...Instr
 		name:      name,
 		labelKeys: labelKeys,
 		opts:      opts,
+		cache:     make(map[string]Gauge),
 	}
 }
 
@@ -156,16 +159,29 @@ func (gv *GaugeVec) WithLabelValues(labelValues ...string) Gauge {
 		return &noOpGauge{}
 	}
 
+	// Create cache key from label values
+	cacheKey := strings.Join(labelValues, "\x00") // Use null byte as separator
+
+	// Return cached gauge if it exists
+	if cached, ok := gv.cache[cacheKey]; ok {
+		return cached
+	}
+
 	attrs := make([]attribute.KeyValue, len(gv.labelKeys))
 	for i, key := range gv.labelKeys {
 		attrs[i] = attribute.String(key, labelValues[i])
 	}
 
 	gauge := gv.metrics.Gauge(gv.name, gv.opts...)
-	return &labeledGauge{
+	labeledGauge := &labeledGauge{
 		gauge: gauge,
 		attrs: attrs,
 	}
+
+	// Cache the gauge instance
+	gv.cache[cacheKey] = labeledGauge
+
+	return labeledGauge
 }
 
 // labeledGauge wraps a Gauge with fixed attributes

@@ -33,13 +33,12 @@ func main() {
 	// Generate instance ID that includes keeper address for better uniqueness
 	keeperInstanceID := observability.GenerateKeeperInstanceID(config.GetKeeperAddress())
 
-	obsCfg := observability.NewConfigWithOptions(
+	obsCfg := observability.NewConfig(
 		observability.KeeperService,
 		config.GetVersion(),
 		config.GetOTELExporterEndpoint(),
 		config.IsDevMode(),
-		observability.WithInstanceID(keeperInstanceID),
-		observability.WithPrometheusExport(config.GetEnablePrometheusExport()),
+		keeperInstanceID,
 	)
 
 	// Initialize observability (all three pillars)
@@ -80,9 +79,10 @@ func main() {
 		KeeperAddress:    config.GetKeeperAddress(),
 		PeerID:           config.GetPeerID(),
 		Version:          config.GetVersion(),
+		Network:          config.GetNetwork(),
 		RequestTimeout:   config.GetHealthRequestTimeout(),
 	}
-	healthClient, err := health.NewClient(logger, healthCfg)
+	healthClient, err := health.NewClient(logger, tracer, healthCfg)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize health client", observability.Error(err))
 	}

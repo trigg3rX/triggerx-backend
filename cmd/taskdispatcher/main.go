@@ -36,6 +36,7 @@ func main() {
 		config.GetVersion(),
 		config.GetOTELExporterEndpoint(),
 		config.IsDevMode(),
+		config.GetServiceID(),
 	)
 
 	// Initialize observability (all three pillars)

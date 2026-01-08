@@ -11,12 +11,14 @@ DESCRIPTION:
     Supports building individual services or all services in parallel.
 
 USAGE:
-    $0 -n <service> -v <version>
+    $0 -n <service> -v <version> [-w <network>]
     $0 -h|--help
 
 OPTIONS:
     -n, --service    Service name to build (required)
     -v, --version    Version tag for the Docker image (required, format: MAJOR.MINOR.PATCH)
+    -w, --network    Network name for keeper service (required for keeper, ignored for other services)
+                     Valid values: mainnet, imua, sepolia
     -h, --help       Display this help message
 
 AVAILABLE SERVICES:
@@ -39,7 +41,8 @@ EOF
 
 # Function to display usage (simplified version for errors)
 usage() {
-    echo "Usage: $0 -n <service> -v <version>"
+    echo "Usage: $0 -n <service> -v <version> [-w <network>]"
+    echo "For keeper service: $0 -n keeper -v <version> -w <network>"
     echo "Use '$0 -h' for detailed help and examples"
     exit 1
 }
@@ -135,14 +138,61 @@ update_yaml_version() {
     fi
 }
 
+# Function to update network in keeper.yaml file
+update_keeper_network() {
+    local network=$1
+    local yaml_file="config/services/keeper.yaml"
+    
+    # Check if YAML file exists
+    if [ ! -f "$yaml_file" ]; then
+        echo "Error: Keeper YAML file $yaml_file not found" 1>&2
+        return 1
+    fi
+    
+    # Validate network value
+    if [[ ! "$network" =~ ^(mainnet|imua|sepolia)$ ]]; then
+        echo "Error: Invalid network value. Must be one of: mainnet, imua, sepolia" 1>&2
+        return 1
+    fi
+    
+    # Use awk to update or add network field
+    awk -v network="$network" 'BEGIN {
+        network_updated = 0
+    }
+    {
+        if (/^network:/) {
+            printf "network: \"%s\"                  # Network: mainnet, imua, or sepolia\n", network
+            network_updated = 1
+            next
+        }
+        print $0
+    }
+    END {
+        if (!network_updated) {
+            # If network field doesn't exist, add it at the beginning after comments
+            print "network: \"" network "\"                  # Network: mainnet, imua, or sepolia"
+        }
+    }' "$yaml_file" > "${yaml_file}.tmp" && mv "${yaml_file}.tmp" "$yaml_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "Updated network in $yaml_file to $network"
+    else
+        echo "Error: Failed to update network in $yaml_file" 1>&2
+        return 1
+    fi
+}
+
 # Parse command-line arguments
-while getopts ":n:v:h-:" opt; do
+while getopts ":n:v:w:h-:" opt; do
     case ${opt} in
         n )
             SERVICE=$OPTARG
             ;;
         v )
             VERSION=$OPTARG
+            ;;
+        w )
+            NETWORK=$OPTARG
             ;;
         h )
             show_help
@@ -155,6 +205,9 @@ while getopts ":n:v:h-:" opt; do
                     ;;
                 version=* )
                     VERSION="${OPTARG#*=}"
+                    ;;
+                network=* )
+                    NETWORK="${OPTARG#*=}"
                     ;;
                 help )
                     show_help
@@ -274,14 +327,17 @@ if [[ "$SERVICE" == "all" ]]; then
     echo "Successfully built all services: ${VERSION}"
     exit 0
 elif [[ "$SERVICE" == "keeper" ]]; then
+    # Update network in YAML file BEFORE building (mandatory for keeper)
+    update_keeper_network "$NETWORK"
+    
     # Update version in YAML file BEFORE building
     update_yaml_version "keeper" "$VERSION"
     
-    echo "Building $SERVICE..."
+    echo "Building $SERVICE with network=$NETWORK..."
     if docker build --no-cache \
         -f docker/Dockerfile.keeper \
         -t triggerx-keeper:${VERSION} .; then
-        echo "Successfully built keeper:${VERSION}"
+        echo "Successfully built keeper:${VERSION} (network: $NETWORK)"
         echo "Successfully built: ${VERSION}"
         exit 0
     else

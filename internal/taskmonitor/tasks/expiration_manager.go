@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	// DispatchedTimeoutsKey is the Redis sorted set key for tracking dispatched task timeouts
+	// ExecutedTimeoutsKey is the Redis sorted set key for tracking executed task timeouts (pending validation)
+	ExecutedTimeoutsKey = "executed_timeouts"
+	// DispatchedTimeoutsKey is the Redis sorted set key for tracking dispatched task timeouts (legacy, kept for compatibility)
 	DispatchedTimeoutsKey = "dispatched_timeouts"
 	// StreamExpirationKeyPrefix is the prefix for sorted sets tracking stream entry expiration
 	StreamExpirationKeyPrefix = "stream:expiration:"
@@ -38,8 +40,13 @@ func (em *ExpirationManager) getStreamExpirationKey(stream string) string {
 	return StreamExpirationKeyPrefix + stream
 }
 
-// AddTaskTimeout adds a task to the timeout tracking sorted set
+// AddTaskTimeout adds a task to the timeout tracking sorted set (for executed tasks)
 func (em *ExpirationManager) AddTaskTimeout(ctx context.Context, taskID int64, timeoutDuration time.Duration) error {
+	return em.AddExecutedTaskTimeout(ctx, taskID, timeoutDuration)
+}
+
+// AddExecutedTaskTimeout adds an executed task to the timeout tracking sorted set
+func (em *ExpirationManager) AddExecutedTaskTimeout(ctx context.Context, taskID int64, timeoutDuration time.Duration) error {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
 	defer cancel()
@@ -47,7 +54,7 @@ func (em *ExpirationManager) AddTaskTimeout(ctx context.Context, taskID int64, t
 	timeoutTimestamp := float64(time.Now().Add(timeoutDuration).Unix())
 	taskIDStr := strconv.FormatInt(taskID, 10)
 
-	_, err := em.tsm.redisClient.ZAdd(ctx, DispatchedTimeoutsKey, redis.Z{
+	_, err := em.tsm.redisClient.ZAdd(ctx, ExecutedTimeoutsKey, redis.Z{
 		Score:  timeoutTimestamp,
 		Member: taskIDStr,
 	})
@@ -57,18 +64,18 @@ func (em *ExpirationManager) AddTaskTimeout(ctx context.Context, taskID int64, t
 		if metrics.TasksAddedToStreamTotal != nil {
 			metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_add", "failure").Inc(ctx)
 		}
-		em.tsm.logger.Error(ctx, "Failed to add task timeout",
+		em.tsm.logger.Error(ctx, "Failed to add executed task timeout",
 			observability.Int64("task_id", taskID),
 			observability.Float64("timeout_timestamp", timeoutTimestamp),
 			observability.Duration("duration", duration),
 			observability.Error(err))
-		return fmt.Errorf("failed to add task timeout: %w", err)
+		return fmt.Errorf("failed to add executed task timeout: %w", err)
 	}
 
 	// Set TTL on the sorted set to ensure it expires
-	err = em.tsm.redisClient.SetTTL(ctx, DispatchedTimeoutsKey, ExpirationTrackingTTL)
+	err = em.tsm.redisClient.SetTTL(ctx, ExecutedTimeoutsKey, ExpirationTrackingTTL)
 	if err != nil {
-		em.tsm.logger.Warn(ctx, "Failed to set TTL on timeout tracking",
+		em.tsm.logger.Warn(ctx, "Failed to set TTL on executed timeout tracking",
 			observability.Int64("task_id", taskID),
 			observability.Error(err))
 	}
@@ -76,7 +83,7 @@ func (em *ExpirationManager) AddTaskTimeout(ctx context.Context, taskID int64, t
 	if metrics.TasksAddedToStreamTotal != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_add", "success").Inc(ctx)
 	}
-	em.tsm.logger.Debug(ctx, "Task timeout added successfully",
+	em.tsm.logger.Debug(ctx, "Executed task timeout added successfully",
 		observability.Int64("task_id", taskID),
 		observability.Float64("timeout_timestamp", timeoutTimestamp),
 		observability.Duration("duration", duration))
@@ -84,25 +91,30 @@ func (em *ExpirationManager) AddTaskTimeout(ctx context.Context, taskID int64, t
 	return nil
 }
 
-// GetExpiredTasks efficiently retrieves all tasks that have timed out
+// GetExpiredTasks efficiently retrieves all executed tasks that have timed out (pending validation)
 func (em *ExpirationManager) GetExpiredTasks(ctx context.Context) ([]int64, error) {
+	return em.GetExpiredExecutedTasks(ctx)
+}
+
+// GetExpiredExecutedTasks efficiently retrieves all executed tasks that have timed out
+func (em *ExpirationManager) GetExpiredExecutedTasks(ctx context.Context) ([]int64, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
 	defer cancel()
 
 	currentTimestamp := time.Now().Unix()
-	expiredTaskIDs, err := em.tsm.redisClient.ZRangeByScore(ctx, DispatchedTimeoutsKey, "0", strconv.FormatInt(currentTimestamp, 10))
+	expiredTaskIDs, err := em.tsm.redisClient.ZRangeByScore(ctx, ExecutedTimeoutsKey, "0", strconv.FormatInt(currentTimestamp, 10))
 	duration := time.Since(start)
 
 	if err != nil {
 		if metrics.TasksAddedToStreamTotal != nil {
 			metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_query", "failure").Inc(ctx)
 		}
-		em.tsm.logger.Error(ctx, "Failed to get expired tasks",
+		em.tsm.logger.Error(ctx, "Failed to get expired executed tasks",
 			observability.Int64("current_timestamp", currentTimestamp),
 			observability.Duration("duration", duration),
 			observability.Error(err))
-		return nil, fmt.Errorf("failed to get expired tasks: %w", err)
+		return nil, fmt.Errorf("failed to get expired executed tasks: %w", err)
 	}
 
 	// Convert string task IDs to int64
@@ -110,7 +122,7 @@ func (em *ExpirationManager) GetExpiredTasks(ctx context.Context) ([]int64, erro
 	for _, taskIDStr := range expiredTaskIDs {
 		taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
 		if err != nil {
-			em.tsm.logger.Error(ctx, "Failed to parse task ID from timeout tracking",
+			em.tsm.logger.Error(ctx, "Failed to parse task ID from executed timeout tracking",
 				observability.String("task_id_str", taskIDStr),
 				observability.Error(err))
 			continue
@@ -124,36 +136,41 @@ func (em *ExpirationManager) GetExpiredTasks(ctx context.Context) ([]int64, erro
 	return taskIDs, nil
 }
 
-// RemoveTaskTimeout removes a task from the timeout tracking sorted set
+// RemoveTaskTimeout removes a task from the executed timeout tracking sorted set
 func (em *ExpirationManager) RemoveTaskTimeout(ctx context.Context, taskID int64) error {
+	return em.RemoveExecutedTaskTimeout(ctx, taskID)
+}
+
+// RemoveExecutedTaskTimeout removes an executed task from the timeout tracking sorted set
+func (em *ExpirationManager) RemoveExecutedTaskTimeout(ctx context.Context, taskID int64) error {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
 	defer cancel()
 
 	taskIDStr := strconv.FormatInt(taskID, 10)
-	removed, err := em.tsm.redisClient.ZRem(ctx, DispatchedTimeoutsKey, taskIDStr)
+	removed, err := em.tsm.redisClient.ZRem(ctx, ExecutedTimeoutsKey, taskIDStr)
 	duration := time.Since(start)
 
 	if err != nil {
 		if metrics.TasksAddedToStreamTotal != nil {
 			metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_remove", "failure").Inc(ctx)
 		}
-		em.tsm.logger.Error(ctx, "Failed to remove task timeout",
+		em.tsm.logger.Error(ctx, "Failed to remove executed task timeout",
 			observability.Int64("task_id", taskID),
 			observability.Duration("duration", duration),
 			observability.Error(err))
-		return fmt.Errorf("failed to remove task timeout: %w", err)
+		return fmt.Errorf("failed to remove executed task timeout: %w", err)
 	}
 
 	if removed == 0 {
-		em.tsm.logger.Debug(ctx, "Task timeout entry not found for removal",
+		em.tsm.logger.Debug(ctx, "Executed task timeout entry not found for removal",
 			observability.Int64("task_id", taskID),
 			observability.Duration("duration", duration))
 	} else {
 		if metrics.TasksAddedToStreamTotal != nil {
 			metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_remove", "success").Inc(ctx)
 		}
-		em.tsm.logger.Debug(ctx, "Task timeout removed successfully",
+		em.tsm.logger.Debug(ctx, "Executed task timeout removed successfully",
 			observability.Int64("task_id", taskID),
 			observability.Duration("duration", duration))
 	}
@@ -178,7 +195,7 @@ func (em *ExpirationManager) RemoveMultipleTaskTimeouts(ctx context.Context, tas
 
 	_, err := em.tsm.redisClient.ExecutePipeline(ctx, func(pipe redis.Pipeliner) error {
 		for _, taskIDStr := range taskIDStrs {
-			pipe.ZRem(ctx, DispatchedTimeoutsKey, taskIDStr)
+			pipe.ZRem(ctx, ExecutedTimeoutsKey, taskIDStr)
 		}
 		return nil
 	})
@@ -342,7 +359,8 @@ func (em *ExpirationManager) GetExpiredMessages(ctx context.Context, stream stri
 func (em *ExpirationManager) GetExpiredMessagesForAllStreams(ctx context.Context) (map[string][]string, error) {
 	streams := []string{
 		StreamTaskDispatched,
-		StreamTaskCompleted,
+		StreamTaskExecuted,
+		StreamTaskValidated,
 		StreamTaskFailed,
 		StreamTaskRetry,
 	}

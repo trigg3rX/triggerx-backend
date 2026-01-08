@@ -115,9 +115,9 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	if keeperHealth.Version == "" {
 		keeperHealth.Version = "0.1.0"
 	}
-
-	// Record check-in by version metric
-	metrics.RecordKeeperCheckIn(ctx, keeperHealth.Version)
+	if keeperHealth.Network == "" {
+		keeperHealth.Network = "mainnet"
+	}
 
 	// Verify signature for all versions
 	ok, _ := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
@@ -152,69 +152,61 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		return
 	}
 
+	// Update keeper counts metrics after successful check-in
+	total, active := h.stateManager.GetKeeperCount(ctx)
+	metrics.UpdateKeeperCounts(ctx, total, active)
+
+	// Update keepers online by version metric
+	keepersByVersion := h.stateManager.GetKeepersByVersion(ctx)
+	metrics.UpdateKeepersOnlineByVersion(ctx, keepersByVersion)
+
 	h.logger.Debug(ctx, "CheckIn Successful",
 		observability.String("keeper", keeperHealth.KeeperAddress),
 		observability.String("version", keeperHealth.Version),
+		observability.String("network", keeperHealth.Network),
 	)
 
-	// Handle different versions according to requirements
-	latestVersions := config.GetKeeperLatestVersions()
-	versionsWithTaskExecutionAddress := config.GetKeeperVersionsWithTaskExecutionAddress()
-
-	if config.IsKeeperVersionInList(keeperHealth.Version, latestVersions) {
-		// Latest version - return msgData with no warning
-		var message string
+	// All versions are allowed to check-in and receive encrypted data
+	// Use network field to decide which task execution address to use
+	var taskExecutionAddress string
+	switch strings.ToLower(keeperHealth.Network) {
+	case "imua":
+		taskExecutionAddress = config.GetImuaTaskExecutionAddress()
+	case "mainnet":
+		taskExecutionAddress = config.GetTaskExecutionAddress()
+	case "sepolia":
+		taskExecutionAddress = config.GetTestTaskExecutionAddress()
+	default:
+		// Fallback to old logic for backward compatibility
 		if keeperHealth.IsImua {
-			message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
-				config.GetEtherscanAPIKey(),
-				config.GetAlchemyAPIKey(),
-				config.GetPinataHost(),
-				config.GetPinataJWT(),
-				config.GetDispatcherSigningAddress(),
-				config.GetImuaTaskExecutionAddress(),
-			)
+			taskExecutionAddress = config.GetImuaTaskExecutionAddress()
 		} else {
-			if config.IsKeeperVersionInList(keeperHealth.Version, versionsWithTaskExecutionAddress) {
-				message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
-					config.GetEtherscanAPIKey(),
-					config.GetAlchemyAPIKey(),
-					config.GetPinataHost(),
-					config.GetPinataJWT(),
-					config.GetDispatcherSigningAddress(),
-					config.GetTaskExecutionAddress(),
-				)
-			} else {
-				message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
-					config.GetEtherscanAPIKey(),
-					config.GetAlchemyAPIKey(),
-					config.GetPinataHost(),
-					config.GetPinataJWT(),
-					config.GetDispatcherSigningAddress(),
-					config.GetTestTaskExecutionAddress(),
-				)
-			}
+			taskExecutionAddress = config.GetTestTaskExecutionAddress()
 		}
-		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
-		if err != nil {
-			h.logger.Error(context.Background(), "Failed to encrypt message for keeper",
-				observability.Error(err),
-			)
-			response.Status = false
-			response.Data = err.Error()
-			c.JSON(http.StatusInternalServerError, response)
-			return
-		}
-
-		response.Status = true
-		response.Data = msgData
-		c.JSON(http.StatusOK, response)
-	} else {
-		// Return warning only, no msgData
-
-		response.Status = true
-		response.Data = config.GetKeeperUpgradeMessage()
-		c.JSON(http.StatusOK, response)
 	}
+
+	message := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+		config.GetEtherscanAPIKey(),
+		config.GetAlchemyAPIKey(),
+		config.GetPinataHost(),
+		config.GetPinataJWT(),
+		config.GetDispatcherSigningAddress(),
+		taskExecutionAddress,
+	)
+	msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
+	if err != nil {
+		h.logger.Error(context.Background(), "Failed to encrypt message for keeper",
+			observability.Error(err),
+		)
+		response.Status = false
+		response.Data = err.Error()
+		c.JSON(http.StatusInternalServerError, response)
+		return
+	}
+
+	response.Status = true
+	response.Data = msgData
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *Handler) GetKeeperStatus(c *gin.Context) {
@@ -240,25 +232,21 @@ func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 	// Update keeper metrics
 	metrics.UpdateKeeperCounts(ctx, total, active)
 
-	// Update keeper uptime metrics for each keeper
-	now := time.Now().UTC()
-	var maxUptime float64
-	var mostActiveKeeper string
-	for _, keeper := range detailedInfo {
-		if keeper.IsActive && !keeper.LastCheckedIn.IsZero() {
-			// Calculate uptime from last check-in (for active keepers)
-			uptime := now.Sub(keeper.LastCheckedIn).Seconds()
-			metrics.UpdateKeeperUptime(ctx, keeper.KeeperAddress, uptime)
-			if uptime > maxUptime {
-				maxUptime = uptime
-				mostActiveKeeper = keeper.KeeperAddress
+	// Get keeper uptimes from database and update metrics
+	// This uses the cumulative uptime stored in the database, which is more accurate
+	// than calculating from last check-in time
+	uptimes, err := h.stateManager.GetKeeperUptimes(ctx)
+	if err != nil {
+		h.logger.Warn(ctx, "Failed to get keeper uptimes from database",
+			observability.Error(err),
+		)
+	} else {
+		// Update uptime metrics for all keepers (both active and inactive)
+		for _, keeper := range detailedInfo {
+			if uptime, exists := uptimes[strings.ToLower(keeper.KeeperAddress)]; exists {
+				metrics.UpdateKeeperUptime(ctx, keeper.KeeperAddress, float64(uptime))
 			}
 		}
-	}
-
-	// Record the most active keeper uptime
-	if mostActiveKeeper != "" {
-		metrics.RecordMostActiveKeeperUptime(ctx, mostActiveKeeper, maxUptime)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

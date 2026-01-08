@@ -71,6 +71,9 @@ type Config struct {
 	otelExporterEndpoint   string
 	enablePrometheusExport bool
 
+	// Network configuration
+	network string
+
 	// YAML-loaded settings
 	api      APIConfig
 	health   HealthConfig
@@ -93,6 +96,7 @@ type ShutdownConfig struct {
 }
 
 type YAMLConfig struct {
+	Network  string             `yaml:"network"`
 	API      APIConfig          `yaml:"api"`
 	Health   HealthConfig       `yaml:"health"`
 	Shutdown ShutdownConfig     `yaml:"shutdown"`
@@ -133,12 +137,13 @@ func Init(configPath string) error {
 		tlsProofHost:         "www.google.com",
 		tlsProofPort:         "443",
 		// Test Attestation Center Address for Base Sepolia
-		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
+		attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
 		// Base Mainnet Attestation Center Address
 		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
 		othenticBootstrapID:    env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 		otelExporterEndpoint:   env.GetOTELExporterEndpoint(),
 		enablePrometheusExport: env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
+		network:                yamlConfig.Network,
 		api:                    yamlConfig.API,
 		health:                 yamlConfig.Health,
 		shutdown:               yamlConfig.Shutdown,
@@ -385,4 +390,8 @@ func GetHealthRequestTimeout() time.Duration {
 
 func GetShutdownTimeout() time.Duration {
 	return cfg.shutdown.Timeout.ToDuration()
+}
+
+func GetNetwork() string {
+	return cfg.network
 }

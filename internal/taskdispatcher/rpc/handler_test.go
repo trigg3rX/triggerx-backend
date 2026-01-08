@@ -45,7 +45,7 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 					TaskID: 123,
 				},
 			},
-			SchedulerID: 1,
+			SchedulerID: "1",
 		},
 		Source: "test_scheduler",
 	}

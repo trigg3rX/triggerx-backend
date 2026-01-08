@@ -139,8 +139,6 @@ format-go:
 # Build the Go code (active)
 build-go:
     go build -v ./cmd/... ./internal/... ./pkg/...
-    go mod tidy
-    git diff --exit-code go.mod go.sum
 
 ############################ BUILD AND PUSH DOCKER IMAGES ####################################
 

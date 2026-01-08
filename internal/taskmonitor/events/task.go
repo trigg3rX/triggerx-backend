@@ -289,7 +289,7 @@ func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *Cha
 
 // ProcessConsensusEventFromIPFS processes consensus events with IPFS data directly from eventmonitor
 // This is the new flow where eventmonitor fetches IPFS data and passes it with trace context
-func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, txHash string, isAccepted bool, ipfsData *pkgTypes.IPFSData) error {
+func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, txHash string, isAccepted bool, ipfsData *pkgTypes.IPFSData, ipfsCID string) error {
 	if ipfsData == nil {
 		return fmt.Errorf("ipfs data is nil")
 	}
@@ -360,12 +360,15 @@ func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, tx
 	))
 
 	// Move task from dispatched to completed stream
+	streamHandled := true
 	if err := h.moveTaskToCompleted(ctx, taskID); err != nil {
 		span.RecordError(err, observability.WithErrorAttributes(
 			attribute.String("error.type", "stream_move_failed"),
 		))
-		h.logger.Error(ctx, "Failed to move task to completed stream", observability.Error(err))
-		// Continue processing even if stream move fails
+		h.logger.Error(ctx, "Failed to move task to validated stream", observability.Error(err))
+		streamHandled = false
+		// Stream move failure is critical - task should be in validated stream
+		// But continue to attempt DB update anyway
 	}
 
 	// Update task submission data in database
@@ -373,9 +376,22 @@ func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, tx
 		span.RecordError(err, observability.WithErrorAttributes(
 			attribute.String("error.type", "database_update_failed"),
 		))
-		span.SetStatus(codes.Error, "failed to update execution data")
 		h.logger.Error(ctx, "Failed to update task submission data in database", observability.Error(err))
-		return err
+		// Don't return error - task is already validated in stream
+		// DB update can be retried later if needed, but task should not be rebroadcasted
+	} else {
+		span.SetStatus(codes.Ok, "task validated and database updated")
+
+		// Schedule IPFS file deletion after 6 hours delay
+		// This happens after data is downloaded, DB is updated, and stream is handled
+		// Only schedule deletion if both stream handling and DB update succeeded
+		if streamHandled && ipfsCID != "" {
+			h.scheduleIPFSDeletion(ctx, ipfsCID, taskID)
+		} else if !streamHandled {
+			h.logger.Warn(ctx, "Skipping IPFS deletion scheduling - stream handling failed",
+				observability.String("ipfs_cid", ipfsCID),
+				observability.Int64("task_id", taskID))
+		}
 	}
 
 	span.AddEvent("task.data.updated", observability.WithEventAttributes(
@@ -445,30 +461,104 @@ func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, tx
 	return nil
 }
 
-// moveTaskToCompleted moves a task from dispatched to completed stream
+// moveTaskToCompleted moves a task from executed (or dispatched) to validated stream
 func (h *TaskEventHandler) moveTaskToCompleted(ctx context.Context, taskID int64) error {
-	h.logger.Info(ctx, "Moving task to completed stream", observability.Int64("task_id", taskID))
+	h.logger.Info(ctx, "Moving task to validated stream", observability.Int64("task_id", taskID))
 
-	// Find the task in the dispatched stream
-	task, err := h.taskStreamManager.FindTaskInDispatched(taskID)
+	// Try to find task in executed stream first (most common case after execution)
+	var task *tasks.TaskStreamData
+	var messageID string
+	var err error
+	task, messageID, err = h.taskStreamManager.FindTaskByIDInStream(ctx, taskID, tasks.StreamTaskExecuted)
 	if err != nil {
-		h.logger.Error(ctx, "Failed to find task in dispatched stream", observability.Int64("task_id", taskID), observability.Error(err))
+		// Fallback to dispatched stream (for tasks that were validated before execution completed)
+		h.logger.Debug(ctx, "Task not found in executed stream, checking dispatched stream",
+			observability.Int64("task_id", taskID))
+		task, err = h.taskStreamManager.FindTaskInDispatched(taskID)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to find task in executed or dispatched stream",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+			return err
+		}
+		messageID = "" // No messageID for dispatched stream lookup
+	}
+
+	// Mark task as validated
+	now := time.Now()
+	task.ValidatedAt = &now
+
+	// Add to validated stream
+	err = h.taskStreamManager.AddTaskToStream(ctx, tasks.StreamTaskValidated, task)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to add task to validated stream", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
 
-	// Mark task as completed
-	task.CompletedAt = &[]time.Time{time.Now()}[0]
-
-	// Add to completed stream
-	err = h.taskStreamManager.AddTaskToStream(ctx, tasks.StreamTaskCompleted, task)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to add task to completed stream", observability.Int64("task_id", taskID), observability.Error(err))
-		return err
+	// Remove from executed stream if it was there (acknowledge)
+	if messageID != "" {
+		if err := h.taskStreamManager.AckTaskProcessed(ctx, tasks.StreamTaskExecuted, "task-processors", messageID); err != nil {
+			h.logger.Warn(ctx, "Failed to acknowledge task from executed stream",
+				observability.Int64("task_id", taskID),
+				observability.String("message_id", messageID),
+				observability.Error(err))
+		}
+		// Always remove from task index and timeout tracking, even if ack failed
+		// The task is already validated, so it should not be in timeout tracking
+		if err := h.taskStreamManager.RemoveTaskIndex(ctx, taskID); err != nil {
+			h.logger.Warn(ctx, "Failed to remove task from index after validation",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+		}
+		// CRITICAL: Always remove from timeout tracking - task is validated, don't rebroadcast
+		if err := h.taskStreamManager.RemoveExecutedTaskTimeout(ctx, taskID); err != nil {
+			h.logger.Warn(ctx, "Failed to remove task from timeout tracking after validation",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+		}
+	} else {
+		// Task was in dispatched stream (no timeout tracking), but still clean up index if present
+		if err := h.taskStreamManager.RemoveTaskIndex(ctx, taskID); err != nil {
+			h.logger.Debug(ctx, "Task index not found (expected for dispatched stream tasks)",
+				observability.Int64("task_id", taskID))
+		}
 	}
 
-	// Remove from dispatched stream (acknowledge)
-	// Note: In a real implementation, we'd need to track the dispatched message ID
-	h.logger.Info(ctx, "Task moved to completed stream successfully", observability.Int64("task_id", taskID))
+	h.logger.Info(ctx, "Task moved to validated stream successfully", observability.Int64("task_id", taskID))
 
 	return nil
+}
+
+// scheduleIPFSDeletion schedules IPFS file deletion after a 6-hour delay
+// This is called after data is downloaded, DB is updated, and stream is handled
+func (h *TaskEventHandler) scheduleIPFSDeletion(ctx context.Context, ipfsCID string, taskID int64) {
+	const deletionDelay = 6 * time.Hour
+
+	// Start a goroutine to handle delayed deletion
+	go func() {
+		// Create a new context for the deletion operation
+		// We use a background context since the original context might be cancelled
+		deleteCtx := context.Background()
+
+		// Wait for the delay
+		select {
+		case <-time.After(deletionDelay):
+			// Attempt to delete the IPFS file
+			if err := h.ipfsClient.Delete(deleteCtx, ipfsCID); err != nil {
+				h.logger.Error(deleteCtx, "Failed to delete IPFS file",
+					observability.String("ipfs_cid", ipfsCID),
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
+			} else {
+				h.logger.Info(deleteCtx, "Successfully deleted IPFS file",
+					observability.String("ipfs_cid", ipfsCID),
+					observability.Int64("task_id", taskID))
+			}
+		case <-ctx.Done():
+			// Original context cancelled, abort deletion
+			h.logger.Debug(deleteCtx, "IPFS deletion cancelled due to context cancellation",
+				observability.String("ipfs_cid", ipfsCID),
+				observability.Int64("task_id", taskID))
+		}
+	}()
 }

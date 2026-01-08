@@ -20,6 +20,9 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
+	// Service ID for OpenTelemetry
+	serviceID string
+
 	// Condition Scheduler RPC URL
 	conditionSchedulerRPCUrl string
 
@@ -84,6 +87,7 @@ func Init(configPath string) error {
 		httpPort:                     env.GetEnvString("EVENT_MONITOR_HTTP_PORT", "9008"),
 		grpcPort:                     env.GetEnvString("EVENT_MONITOR_GRPC_PORT", "9018"),
 		otelExporterEndpoint:         env.GetOTELExporterEndpoint(),
+		serviceID:                    env.GetEnvString("EVENT_MONITOR_SERVICE_ID", "1"),
 		conditionSchedulerRPCUrl:     env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "localhost:9016"),
 		taskMonitorRPCUrl:            env.GetEnvString("TASK_MONITOR_RPC_URL", "localhost:9013"),
 		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
@@ -152,6 +156,10 @@ func GetGRPCPort() string {
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
+}
+
+func GetServiceID() string {
+	return cfg.serviceID
 }
 
 func GetMetricsUpdateInterval() time.Duration {

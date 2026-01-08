@@ -187,6 +187,7 @@ type KeeperData struct {
 	Registered        bool      `json:"registered"`
 	Online            bool      `json:"online"`
 	Version           string    `json:"version"`
+	Network           string    `json:"network"`
 	NoExecutedTasks   int       `json:"no_executed_tasks"`
 	NoAttestedTasks   int       `json:"no_attested_tasks"`
 	ChatID            int64     `json:"chat_id"`

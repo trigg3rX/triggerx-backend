@@ -9,13 +9,16 @@ import (
 
 const (
 	// Task Lifecycle Streams (Redis Managed Internally)
-	StreamTaskDispatched = "task:dispatched" // Dispatched to Aggregator
-	StreamTaskCompleted  = "task:completed"  // Completed tasks
+	StreamTaskDispatched = "task:dispatched" // Dispatched to Aggregator (pending execution)
+	StreamTaskExecuted   = "task:executed"   // Executed, pending validation (waiting for on-chain confirmation)
+	StreamTaskValidated  = "task:validated"  // Validated on-chain (completed)
 	StreamTaskFailed     = "task:failed"     // Failed tasks - managed by retry rules
 	StreamTaskRetry      = "task:retry"      // Retry tasks - managed by retry rules
 
 	// Expiration Configuration
 	TasksProcessingTTL = 1 * time.Hour
+	TasksExecutedTTL   = 15 * time.Minute // Timeout for executed tasks waiting validation
+	TasksValidatedTTL  = 1 * time.Hour
 	TasksCompletedTTL  = 1 * time.Hour
 	TasksFailedTTL     = 1 * time.Hour
 	TasksRetryTTL      = 1 * time.Hour
@@ -38,9 +41,12 @@ type TaskStreamData struct {
 	SendTaskDataToKeeper types.SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
 
 	// Processing status (Redis internal use)
-	DispatchedAt *time.Time `json:"dispatched_at,omitempty"`
-	CompletedAt  *time.Time `json:"completed_at,omitempty"`
-	LastError    string     `json:"last_error,omitempty"`
+	DispatchedAt      *time.Time `json:"dispatched_at,omitempty"`
+	ExecutedAt        *time.Time `json:"executed_at,omitempty"`         // When task was executed and sent to aggregator
+	ValidatedAt       *time.Time `json:"validated_at,omitempty"`        // When task was validated on-chain
+	RebroadcastCount  int        `json:"rebroadcast_count,omitempty"`   // Number of rebroadcast attempts
+	LastRebroadcastAt *time.Time `json:"last_rebroadcast_at,omitempty"` // Last rebroadcast attempt time
+	LastError         string     `json:"last_error,omitempty"`
 }
 
 // TaskStatusUpdate represents status updates from performers

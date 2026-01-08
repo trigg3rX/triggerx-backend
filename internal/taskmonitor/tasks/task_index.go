@@ -152,8 +152,13 @@ func (tim *TaskIndexManager) RemoveTaskIndex(ctx context.Context, taskID int64) 
 	return nil
 }
 
-// FindTaskByID efficiently finds a task by its ID using the index
+// FindTaskByID efficiently finds a task by its ID using the index (searches dispatched stream by default)
 func (tim *TaskIndexManager) FindTaskByID(ctx context.Context, taskID int64) (*TaskStreamData, string, error) {
+	return tim.FindTaskByIDInStream(ctx, taskID, StreamTaskDispatched)
+}
+
+// FindTaskByIDInStream efficiently finds a task by its ID in a specific stream
+func (tim *TaskIndexManager) FindTaskByIDInStream(ctx context.Context, taskID int64, stream string) (*TaskStreamData, string, error) {
 	start := time.Now()
 
 	// First, get the messageID from the index
@@ -164,9 +169,10 @@ func (tim *TaskIndexManager) FindTaskByID(ctx context.Context, taskID int64) (*T
 
 	if !exists {
 		tim.tsm.logger.Debug(ctx, "Task not found in index, falling back to stream scan",
-			observability.Int64("task_id", taskID))
+			observability.Int64("task_id", taskID),
+			observability.String("stream", stream))
 		// Fall back to the old method for backward compatibility
-		task, err := tim.tsm.findTaskInDispatched(taskID)
+		task, err := tim.tsm.findTaskInStream(taskID, stream)
 		if err != nil {
 			return nil, "", err
 		}
@@ -174,48 +180,52 @@ func (tim *TaskIndexManager) FindTaskByID(ctx context.Context, taskID int64) (*T
 	}
 
 	// Use XRANGE to get the specific message efficiently without adding to PEL
-	task, err := tim.getTaskByMessageID(ctx, messageID)
+	task, err := tim.getTaskByMessageID(ctx, messageID, stream)
 	if err != nil {
 		duration := time.Since(start)
 		tim.tsm.logger.Warn(ctx, "Task index found messageID but task not found in stream",
 			observability.Int64("task_id", taskID),
 			observability.String("message_id", messageID),
+			observability.String("stream", stream),
 			observability.Duration("duration", duration))
-		return nil, messageID, fmt.Errorf("task %d not found in stream despite having messageID %s: %w", taskID, messageID, err)
+		return nil, messageID, fmt.Errorf("task %d not found in stream %s despite having messageID %s: %w", taskID, stream, messageID, err)
 	}
 
 	duration := time.Since(start)
 	tim.tsm.logger.Debug(ctx, "Task found efficiently using index",
 		observability.Int64("task_id", taskID),
 		observability.String("message_id", messageID),
+		observability.String("stream", stream),
 		observability.Duration("duration", duration))
 	return task, messageID, nil
 }
 
-// getTaskByMessageID retrieves a specific task by its messageID using XRANGE
-func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID string) (*TaskStreamData, error) {
+// getTaskByMessageID retrieves a specific task by its messageID using XRANGE from a specific stream
+func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID string, stream string) (*TaskStreamData, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
 	defer cancel()
 
 	// Use XRANGE to get the specific message without adding to PEL
-	streams, err := tim.tsm.redisClient.Client().XRange(ctx, StreamTaskDispatched, messageID, messageID).Result()
+	streams, err := tim.tsm.redisClient.Client().XRange(ctx, stream, messageID, messageID).Result()
 	if err != nil {
 		tim.tsm.logger.Error(ctx, "Failed to get task by messageID using XRANGE",
 			observability.String("message_id", messageID),
+			observability.String("stream", stream),
 			observability.Error(err))
 		return nil, fmt.Errorf("failed to get task by messageID: %w", err)
 	}
 
 	if len(streams) == 0 {
-		return nil, fmt.Errorf("no message found with ID %s", messageID)
+		return nil, fmt.Errorf("no message found with ID %s in stream %s", messageID, stream)
 	}
 
 	message := streams[0]
 	taskJSON, exists := message.Values["task"].(string)
 	if !exists {
 		tim.tsm.logger.Error(ctx, "Message missing task data",
-			observability.String("message_id", messageID))
+			observability.String("message_id", messageID),
+			observability.String("stream", stream))
 		return nil, fmt.Errorf("message %s missing task data", messageID)
 	}
 
@@ -223,6 +233,7 @@ func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID s
 	if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
 		tim.tsm.logger.Error(ctx, "Failed to unmarshal task data",
 			observability.String("message_id", messageID),
+			observability.String("stream", stream),
 			observability.Error(err))
 		return nil, fmt.Errorf("failed to unmarshal task data: %w", err)
 	}
@@ -231,6 +242,7 @@ func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID s
 	tim.tsm.logger.Debug(ctx, "Task retrieved by messageID successfully",
 		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
 		observability.String("message_id", messageID),
+		observability.String("stream", stream),
 		observability.Duration("duration", duration))
 
 	return &task, nil

@@ -58,6 +58,6 @@ type TaskStatusUpdate struct {
 // SchedulerTaskRequest represents the simplified interface for schedulers
 type SchedulerTaskRequest struct {
 	SendTaskDataToKeeper types.SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
-	SchedulerID          int                        `json:"scheduler_id"`
+	SchedulerID          string                     `json:"scheduler_id"`
 	Source               string                     `json:"source"` // "time_scheduler" or "condition_scheduler"
 }

@@ -15,6 +15,7 @@ type KeeperHealthCheckIn struct {
 	Signature        string    `json:"signature" validate:"required"`
 	PeerID           string    `json:"peer_id" validate:"required"`
 	IsImua           bool      `json:"is_imua" validate:"required"`
+	Network          string    `json:"network" validate:"required,oneof=mainnet imua sepolia"`
 }
 
 // KeeperHealthCheckInResponse represents the response from the health check-in endpoint

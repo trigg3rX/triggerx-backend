@@ -30,13 +30,14 @@ type TimeBasedScheduler struct {
 	scriptStorageRepository repository.ScriptStorageRepository
 	taskDispatcherClient TaskDispatcherClient // RPC client for task dispatcher
 	metrics              *metrics.Collector
-	schedulerID          int
+	schedulerID          string
 	pollingInterval      time.Duration
 	pollingLookAhead     time.Duration
 	taskBatchSize        int
 	performerLockTTL     time.Duration
 	taskCacheTTL         time.Duration
 	duplicateTaskWindow  time.Duration
+	jobStatusChecker     *JobStatusChecker
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler.
@@ -88,11 +89,17 @@ func NewTimeBasedScheduler(logger observability.Logger, tracer observability.Tra
 	// Start metrics collection
 	scheduler.metrics.Start()
 
+	// Initialize job status checker
+	scheduler.jobStatusChecker = NewJobStatusChecker(timeJobRepo, logger)
+
 	return scheduler, nil
 }
 
 // Start begins the scheduler's main polling and execution loop
 func (s *TimeBasedScheduler) Start(ctx context.Context) {
+	// Start job status checker in background
+	go s.jobStatusChecker.StartStatusCheckLoop(ctx)
+
 	ticker := time.NewTicker(s.pollingInterval)
 	defer ticker.Stop()
 	// Poll and schedule tasks immediately on startup

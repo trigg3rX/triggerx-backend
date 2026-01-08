@@ -3,13 +3,9 @@ package observability
 import (
 	"context"
 	"fmt"
-	"net/http"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-	otelprometheus "go.opentelemetry.io/otel/exporters/prometheus"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -19,58 +15,30 @@ import (
 type otelMetrics struct {
 	meterProvider      *sdkmetric.MeterProvider
 	meter              otelmetric.Meter
-	prometheusExporter *otelprometheus.Exporter
-	prometheusRegistry *prometheus.Registry
-	prometheusHandler  http.Handler
 }
 
 // NewMetrics creates a new metrics instance with the provided configuration and resource
 // Each service can call this to create their own metrics instance and define custom metrics
+// Metrics are exported to OpenTelemetry collector via OTLP
 func NewMetrics(cfg Config, res *resource.Resource) (Metrics, func(context.Context) error, error) {
-	var reader sdkmetric.Reader
-	var prometheusExporter *otelprometheus.Exporter
-	var prometheusRegistry *prometheus.Registry
-	var prometheusHandler http.Handler
-
-	if cfg.EnablePrometheusExport {
-		// Create a Prometheus registry and register the exporter
-		prometheusRegistry = prometheus.NewRegistry()
-		var err error
-		prometheusExporter, err = otelprometheus.New(
-			otelprometheus.WithRegisterer(prometheusRegistry),
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create Prometheus exporter: %w", err)
-		}
-
-		// Create HTTP handler for Prometheus scraping
-		// The registry implements prometheus.Gatherer
-		prometheusHandler = promhttp.HandlerFor(prometheusRegistry, promhttp.HandlerOpts{
-			EnableOpenMetrics: true,
-		})
-
-		// Use Prometheus exporter as the reader (it implements sdkmetric.Reader)
-		reader = prometheusExporter
-	} else {
-		// Create OTLP HTTP metric exporter
-		otlpExporter, err := otlpmetrichttp.New(
-			context.Background(),
-			otlpmetrichttp.WithEndpoint(cfg.OTELExporterEndpoint),
-			otlpmetrichttp.WithInsecure(), // TODO: make this configurable
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
-		}
-
-		// Create OTLP reader
-		reader = sdkmetric.NewPeriodicReader(
-			otlpExporter,
-			sdkmetric.WithInterval(cfg.BatchTimeout),
-			sdkmetric.WithTimeout(cfg.ExportTimeout),
-		)
+	// Create OTLP HTTP metric exporter
+	otlpExporter, err := otlpmetrichttp.New(
+		context.Background(),
+		otlpmetrichttp.WithEndpoint(cfg.OTELExporterEndpoint),
+		otlpmetrichttp.WithInsecure(), // TODO: make this configurable
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
 	}
 
-	// Create meter provider with the selected reader
+	// Create OTLP reader
+	reader := sdkmetric.NewPeriodicReader(
+		otlpExporter,
+		sdkmetric.WithInterval(cfg.BatchTimeout),
+		sdkmetric.WithTimeout(cfg.ExportTimeout),
+	)
+
+	// Create meter provider with the reader
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),
 		sdkmetric.WithReader(reader),
@@ -91,9 +59,6 @@ func NewMetrics(cfg Config, res *resource.Resource) (Metrics, func(context.Conte
 	return &otelMetrics{
 		meterProvider:      meterProvider,
 		meter:              meter,
-		prometheusExporter: prometheusExporter,
-		prometheusRegistry: prometheusRegistry,
-		prometheusHandler:  prometheusHandler,
 	}, shutdown, nil
 }
 
@@ -160,24 +125,6 @@ func (m *otelMetrics) GetMeterProvider() *sdkmetric.MeterProvider {
 // GetMeter returns the underlying meter (for creating custom instruments)
 func (m *otelMetrics) GetMeter() otelmetric.Meter {
 	return m.meter
-}
-
-// PrometheusHandler returns the HTTP handler for Prometheus metrics scraping
-// Returns nil if Prometheus export is not enabled
-func (m *otelMetrics) PrometheusHandler() http.Handler {
-	return m.prometheusHandler
-}
-
-// PrometheusExporter returns the Prometheus exporter (for advanced use cases)
-// Returns nil if Prometheus export is not enabled
-func (m *otelMetrics) PrometheusExporter() *otelprometheus.Exporter {
-	return m.prometheusExporter
-}
-
-// PrometheusRegistry returns the Prometheus registry (for advanced use cases)
-// Returns nil if Prometheus export is not enabled
-func (m *otelMetrics) PrometheusRegistry() *prometheus.Registry {
-	return m.prometheusRegistry
 }
 
 // noOpCounter is a no-op counter implementation for error cases

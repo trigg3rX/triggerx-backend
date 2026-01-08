@@ -57,7 +57,7 @@ services:
   mimir:
     profiles: [lgtm]
     image: grafana/mimir:latest
-    user: "1000:1000"
+    working_dir: /mimir
     command: -config.file=/etc/mimir.yaml -target=all
     volumes:
       - ./../config/mimir.yaml:/etc/mimir.yaml
@@ -76,6 +76,7 @@ services:
     volumes:
       - ./../data/grafana:/var/lib/grafana
       - ./../config/grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./../config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
     depends_on:
       - loki
       - tempo
