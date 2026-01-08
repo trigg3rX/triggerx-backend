@@ -28,13 +28,13 @@ func (tsm *TaskStreamManager) StartTimeoutWorker(ctx context.Context) {
 			return
 		case <-ticker.C:
 			// tsm.logger.Debug("Timeout worker checking for timed out tasks")
-			tsm.checkDispatchedTimeouts(ctx)
+			tsm.checkExecutedTimeouts(ctx)
 		}
 	}
 }
 
-// checkDispatchedTimeouts checks for tasks that have been dispatched too long
-func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
+// checkExecutedTimeouts checks for executed tasks that have been pending validation too long
+func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 	// Span: Timeout check cycle
 	ctx, span := tsm.tracer.Start(ctx, "worker.timeout_check",
 		observability.WithSpanKind(trace.SpanKindInternal),
@@ -71,35 +71,145 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 			),
 		)
 
-		// Find the task using the efficient index lookup
-		task, messageID, err := tsm.taskIndex.FindTaskByID(taskCtx, taskID)
-		if err != nil {
-			taskSpan.RecordError(err)
-			taskSpan.SetStatus(codes.Error, "failed to find task")
+		// CRITICAL: Check if task is already validated FIRST - if so, don't rebroadcast
+		// Task in validated stream should never be rebroadcasted, regardless of timeout tracking state
+		validatedTask, _, validatedErr := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, StreamTaskValidated)
+		if validatedErr == nil && validatedTask != nil {
+			// Task was already validated, just clean up timeout tracking
+			taskSpan.AddEvent("task.already_validated")
+			tsm.logger.Debug(taskCtx, "Expired task was already validated, cleaning up timeout tracking (should not rebroadcast)",
+				observability.Int64("task_id", taskID))
+			// Remove from timeout tracking since task is validated
+			if err := tsm.expirationManager.RemoveTaskTimeout(taskCtx, taskID); err != nil {
+				tsm.logger.Warn(taskCtx, "Failed to remove validated task from timeout tracking",
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
+			}
+			processedTaskIDs = append(processedTaskIDs, taskID)
+			taskSpan.SetStatus(codes.Ok, "task already validated")
 			taskSpan.End()
-			tsm.logger.Error(taskCtx, "Failed to find expired task",
+			continue
+		}
+
+		// Find the task in executed stream using the efficient index lookup
+		task, messageID, err := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, StreamTaskExecuted)
+		if err != nil {
+
+			// Check if task is in failed stream (already processed)
+			failedTask, _, failedErr := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, StreamTaskFailed)
+			if failedErr == nil && failedTask != nil {
+				// Task was already moved to failed, just clean up timeout tracking
+				taskSpan.AddEvent("task.already_failed")
+				tsm.logger.Debug(taskCtx, "Expired task was already moved to failed, cleaning up timeout tracking",
+					observability.Int64("task_id", taskID))
+				processedTaskIDs = append(processedTaskIDs, taskID)
+				taskSpan.SetStatus(codes.Ok, "task already failed")
+				taskSpan.End()
+				continue
+			}
+
+			// Task not found in any stream - might have been cleaned up or never existed
+			// This could happen if:
+			// 1. Task was validated/moved before timeout worker processed it
+			// 2. Task index is out of sync
+			// 3. Task was never actually added to executed stream
+			taskSpan.RecordError(err)
+			taskSpan.SetStatus(codes.Error, "task not found in executed stream")
+			tsm.logger.Warn(taskCtx, "Failed to find expired executed task in any stream, cleaning up timeout tracking",
 				observability.Int64("task_id", taskID),
 				observability.Error(err))
 			// Still remove from timeout tracking to prevent reprocessing
 			processedTaskIDs = append(processedTaskIDs, taskID)
+			taskSpan.End()
 			continue
 		}
 
 		taskSpan.AddEvent("task.found")
 
-		// Log task timeout with dispatched_at if available
+		// Log task timeout with executed_at if available
 		logFields := []observability.Field{
 			observability.Int64("task_id", taskID),
 			observability.Time("created_at", task.CreatedAt),
 		}
-		if task.DispatchedAt != nil {
-			logFields = append(logFields, observability.Time("dispatched_at", *task.DispatchedAt))
-			taskSpan.SetAttributes(attribute.String("task.dispatched_at", task.DispatchedAt.Format(time.RFC3339)))
+		if task.ExecutedAt != nil {
+			logFields = append(logFields, observability.Time("executed_at", *task.ExecutedAt))
+			taskSpan.SetAttributes(attribute.String("task.executed_at", task.ExecutedAt.Format(time.RFC3339)))
 		}
-		tsm.logger.Warn(taskCtx, "Task timeout detected", logFields...)
+		tsm.logger.Warn(taskCtx, "Executed task validation timeout detected", logFields...)
 
-		// Move to failed stream
-		if err := tsm.moveTaskToFailed(taskCtx, *task, "dispatched timeout"); err != nil {
+		// Check rebroadcast limit (max 3 attempts to prevent infinite rebroadcasts)
+		maxRebroadcastAttempts := 3
+		rebroadcastCount := task.RebroadcastCount
+
+		if tsm.keeperClient != nil && rebroadcastCount < maxRebroadcastAttempts {
+			rebroadcastErr := tsm.keeperClient.RebroadcastTask(taskCtx, taskID)
+			if rebroadcastErr != nil {
+				taskSpan.RecordError(rebroadcastErr)
+				tsm.logger.Error(taskCtx, "Failed to rebroadcast task",
+					observability.Int64("task_id", taskID),
+					observability.Int("rebroadcast_count", rebroadcastCount),
+					observability.Error(rebroadcastErr))
+				// Continue to move to failed even if rebroadcast fails
+			} else {
+				// Update rebroadcast count and timestamp
+				now := time.Now()
+				task.RebroadcastCount = rebroadcastCount + 1
+				task.LastRebroadcastAt = &now
+
+				// Acknowledge the old message to remove it from PEL
+				if messageID != "" {
+					if err := tsm.AckTaskProcessed(taskCtx, StreamTaskExecuted, "timeout-checker", messageID); err != nil {
+						tsm.logger.Warn(taskCtx, "Failed to acknowledge old message after rebroadcast",
+							observability.Int64("task_id", taskID),
+							observability.String("message_id", messageID),
+							observability.Error(err))
+					}
+
+					// Add new entry to stream with updated rebroadcast info
+					newMessageID, err := tsm.addTaskToStreamWithMessageID(taskCtx, StreamTaskExecuted, task)
+					if err != nil {
+						tsm.logger.Warn(taskCtx, "Failed to add task with rebroadcast info to stream",
+							observability.Int64("task_id", taskID),
+							observability.Error(err))
+					} else if newMessageID != "" {
+						// Update task index to point to new message
+						if err := tsm.taskIndex.StoreTaskIndex(taskCtx, taskID, newMessageID); err != nil {
+							tsm.logger.Warn(taskCtx, "Failed to update task index after rebroadcast",
+								observability.Int64("task_id", taskID),
+								observability.Error(err))
+						}
+					}
+				}
+
+				taskSpan.AddEvent("task.rebroadcast.initiated")
+				tsm.logger.Info(taskCtx, "Task rebroadcast initiated",
+					observability.Int64("task_id", taskID),
+					observability.Int("rebroadcast_count", task.RebroadcastCount),
+					observability.Int("max_attempts", maxRebroadcastAttempts))
+				// Remove from current timeout tracking
+				processedTaskIDs = append(processedTaskIDs, taskID)
+				// Re-add to timeout tracking with a new timeout
+				if err := tsm.expirationManager.AddExecutedTaskTimeout(taskCtx, taskID, TasksExecutedTTL); err != nil {
+					tsm.logger.Warn(taskCtx, "Failed to re-add task to timeout tracking after rebroadcast",
+						observability.Int64("task_id", taskID),
+						observability.Error(err))
+				} else {
+					taskSpan.AddEvent("task.timeout_reset")
+				}
+				taskSpan.SetStatus(codes.Ok, "rebroadcast initiated")
+				taskSpan.End()
+				continue
+			}
+		} else if rebroadcastCount >= maxRebroadcastAttempts {
+			tsm.logger.Warn(taskCtx, "Task rebroadcast limit reached, moving to failed",
+				observability.Int64("task_id", taskID),
+				observability.Int("rebroadcast_count", rebroadcastCount),
+				observability.Int("max_attempts", maxRebroadcastAttempts))
+			taskSpan.AddEvent("task.rebroadcast_limit_reached")
+		}
+
+		// Move to failed stream (task didn't get validated on-chain in time and rebroadcast failed or wasn't attempted)
+		if err := tsm.moveTaskToFailed(taskCtx, *task, "validation timeout - task not confirmed on-chain"); err != nil {
 			taskSpan.RecordError(err)
 			taskSpan.SetStatus(codes.Error, "failed to move task to failed")
 			taskSpan.End()
@@ -113,7 +223,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 
 		// Acknowledge the timed-out task if we have the messageID
 		if messageID != "" {
-			err := tsm.AckTaskProcessed(taskCtx, StreamTaskDispatched, "timeout-checker", messageID)
+			err := tsm.AckTaskProcessed(taskCtx, StreamTaskExecuted, "timeout-checker", messageID)
 			if err != nil {
 				taskSpan.RecordError(err)
 				tsm.logger.Error(taskCtx, "Failed to acknowledge timed-out task",
@@ -162,7 +272,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 					JobID:      0,
 					Status:     "failed",
 					IsAccepted: false,
-					Error:      "dispatched timeout",
+					Error:      "validation timeout - task not confirmed on-chain",
 					OccurredAt: time.Now(),
 				}
 				if err := tsm.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {

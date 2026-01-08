@@ -14,24 +14,40 @@ import (
 
 // UpdateTaskSubmissionData updates task number, success status and execution details in database
 func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data types.TaskSubmissionData) error {
-	performerId, err := dm.GetKeeperIds(ctx, []string{data.PerformerAddress})
+	// Get performer ID by consensus address (keeper stores consensus address in PerformerSigningAddress)
+	if data.PerformerAddress == "" {
+		dm.logger.Error(ctx, "Performer address is empty in task submission data",
+			observability.Int64("task_id", data.TaskID))
+		return fmt.Errorf("performer address is empty for task %d", data.TaskID)
+	}
+
+	// PerformerAddress from IPFS contains consensus_address (as stored by keeper)
+	performerId, err := dm.GetKeeperIDByConsensusAddress(ctx, data.PerformerAddress)
 	if err != nil {
-		dm.logger.Error(ctx, "Failed to get performer ID", observability.Error(err))
-		return err
+		dm.logger.Error(ctx, "Failed to get performer ID by consensus address",
+			observability.String("consensus_address", data.PerformerAddress),
+			observability.Int64("task_id", data.TaskID),
+			observability.Error(err))
+		return fmt.Errorf("keeper not found for consensus address %s: %w", data.PerformerAddress, err)
 	}
 	attesterIds := data.AttesterIds
+	// Ensure attesterIds is not nil (use empty slice instead)
+	if attesterIds == nil {
+		attesterIds = []int64{}
+	}
 
-	// Convert []interface{} to []string for Cassandra
-	convertedArgsStrings := make([]string, len(data.ConvertedArguments))
-	for i, arg := range data.ConvertedArguments {
-		convertedArgsStrings[i] = fmt.Sprintf("%v", arg)
+	// Convert []interface{} to []string for Cassandra list<text>
+	// Ensure we always pass a []string (empty slice if no arguments) for Cassandra list<text>
+	convertedArgsStrings := make([]string, 0, len(data.ConvertedArguments))
+	for _, arg := range data.ConvertedArguments {
+		convertedArgsStrings = append(convertedArgsStrings, fmt.Sprintf("%v", arg))
 	}
 
 	if err := dm.db.NewQuery(queries.UpdateTaskSubmissionData,
 		data.TaskNumber,
 		data.IsAccepted,
 		data.TaskSubmissionTxHash,
-		performerId[0],
+		performerId,
 		attesterIds,
 		data.ExecutionTxHash,
 		data.ExecutionTimestamp,
@@ -48,7 +64,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data typ
 }
 
 func (dm *DatabaseClient) UpdateTaskFailed(ctx context.Context, taskID int64) error {
-	// First, check if the task already has a status (i.e., is already failed or completed)
+	// Check if the task already has a final status (completed or failed)
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
 	defer func() {
@@ -56,11 +72,11 @@ func (dm *DatabaseClient) UpdateTaskFailed(ctx context.Context, taskID int64) er
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
-	if iter.Scan(&existingStatus) && existingStatus != "" {
-		dm.logger.Info(ctx, "Task already has a status, not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
+	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
+		dm.logger.Info(ctx, "Task already has final status, not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
-	// Proceed with marking as failed only if status is absent or empty
+	// Allow updating from pending_confirmation to failed (timeout case)
 	if err := dm.db.NewQuery(queries.UpdateTaskFailed, taskID).Exec(); err != nil {
 		dm.logger.Error(ctx, "Error updating task failed for task ID", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
@@ -71,7 +87,7 @@ func (dm *DatabaseClient) UpdateTaskFailed(ctx context.Context, taskID int64) er
 
 // UpdateTaskError updates a task with error information
 func (dm *DatabaseClient) UpdateTaskError(ctx context.Context, taskID int64, errorMsg string) error {
-	// First, check if the task already has a status (i.e., is already failed or completed)
+	// Check if the task already has a final status (completed or failed)
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
 	defer func() {
@@ -79,11 +95,11 @@ func (dm *DatabaseClient) UpdateTaskError(ctx context.Context, taskID int64, err
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
-	if iter.Scan(&existingStatus) && existingStatus != "" {
-		dm.logger.Info(ctx, "Task already has a status, not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
+	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
+		dm.logger.Info(ctx, "Task already has final status, not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
-	// Proceed with marking as failed only if status is absent or empty
+	// Allow updating from pending_confirmation to failed (timeout case)
 	if err := dm.db.NewQuery(queries.UpdateTaskError, errorMsg, taskID).Exec(); err != nil {
 		dm.logger.Error(ctx, "Error updating task error for task ID", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
@@ -248,13 +264,14 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	}
 
 	// Update the Performer Points
-	performerId, err := dm.GetKeeperIds(ctx, []string{data.PerformerAddress})
+	// PerformerAddress from IPFS contains consensus_address (as stored by keeper)
+	performerId, err := dm.GetKeeperIDByConsensusAddress(ctx, data.PerformerAddress)
 	if err != nil {
-		dm.logger.Error(ctx, "Failed to get performer ID", observability.Error(err))
+		dm.logger.Error(ctx, "Failed to get performer ID by consensus address", observability.Error(err))
 		return err
 	}
 	// Use RetryableIter since the query needs parameters
-	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerId[0]).Iter()
+	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerId).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
@@ -262,8 +279,8 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	}()
 
 	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
-		dm.logger.Error(ctx, "Failed to get keeper points for performer_id", observability.Int64("performer_id", performerId[0]))
-		return fmt.Errorf("keeper not found for performer_id %d", performerId[0])
+		dm.logger.Error(ctx, "Failed to get keeper points for performer_id", observability.Int64("performer_id", performerId))
+		return fmt.Errorf("keeper not found for performer_id %d", performerId)
 	}
 	if data.IsAccepted {
 		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
@@ -273,7 +290,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	noExecutedTasks = noExecutedTasks + 1
 
 	if err := dm.db.NewQuery(queries.UpdatePerformerPointsAndNoOfTasks,
-		keeperPoints, noExecutedTasks, performerId[0]).Exec(); err != nil {
+		keeperPoints, noExecutedTasks, performerId).Exec(); err != nil {
 		dm.logger.Error(ctx, "Failed to update keeper points", observability.Error(err))
 		return err
 	}
@@ -382,6 +399,26 @@ func (dm *DatabaseClient) GetConsensusAddressByKeeperAddress(ctx context.Context
 	}
 
 	return consensusAddress, nil
+}
+
+// GetKeeperIDByConsensusAddress gets the keeper ID for a given consensus address
+func (dm *DatabaseClient) GetKeeperIDByConsensusAddress(ctx context.Context, consensusAddress string) (int64, error) {
+	consensusAddress = strings.ToLower(consensusAddress)
+	var keeperID int64
+
+	iter := dm.db.NewQuery(queries.GetKeeperIDByConsensusAddress, consensusAddress).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
+		}
+	}()
+
+	if !iter.Scan(&keeperID) {
+		dm.logger.Error(ctx, "Failed to get keeper ID for consensus address", observability.String("consensus_address", consensusAddress))
+		return 0, fmt.Errorf("keeper not found for consensus address %s", consensusAddress)
+	}
+
+	return keeperID, nil
 }
 
 // UpdateScriptStorage updates script storage for a custom job (TaskDefinitionID = 7)

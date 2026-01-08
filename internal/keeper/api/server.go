@@ -118,6 +118,7 @@ func (s *Server) setupRoutes(deps *Dependencies) {
 	// Task routes
 	s.router.POST("/p2p/message", taskHandler.ExecuteTask)
 	s.router.POST("/task/validate", taskHandler.ValidateTask)
+	s.router.POST("/task/rebroadcast", taskHandler.RebroadcastTask)
 
 	// Health and metrics routes
 	s.router.GET("/metrics", metricsHandler.Metrics)

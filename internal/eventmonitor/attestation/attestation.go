@@ -355,7 +355,7 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 	isAccepted := eventName != "TaskRejected"
 
 	// Send to TaskMonitor via RPC with IPFS data
-	if err := p.taskMonitorClient.ReportConsensusEvent(ctx, lg.TxHash.Hex(), isAccepted, &ipfsData); err != nil {
+	if err := p.taskMonitorClient.ReportConsensusEvent(ctx, lg.TxHash.Hex(), isAccepted, &ipfsData, ipfsCID); err != nil {
 		span.RecordError(err, observability.WithErrorAttributes(
 			attribute.String("error.type", "rpc_call_failed"),
 		))

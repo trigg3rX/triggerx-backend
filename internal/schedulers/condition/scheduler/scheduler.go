@@ -40,10 +40,11 @@ type ConditionBasedScheduler struct {
 	schedulerID          string
 	webhookURL           string        // Webhook URL for receiving event notifications
 	cooldownPeriod       time.Duration // Cooldown period between task creations for recurring jobs
+	jobStatusChecker     *JobStatusChecker
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
-func NewConditionBasedScheduler(logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, taskRepo repository.TaskRepository) (*ConditionBasedScheduler, error) {
+func NewConditionBasedScheduler(logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, taskRepo repository.TaskRepository, eventJobRepo repository.EventJobRepository, conditionJobRepo repository.ConditionJobRepository) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -98,6 +99,9 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 	// Start metrics collection
 	scheduler.metrics.Start()
 
+	// Initialize job status checker
+	scheduler.jobStatusChecker = NewJobStatusChecker(eventJobRepo, conditionJobRepo, logger)
+
 	scheduler.logger.Info(ctx, "Condition-based scheduler initialized",
 		observability.Int("max_workers", scheduler.maxWorkers),
 		observability.String("scheduler_id", scheduler.schedulerID),
@@ -116,6 +120,9 @@ func (s *ConditionBasedScheduler) Start(ctx context.Context) {
 
 	// Start background cleanup goroutine for expired event jobs
 	go s.cleanupExpiredEventJobs(ctx)
+
+	// Start job status checker in background
+	go s.jobStatusChecker.StartStatusCheckLoop(ctx)
 
 	// Keep the service alive
 	<-ctx.Done()

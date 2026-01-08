@@ -15,6 +15,16 @@ type TimeJobRepository interface {
 	// GetTimeJobsByNextExecutionTimestamp retrieves time-based jobs that are due for execution
 	// within the specified look-ahead window.
 	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]types.ScheduleTimeTaskData, error)
+	// GetActiveTimeJobs retrieves all active time jobs.
+	GetActiveTimeJobs() ([]ActiveTimeJob, error)
+	// UpdateTimeJobStatus updates the active status of a time job.
+	UpdateTimeJobStatus(jobID *big.Int, isActive bool) error
+}
+
+// ActiveTimeJob represents a time job with minimal fields needed for expiration checking
+type ActiveTimeJob struct {
+	JobID          *big.Int
+	ExpirationTime time.Time
 }
 
 type timeJobRepository struct {
@@ -31,7 +41,8 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 // GetTimeJobsByNextExecutionTimestamp retrieves time-based jobs due for execution.
 func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]types.ScheduleTimeTaskData, error) {
 	currentTime := time.Now()
-	iter := r.db.Session().Query(getTimeJobsByNextExecutionTimestampQuery, currentTime, lookAheadTime).Iter()
+	// Exclude expired jobs by checking expiration_time >= currentTime
+	iter := r.db.Session().Query(getTimeJobsByNextExecutionTimestampQuery, currentTime, lookAheadTime, currentTime).Iter()
 
 	var timeJobs []types.ScheduleTimeTaskData
 	var timeJob types.ScheduleTimeTaskData
@@ -70,7 +81,7 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 			if err != nil {
 				return nil, err
 			}
-			err = r.updateTimeJobStatus(timeJob.TaskTargetData.JobID.Int, false)
+			err = r.UpdateTimeJobStatus(timeJob.TaskTargetData.JobID.Int, false)
 			if err != nil {
 				return nil, err
 			}
@@ -105,14 +116,34 @@ func (r *timeJobRepository) completeTimeJob(jobID *big.Int) error {
 	return nil
 }
 
-// updateTimeJobStatus updates the active status of a time job.
-func (r *timeJobRepository) updateTimeJobStatus(jobID *big.Int, isActive bool) error {
+// UpdateTimeJobStatus updates the active status of a time job.
+func (r *timeJobRepository) UpdateTimeJobStatus(jobID *big.Int, isActive bool) error {
 	err := r.db.Session().Query(updateTimeJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time job status")
 	}
 
 	return nil
+}
+
+// GetActiveTimeJobs retrieves all active time jobs.
+func (r *timeJobRepository) GetActiveTimeJobs() ([]ActiveTimeJob, error) {
+	iter := r.db.Session().Query(getActiveTimeJobsQuery).Iter()
+
+	var timeJobs []ActiveTimeJob
+	var job ActiveTimeJob
+	var jobIDBigInt *big.Int
+
+	for iter.Scan(&jobIDBigInt, &job.ExpirationTime) {
+		job.JobID = jobIDBigInt
+		timeJobs = append(timeJobs, job)
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+
+	return timeJobs, nil
 }
 
 // updateTimeJobNextExecutionTimestamp updates the next execution timestamp for a time job.
@@ -133,7 +164,8 @@ const (
 			target_chain_id, target_contract_address, target_function, 
 			abi, arg_type, arguments, dynamic_arguments_script_url
 		FROM triggerx.time_job_data
-		WHERE next_execution_timestamp >= ? AND next_execution_timestamp <= ? AND is_active = true
+		WHERE next_execution_timestamp >= ? AND next_execution_timestamp <= ? 
+			AND expiration_time >= ? AND is_active = true
 		ALLOW FILTERING`
 
 	isJobImuaQuery = `
@@ -157,7 +189,13 @@ const (
 		WHERE job_id = ?`
 
 	updateTimeJobNextExecutionTimestampQuery = `
-		UPDATE triggerx.time_job_data
-		SET next_execution_timestamp = ?
-		WHERE job_id = ?`
+        UPDATE triggerx.time_job_data
+        SET next_execution_timestamp = ?
+        WHERE job_id = ?`
+
+	getActiveTimeJobsQuery = `
+        SELECT job_id, expiration_time
+        FROM triggerx.time_job_data
+        WHERE is_active = true
+        ALLOW FILTERING`
 )

@@ -12,6 +12,11 @@ const (
         FROM triggerx.keeper_data 
         WHERE keeper_address = ? 
         ALLOW FILTERING`
+	GetKeeperIDByConsensusAddress = `
+        SELECT keeper_id 
+        FROM triggerx.keeper_data 
+        WHERE consensus_address = ? 
+        ALLOW FILTERING`
 	GetTaskCostAndJobId = `
         SELECT task_opx_predicted_cost, job_id 
         FROM triggerx.task_data 

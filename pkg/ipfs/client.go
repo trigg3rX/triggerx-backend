@@ -225,10 +225,20 @@ func (c *ipfsClient) Delete(ctx context.Context, cid string) error {
 	}
 
 	// Find file ID by CID
-	network := c.config.PinataHost // Use configurable network from config
+	// For Pinata v3 API, network should be "public" or "private"
+	// PinataHost is used for gateway access, not for API endpoints
+	// Default to "public" for searching files
+	network := "public"
 	url := fmt.Sprintf("https://api.pinata.cloud/v3/files/%s?cid=%s&limit=1", network, cid)
 
-	resp, err := c.httpClient.Get(ctx, url)
+	// Create request with Authorization header
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("error deleting IPFS content: CID %s: failed to create request: %w", cid, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.config.PinataJWT)
+
+	resp, err := c.httpClient.DoWithRetry(ctx, req)
 	if err != nil {
 		return fmt.Errorf("error deleting IPFS content: CID %s: %w", cid, err)
 	}
@@ -257,7 +267,14 @@ func (c *ipfsClient) Delete(ctx context.Context, cid string) error {
 
 	url = fmt.Sprintf("https://api.pinata.cloud/v3/files/%s/%s", network, listResp.Data.Files[0].ID)
 
-	resp, err = c.httpClient.Delete(ctx, url)
+	// Create DELETE request with Authorization header
+	deleteReq, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("error deleting IPFS content: file %s: failed to create request: %w", listResp.Data.Files[0].ID, err)
+	}
+	deleteReq.Header.Set("Authorization", "Bearer "+c.config.PinataJWT)
+
+	resp, err = c.httpClient.DoWithRetry(ctx, deleteReq)
 	if err != nil {
 		return fmt.Errorf("error deleting IPFS content: file %s: %w", listResp.Data.Files[0].ID, err)
 	}
@@ -287,7 +304,10 @@ func (c *ipfsClient) Delete(ctx context.Context, cid string) error {
 
 // List all files from Pinata v3 API
 func (c *ipfsClient) ListFiles(ctx context.Context) ([]PinataFile, error) {
-	network := c.config.PinataHost // Use configurable network from config
+	// For Pinata v3 API, network should be "public" or "private"
+	// PinataHost is used for gateway access, not for API endpoints
+	// Default to "public" for listing files
+	network := "public"
 	url := fmt.Sprintf("https://api.pinata.cloud/v3/files/%s?limit=500", network)
 
 	var allFiles []PinataFile
@@ -299,7 +319,14 @@ func (c *ipfsClient) ListFiles(ctx context.Context) ([]PinataFile, error) {
 			requestURL = fmt.Sprintf("%s&pageToken=%s", url, nextPageToken)
 		}
 
-		resp, err := c.httpClient.Get(ctx, requestURL)
+		// Create request with Authorization header
+		req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error listing IPFS files: failed to create request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+c.config.PinataJWT)
+
+		resp, err := c.httpClient.DoWithRetry(ctx, req)
 		if err != nil {
 			return nil, fmt.Errorf("error listing IPFS files: %w", err)
 		}

@@ -78,10 +78,12 @@ func main() {
 
 	// Initialize repositories
 	taskRepo := repository.NewTaskRepository(dbConn)
+	eventJobRepo := repository.NewEventJobRepository(dbConn)
+	conditionJobRepo := repository.NewConditionJobRepository(dbConn)
 	logger.Info(ctx, "[3/6] Dependency: Repositories Initialised")
 
 	// Initialize condition-based scheduler
-	conditionScheduler, err := scheduler.NewConditionBasedScheduler(logger, tracer, obsMetrics, taskRepo)
+	conditionScheduler, err := scheduler.NewConditionBasedScheduler(logger, tracer, obsMetrics, taskRepo, eventJobRepo, conditionJobRepo)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize condition-based scheduler", observability.Error(err))
 	}

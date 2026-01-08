@@ -41,6 +41,9 @@ type TaskExecutor struct {
 	tracer            observability.Tracer
 	nonceManagers     map[string]*NonceManager // Chain ID -> NonceManager
 	nonceMutex        sync.RWMutex
+	// Broadcast data storage for rebroadcast capability
+	broadcastData      map[int64]*types.BroadcastDataForValidators // Task ID -> BroadcastData
+	broadcastDataMutex sync.RWMutex
 }
 
 // NewTaskExecutor creates a new instance of TaskExecutor
@@ -60,6 +63,7 @@ func NewTaskExecutor(
 		logger:            logger,
 		tracer:            tracer,
 		nonceManagers:     make(map[string]*NonceManager),
+		broadcastData:     make(map[int64]*types.BroadcastDataForValidators),
 	}
 }
 
@@ -363,6 +367,9 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				return
 			}
 
+			// Store broadcast data for potential rebroadcast
+			e.storeBroadcastData(task.TargetData[idx].TaskID, &aggregatorData)
+
 			// Both execution and aggregator submission succeeded
 			aggSpan.SetStatus(codes.Ok, "task sent to aggregator successfully")
 			e.logger.Info(taskCtx, "[7/7] Task result sent to aggregator", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
@@ -415,6 +422,64 @@ func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
 
 	e.nonceManagers[chainID] = nm
 	return nm, nil
+}
+
+// storeBroadcastData stores broadcast data for a task to enable rebroadcast
+func (e *TaskExecutor) storeBroadcastData(taskID int64, data *types.BroadcastDataForValidators) {
+	e.broadcastDataMutex.Lock()
+	defer e.broadcastDataMutex.Unlock()
+	e.broadcastData[taskID] = data
+	e.logger.Debug(context.Background(), "Stored broadcast data for rebroadcast",
+		observability.Int64("task_id", taskID))
+}
+
+// getBroadcastData retrieves broadcast data for a task
+func (e *TaskExecutor) getBroadcastData(taskID int64) (*types.BroadcastDataForValidators, bool) {
+	e.broadcastDataMutex.RLock()
+	defer e.broadcastDataMutex.RUnlock()
+	data, exists := e.broadcastData[taskID]
+	return data, exists
+}
+
+// RebroadcastTask rebroadcasts a task to the aggregator
+func (e *TaskExecutor) RebroadcastTask(ctx context.Context, taskID int64) error {
+	// Get stored broadcast data
+	data, exists := e.getBroadcastData(taskID)
+	if !exists {
+		e.logger.Warn(ctx, "Broadcast data not found for task, cannot rebroadcast",
+			observability.Int64("task_id", taskID),
+			observability.String("reason", "data_not_stored_or_keeper_restarted"))
+		return fmt.Errorf("broadcast data not found for task %d (may have been lost due to keeper restart or task was not executed by this keeper)", taskID)
+	}
+
+	// Create span for rebroadcast
+	ctx, span := e.tracer.Start(ctx, "task.rebroadcast",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.Int64("task.id", taskID),
+		),
+	)
+	defer span.End()
+
+	e.logger.Info(ctx, "Rebroadcasting task to aggregator",
+		observability.Int64("task_id", taskID))
+
+	// Re-send to aggregator
+	success, err := e.aggregatorClient.SendTaskToValidators(ctx, data)
+	if !success {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "rebroadcast failed")
+		e.logger.Error(ctx, "Failed to rebroadcast task to aggregator",
+			observability.Int64("task_id", taskID),
+			observability.Error(err))
+		return fmt.Errorf("failed to rebroadcast task: %w", err)
+	}
+
+	span.SetStatus(codes.Ok, "task rebroadcast successfully")
+	e.logger.Info(ctx, "Task rebroadcast successfully",
+		observability.Int64("task_id", taskID))
+
+	return nil
 }
 
 // reportTaskStatus reports task execution status to taskmonitor (best-effort, doesn't block)

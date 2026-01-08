@@ -22,9 +22,13 @@ func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.Sch
 	var validTaskIDs []int64
 
 	for _, task := range tasks {
-		// Check if ExpirationTime of the job has passed or not
+		// Final safety check: This should not happen as expired jobs are filtered before task creation
+		// This check catches edge cases where a job expired between fetching and processing
 		if task.ExpirationTime.Before(time.Now()) {
-			s.logger.Info(ctx, "Task has expired, skipping execution", observability.Int64("task_id", task.TaskID))
+			s.logger.Warn(ctx, "Task has expired (unexpected - should have been filtered earlier), skipping execution",
+				observability.Int64("task_id", task.TaskID),
+				observability.String("job_id", task.TaskTargetData.JobID.String()),
+				observability.Time("expiration_time", task.ExpirationTime))
 			metrics.TrackTaskExpired()
 			continue
 		}

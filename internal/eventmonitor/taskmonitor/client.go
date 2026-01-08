@@ -38,11 +38,12 @@ func NewClient(serverAddress string, logger observability.Logger, tracer observa
 
 // ReportConsensusEvent reports a consensus event (TaskSubmitted or TaskRejected) to TaskMonitor
 // The EventMonitor fetches IPFS data (containing trace context) and passes it here
-func (c *Client) ReportConsensusEvent(ctx context.Context, txHash string, isAccepted bool, ipfsData *pkgTypes.IPFSData) error {
+func (c *Client) ReportConsensusEvent(ctx context.Context, txHash string, isAccepted bool, ipfsData *pkgTypes.IPFSData, ipfsCID string) error {
 	req := &types.ReportConsensusEventRequest{
 		TxHash:     txHash,
 		IsAccepted: isAccepted,
 		IPFSData:   ipfsData,
+		IPFSCID:    ipfsCID,
 	}
 
 	var resp types.ReportConsensusEventResponse

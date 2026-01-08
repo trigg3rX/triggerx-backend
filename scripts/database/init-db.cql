@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_opx_cost double,
     execution_timestamp timestamp,
     execution_tx_hash text,
+    converted_arguments list<text>,
     task_performer_id bigint,
     task_attester_ids list<bigint>,
     proof_of_task text,

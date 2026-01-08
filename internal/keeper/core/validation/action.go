@@ -14,7 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-const timeTolerance = 8 * time.Second
+const timeTolerance = 10 * time.Second
 const expirationTimeTolerance = 11 * time.Second
 
 // getReceiptRetryConfig returns a retry configuration optimized for L2 chains

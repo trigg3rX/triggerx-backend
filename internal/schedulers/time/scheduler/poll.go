@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -65,6 +66,33 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 			}
 		}
 	}
+
+	// Filter out expired jobs BEFORE creating task records
+	// This prevents creating tasks for jobs that have already expired
+	currentTime := time.Now()
+	var validTasks []types.ScheduleTimeTaskData
+	expiredCount := 0
+
+	for _, task := range tasks {
+		if task.ExpirationTime.Before(currentTime) {
+			// Mark job as inactive asynchronously (don't block on this)
+			go func(jobID *big.Int) {
+				if err := s.timeJobRepository.UpdateTimeJobStatus(jobID, false); err != nil {
+					s.logger.Warn(ctx, "Failed to mark expired job as inactive",
+						observability.String("job_id", jobID.String()),
+						observability.Error(err))
+				}
+			}(task.TaskTargetData.JobID.Int)
+
+			expiredCount++
+			metrics.TrackTaskExpired()
+			continue
+		}
+		validTasks = append(validTasks, task)
+	}
+
+	// Use only valid (non-expired) tasks
+	tasks = validTasks
 
 	// Create task data for each task and add task IDs to jobs
 	for i := range tasks {

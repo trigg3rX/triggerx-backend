@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
+	keeperClient "github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/events"
@@ -114,8 +115,11 @@ func NewTaskManager(ctx context.Context, logger observability.Logger, tracer obs
 		return nil, fmt.Errorf("failed to initialize IPFS client: %w", err)
 	}
 
+	// Initialize keeper client
+	keeperClientInstance := keeperClient.NewClient(logger, tracer)
+
 	// Initialize task stream manager
-	taskStreamManager, err := tasks.NewTaskStreamManager(ctx, client, databaseClient, logger, tracer)
+	taskStreamManager, err := tasks.NewTaskStreamManager(ctx, client, databaseClient, logger, tracer, keeperClientInstance)
 	if err != nil {
 		// Clean up resources on error
 		cancel()
@@ -228,6 +232,15 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 		}, nil
 	}
 
+	// Mark task as executed and add to executed stream with timeout
+	// Timeout: 15 minutes for validation (from TasksExecutedTTL constant)
+	if err := tm.taskStreamManager.MarkTaskExecuted(ctx, req.TaskID, tasks.TasksExecutedTTL); err != nil {
+		tm.logger.Error(ctx, "Failed to mark task as executed",
+			observability.Int64("task_id", req.TaskID),
+			observability.Error(err))
+		// Don't fail the request, but log the error
+	}
+
 	tm.logger.Info(ctx, "Task success recorded, pending on-chain confirmation",
 		observability.Int64("task_id", req.TaskID),
 		observability.String("keeper_address", req.KeeperAddress),
@@ -273,7 +286,7 @@ func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *taskmonito
 	// Create a task handler instance to process the event
 	taskHandler := tm.createTaskEventHandler()
 	// Process the consensus event with IPFS data
-	if err := taskHandler.ProcessConsensusEventFromIPFS(ctx, req.TxHash, req.IsAccepted, req.IPFSData); err != nil {
+	if err := taskHandler.ProcessConsensusEventFromIPFS(ctx, req.TxHash, req.IsAccepted, req.IPFSData, req.IPFSCID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to process consensus event")
 		return &taskmonitorTypes.ReportConsensusEventResponse{

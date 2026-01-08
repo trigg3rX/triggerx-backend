@@ -28,6 +28,7 @@ type ReportConsensusEventRequest struct {
 	TxHash     string             `json:"tx_hash" validate:"required"`   // Task submission transaction hash
 	IsAccepted bool               `json:"is_accepted"`                   // true for TaskSubmitted, false for TaskRejected
 	IPFSData   *pkgTypes.IPFSData `json:"ipfs_data" validate:"required"` // Full IPFS data including trace context
+	IPFSCID    string             `json:"ipfs_cid" validate:"required"`  // IPFS CID/hash for the data
 }
 
 // ReportConsensusEventResponse represents the response to a consensus event report
