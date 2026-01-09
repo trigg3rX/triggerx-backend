@@ -42,7 +42,7 @@ The **Schedulers** serve as the backbone for decentralized job scheduling and ex
   - Cache management by storing the state in redis.
   - Metrics collection by storing the metrics in Prometheus.
   - Support for various execution triggers.
-  
+
 ### Keepers
 
 The **Keepers** are responsible for executing and validating tasks by:
@@ -58,13 +58,32 @@ Operating in a decentralized architecture, Keepers ensure:
 - Efficient resource usage.
 - Secure and reliable contract interactions.
 
+### TaskDispatcher
+
+The **TaskDispatcher** is responsible for:
+
+- Managing the task queue.
+- Selecting appropriate Keepers based on availability and load.
+- Dispatching tasks to the selected Keeper via the P2P network.
+- Handling task reassignment in case of failures.
+
+### TaskMonitor
+
+The **TaskMonitor** ensures reliable execution by:
+
+- Tracking the lifecycle of assigned tasks.
+- Monitoring the Attestation Center for task submissions.
+- Updating task status in the database.
+- Handling timeouts and triggering retries.
+
 ### Aggregator
 
-The **Aggregator** ensures the consensus of tasks by:
+The **Aggregator** is part of the **Othentic Network** and ensures consensus by:
 
 - Aggregating tasks from multiple Keepers.
-- Submitting the tasks to the blockchain.
-- Acting as a bootstrap for the p2p network.
+- Collecting attestations from validator nodes.
+- Achieving BFT consensus on task results.
+- Submitting validated tasks to the blockchain.
 
 #### Developer Notes can be found here at [devNotes.md](docs/devNotes.md)
 
@@ -74,19 +93,19 @@ The **Aggregator** ensures the consensus of tasks by:
 
 1. Clone the repository.
 
-     - ```sh
-       git clone https://github.com/trigg3rX/triggerx-backend.git
-       ```
+   - ```sh
+     git clone https://github.com/trigg3rX/triggerx-backend.git
+     ```
 
 2. Install the dependencies.
 
-     - ```sh
-       go mod tidy
-       ```
+   - ```sh
+     go mod tidy
+     ```
 
-     - ```sh
-       npm i -g @othentic/othentic-cli  # (Node v22.6.0 is required)
-       ```
+   - ```sh
+     npm i -g @othentic/othentic-cli  # (Node v22.6.0 is required)
+     ```
 
 3. Copy the `.env.example` file to `.env` and set the environment variables.
 
@@ -114,41 +133,51 @@ The **Aggregator** ensures the consensus of tasks by:
      just start-redis
      ```
 
-8. Start the Schedulers.
+8. Start the Task Dispatcher.
 
    - ```sh
-     just start-time-scheduler
-     just start-event-schedulers
-     just start-condition-scheduler
+     just start-taskdispatcher
      ```
 
-9. Start the Event Monitor.
+9. Start the Task Monitor.
 
    - ```sh
-     just start-eventmonitor
+     just start-taskmonitor
      ```
 
-10. Start the Keepers.
+10. Start the Schedulers.
 
-   - Clone the repo:
+- ```sh
+  just start-time-scheduler
+  just start-condition-scheduler
+  ```
 
-     - ```sh
-       git clone https://github.com/trigg3rX/triggerx-keeper-setup.git
-       ```
+11. Start the Event Monitor.
 
-   - Run the Docker image:
+- ```sh
+  just start-eventmonitor
+  ```
 
-     - ```sh
-       ./triggerx.sh start
-       ```
+12. Start the Keepers.
 
-11. Run the Keeper node without docker.
+- Clone the repo:
 
-     - ```sh
-       just start-keeper
-       ```
+  - ```sh
+    git clone https://github.com/trigg3rX/triggerx-keeper-setup.git
+    ```
+
+- Run the Docker image:
+
+  - ```sh
+    ./triggerx.sh start
+    ```
+
+13. Run the Keeper node without docker.
+
+    - ```sh
+      just start-keeper
+      ```
 
 **Note:**
 
-- These services have been pruned from the codebase. If you need to restore them, they can be accessed in this [commit](https://github.com/trigg3rX/triggerx-backend/tree/d3eefa44a139cdacd71e1df436d39f2b59bbdcc7).
-- Services: `checker/`, `cli/`, `internal/aggregator`, `internal/challenger`, `internal/registrar`, `internal/imua-keeper`, `pkg/network`.
+- Ideally all these services should be run via the `just run-all` which is a WIP. for now, you can run them individually as mentioned above.

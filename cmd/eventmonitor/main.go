@@ -78,13 +78,20 @@ func main() {
 	}
 	logger.Info(ctx, "[2/3] Process: Service Started")
 
+	// Start API server
+	go func() {
+		if err := apiSrv.Start(ctx); err != nil {
+			logger.Error(ctx, "API server error", observability.Error(err))
+		}
+	}()
+	logger.Info(ctx, "[3/3] Process: API Server Started", observability.String("port", config.GetHTTPPort()))
+
 	// Start gRPC server
 	go func() {
 		if err := rpcSrv.Start(ctx); err != nil {
 			logger.Error(ctx, "gRPC server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: API Server Started", observability.String("port", config.GetHTTPPort()))
 	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("address", rpcSrv.GetServiceInfo().Address), observability.String("port", config.GetGRPCPort()))
 
 	// Handle graceful shutdown

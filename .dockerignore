@@ -1,0 +1,34 @@
+# Data directories
+data/
+.git/
+
+# Build artifacts
+bin/
+*.log
+build_*.log
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursorignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*_test.go
+
+# Documentation
+docs/
+
+# Repos (not needed for backend builds)
+v_collect_data/
+w_keeper_setup/
+x_frontend/
+y_contracts/
+z_sdk/
+othentic/
+ssl/
