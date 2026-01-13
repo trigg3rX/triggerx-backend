@@ -55,7 +55,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key, X-Trace-ID, ngrok-skip-browser-warning")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key, X-Trace-ID, trace-id, ngrok-skip-browser-warning")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
 
 		if c.Request.Method == "OPTIONS" {
