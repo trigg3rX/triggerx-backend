@@ -114,7 +114,10 @@ func (rm *RegistryManager) Unregister(requestID string) error {
 	}
 
 	if foundEntry == nil {
-		return fmt.Errorf("request ID not found: %s", requestID)
+		// Already unregistered or never existed - this is fine (idempotent)
+		rm.logger.Debug(rm.ctx, "Request ID already unregistered or not found",
+			observability.String("request_id", requestID))
+		return nil
 	}
 
 	// Remove subscriber
