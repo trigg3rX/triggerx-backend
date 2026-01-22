@@ -154,7 +154,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		return types.PerformerActionData{}, false, fmt.Errorf("error packing arguments to function call: %v", err)
 	}
 
-	skipArgumentProcessing:
+skipArgumentProcessing:
 	// Create transaction data for execution contract
 	privateKey, err := crypto.HexToECDSA(config.GetPrivateKeyController())
 	if err != nil {
@@ -162,7 +162,8 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 	}
 
 	// Pack the execution contract's executeFunction call
-	executionABI, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"uint256","name":"jobId","type":"uint256"},{"internalType":"uint256","name":"tgAmount","type":"uint256"},{"internalType":"address","name":"target","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"executeFunction","outputs":[],"stateMutability":"payable","type":"function"}]`))
+	// Updated ABI includes deadline and signature for security verification
+	executionABI, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"uint256","name":"jobId","type":"uint256"},{"internalType":"uint256","name":"tgAmount","type":"uint256"},{"internalType":"address","name":"target","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"uint256","name":"deadline","type":"uint256"},{"internalType":"bytes","name":"signature","type":"bytes"}],"name":"executeFunction","outputs":[],"stateMutability":"payable","type":"function"}]`))
 	if err != nil {
 		return types.PerformerActionData{}, false, fmt.Errorf("failed to parse execution contract ABI: %v", err)
 	}
@@ -175,7 +176,27 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		jobIDBigInt = big.NewInt(0)
 	}
 
-	executionInput, err := executionABI.Pack("executeFunction", jobIDBigInt, result.Stats.CurrentTotalCost, targetContractAddress, callData)
+	// Get deadline from targetData (set by task dispatcher)
+	var deadlineBigInt *big.Int
+	if targetData.Deadline != nil {
+		deadlineBigInt = targetData.Deadline.ToBigInt()
+	} else {
+		// Fallback: if no deadline set, use 5 minutes from now
+		deadlineBigInt = big.NewInt(time.Now().Unix() + 300)
+		e.logger.Warn(ctx, "No deadline set in targetData, using default 5 min deadline",
+			observability.Int64("task_id", targetData.TaskID))
+	}
+
+	// Get contract signature from targetData (set by task dispatcher)
+	contractSignature := targetData.ContractSignature
+	if len(contractSignature) == 0 {
+		// Fallback: empty signature - contract may reject if verification enabled
+		e.logger.Warn(ctx, "No contract signature set in targetData",
+			observability.Int64("task_id", targetData.TaskID))
+		contractSignature = []byte{}
+	}
+
+	executionInput, err := executionABI.Pack("executeFunction", jobIDBigInt, result.Stats.CurrentTotalCost, targetContractAddress, callData, deadlineBigInt, contractSignature)
 	if err != nil {
 		return types.PerformerActionData{}, false, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}

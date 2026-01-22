@@ -24,9 +24,12 @@ type TaskTargetData struct {
 	// Custom script fields (TaskDefinitionID = 7)
 	ScriptStorage  map[string]string `json:"script_storage,omitempty"`  // Storage passed from scheduler
 	ScriptLanguage string            `json:"script_language,omitempty"` // typescript, go, python
+	// Contract execution signature fields (for security verification)
+	Deadline          *BigInt `json:"deadline,omitempty"`           // Unix timestamp when signature expires
+	ContractSignature []byte  `json:"contract_signature,omitempty"` // Dispatcher signature for contract verification
 }
 
-// Monitoring Data for even and condition workers
+// Monitoring Data for event and condition workers
 type EventWorkerData struct {
 	JobID                  *BigInt   `json:"job_id"`
 	ExpirationTime         time.Time `json:"expiration_time"`

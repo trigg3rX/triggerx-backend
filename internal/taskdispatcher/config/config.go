@@ -35,8 +35,9 @@ type Config struct {
 	testPerformerAPIUrl string
 
 	// Task Dispatcher signing key
-	signingKey     string
-	signingAddress string
+	signingKey              string
+	signingAddress          string
+	signatureDeadlineBuffer int // Deadline buffer in seconds for contract signatures
 
 	// Redis (Upstash) connection settings
 	upstashURL   string
@@ -44,9 +45,9 @@ type Config struct {
 
 	// YAML-loaded settings
 	redis    RedisConfig
-	metrics              yaml.MetricsConfig
-	shutdown             yaml.ShutdownConfig
-	version              yaml.VersionConfig
+	metrics  yaml.MetricsConfig
+	shutdown yaml.ShutdownConfig
+	version  yaml.VersionConfig
 }
 
 type RedisConfig struct {
@@ -64,7 +65,7 @@ type RedisConfig struct {
 }
 
 type YAMLConfig struct {
-	Redis    RedisConfig    `yaml:"redis"`
+	Redis    RedisConfig         `yaml:"redis"`
 	Metrics  yaml.MetricsConfig  `yaml:"metrics"`
 	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
 	Version  yaml.VersionConfig  `yaml:"version"`
@@ -85,24 +86,25 @@ func Init(configPath string) error {
 	}
 
 	cfg = Config{
-		devMode:               env.GetEnvBool("DEV_MODE", false),
-		httpPort:              env.GetEnvString("TASK_DISPATCHER_HTTP_PORT", "9007"),
-		grpcPort:              env.GetEnvString("TASK_DISPATCHER_GRPC_PORT", "9017"),
-		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
-		serviceID:             env.GetEnvString("TASK_DISPATCHER_SERVICE_ID", "1"),
-		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "localhost:9014"),
-		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "localhost:9001"),
-		testAggregatorRPCUrl:  env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "localhost:9001"),
-		performerAPIUrl:       env.GetEnvString("PERFORMER_API_URL", "localhost:9021"),
-		testPerformerAPIUrl:   env.GetEnvString("TEST_PERFORMER_API_URL", "localhost:9021"),
-		signingKey:            env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
-		signingAddress:        env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
-		upstashURL:            env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashToken:          env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		redis:                 yamlConfig.Redis,
-		metrics:               yamlConfig.Metrics,
-		shutdown:              yamlConfig.Shutdown,
-		version:               yamlConfig.Version,
+		devMode:                 env.GetEnvBool("DEV_MODE", false),
+		httpPort:                env.GetEnvString("TASK_DISPATCHER_HTTP_PORT", "9007"),
+		grpcPort:                env.GetEnvString("TASK_DISPATCHER_GRPC_PORT", "9017"),
+		otelExporterEndpoint:    env.GetOTELExporterEndpoint(),
+		serviceID:               env.GetEnvString("TASK_DISPATCHER_SERVICE_ID", "1"),
+		healthRPCUrl:            env.GetEnvString("HEALTH_RPC_URL", "localhost:9014"),
+		aggregatorRPCUrl:        env.GetEnvString("AGGREGATOR_RPC_URL", "localhost:9001"),
+		testAggregatorRPCUrl:    env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "localhost:9001"),
+		performerAPIUrl:         env.GetEnvString("PERFORMER_API_URL", "localhost:9021"),
+		testPerformerAPIUrl:     env.GetEnvString("TEST_PERFORMER_API_URL", "localhost:9021"),
+		signingKey:              env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
+		signingAddress:          env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
+		signatureDeadlineBuffer: env.GetEnvInt("SIGNATURE_DEADLINE_BUFFER_SECONDS", 300), // 5 minutes default
+		upstashURL:              env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashToken:            env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		redis:                   yamlConfig.Redis,
+		metrics:                 yamlConfig.Metrics,
+		shutdown:                yamlConfig.Shutdown,
+		version:                 yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -232,6 +234,11 @@ func GetTaskDispatcherSigningKey() string {
 
 func GetTaskDispatcherSigningAddress() string {
 	return cfg.signingAddress
+}
+
+// GetSignatureDeadlineBuffer returns the deadline buffer in seconds for contract signatures
+func GetSignatureDeadlineBuffer() int {
+	return cfg.signatureDeadlineBuffer
 }
 
 func GetUpstashURL() string {

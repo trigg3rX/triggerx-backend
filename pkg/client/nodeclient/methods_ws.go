@@ -327,7 +327,7 @@ func (c *NodeClient) EthSubscribe(ctx context.Context, subscriptionType string, 
 	// Create response channel
 	responseChan := make(chan *RPCResponse, 1)
 
-	// Register pending request
+	//  pending request
 	c.mu.Lock()
 	if c.pendingRequests == nil {
 		c.pendingRequests = make(map[int]chan *RPCResponse)
@@ -372,7 +372,7 @@ func (c *NodeClient) EthSubscribe(ctx context.Context, subscriptionType string, 
 	// Create notification channel
 	notifChan := make(chan *SubscriptionNotification, 100)
 
-	// Register subscription
+	//  subscription
 	if c.wsSubManager == nil {
 		c.mu.Lock()
 		c.wsSubManager = NewWebSocketSubscriptionManager()
@@ -413,7 +413,7 @@ func (c *NodeClient) EthUnsubscribe(ctx context.Context, subscriptionID string) 
 	// Create response channel
 	responseChan := make(chan *RPCResponse, 1)
 
-	// Register pending request
+	//  pending request
 	c.mu.Lock()
 	if c.pendingRequests == nil {
 		c.pendingRequests = make(map[int]chan *RPCResponse)
