@@ -491,4 +491,4 @@ tgrx-frnt-550e8400...
 
 ---
 
-For testing strategies related to these flows, see [testing.md](../02-development/guides/testing.md).
+For testing strategies related to these flows, see [testing.md](../04-development/guides/testing.md).

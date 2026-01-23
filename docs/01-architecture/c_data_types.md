@@ -738,9 +738,9 @@ const (
     TaskDefConditionBasedDynamic  = 6  // Condition based job with dynamic arguments
     
     // Agent Jobs (7-9)
-    TaskDefAgentTimeBased         = 7  // Agent time based job
-    TaskDefAgentEventBased        = 8  // Agent event based job
-    TaskDefAgentConditionBased    = 9  // Agent condition based job
+    TaskDefTimeBasedAgent         = 7  // Time based job with agentic script
+    TaskDefEventBasedAgent        = 8  // Event based job with agentic script
+    TaskDefConditionBasedAgent    = 9  // Condition based job with agentic script
 )
 ```
 
@@ -816,7 +816,7 @@ All cost-related fields are stored as **strings** to represent arbitrary-precisi
 - `KeeperDataEntity.KeeperPoints`
 - `ExecutionChallengesEntity.BondAmount`
 
-**Note**: `KeeperDataEntity.RewardsBooster` is stored as `double` in CQL (not Wei-based).
+**Note**: `KeeperDataEntity.RewardsBooster` is stored as `text` in CQL (string in Go, not Wei-based).
 
 ### Calculation Examples
 

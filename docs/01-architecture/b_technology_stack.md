@@ -300,6 +300,6 @@ We use Pinata as our IPFS provider. It provides **decentralized storage** for ta
 
 ---
 
-For details on how these technologies are used in each service, see [services.md](./../04-services/services.md).
+For details on how these technologies are used in each service, see [services](../02-services/a_services.md).
 
 Previous: [System Overview](./../01-architecture/a_system_overview.md) | Next: [Data Types](./../01-architecture/c_data_types.md)
