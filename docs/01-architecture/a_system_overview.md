@@ -45,7 +45,7 @@ TriggerX Backend follows a **microservices architecture** with clear separation 
 │  └──────────────┘     └──────────────┘     └──────────────┘  │            │  │
 └──────────────────────────────────────────────────────────────┘            │  │
             │ ▲                                    ▲                 Update │  │
-    Task    │ │       ┌──────────┐                 │                   Task │  │  
+    Task    │ │       ┌──────────┐                 │                   Task │  │
  Assignment │ └─────► │  Health  │                 │                 Status │  │
             │         └──────────┘                 │                        │  │
             │               ▲                      │ Status                 │  │
@@ -296,6 +296,6 @@ Multi-chain support for task validation:
 
 ---
 
-For more details on each service, see [services.md](./../04-services/services.md).
+For more details on each service, see [services](../02-services/a_services.md).
 
 Next: [Technology Stack](./b_technology_stack.md)

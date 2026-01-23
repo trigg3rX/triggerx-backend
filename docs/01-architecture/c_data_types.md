@@ -104,7 +104,7 @@ type UserDataEntity struct {
 **Field Notes**:
 
 - `UserPoints`: Stored as string to represent Wei (big integer)
-- `JobIDs`: Array of job IDs (set<varint> in CQL, []string in Go) for quick lookup of user's jobs. Stored as string because varint can exceed int64 limits.
+- `JobIDs`: Array of job IDs (`set<text>` in CQL, []string in Go) for quick lookup of user's jobs. Stored as string because varint can exceed int64 limits.
 
 ### 3. SafeAddressDataEntity
 
@@ -153,6 +153,7 @@ type JobDataEntity struct {
 **Primary Key**: `job_id`
 
 **Indexes**:
+
 - `status` - For filtering jobs by status (created, running, completed, failed, expired, deleted)
 - `created_at` - For querying jobs by creation time
 - `updated_at` - For querying jobs by last update time
@@ -181,7 +182,7 @@ type TimeJobDataEntity struct {
     SpecificSchedule          string    `cql:"specific_schedule"`           // Specific timestamp (for specific type)
     Timezone                  string    `cql:"timezone"`                    // Timezone selected by user
     NextExecutionTimestamp    time.Time `cql:"next_execution_timestamp"`    // Calculated next run time
-    
+
     // Traditional job fields (TDI 1, 2) - nullable for agent jobs (TDI 7)
     TargetChainID             string    `cql:"target_chain_id"`             // Chain to execute on
     TargetContractAddress     string    `cql:"target_contract_address"`     // Contract to call
@@ -190,7 +191,7 @@ type TimeJobDataEntity struct {
     ArgType                   int       `cql:"arg_type"`                    // 0=None, 1=Static, 2=Dynamic
     Arguments                 []string  `cql:"arguments"`                   // Static arguments (if ArgType=1, list<text> in CQL)
     DynamicArgumentsScriptURL string    `cql:"dynamic_arguments_script_url"`// IPFS CID for dynamic arg script
-    
+
     // Agent job fields (TDI 7) - nullable for traditional jobs (TDI 1, 2)
     AgentScriptURL            string    `cql:"agent_script_url"`            // IPFS URL of the agent script
     AgentScriptLanguage       string    `cql:"agent_script_language"`       // Script language: 'ts', 'go', 'python', 'javascript'
@@ -198,7 +199,7 @@ type TimeJobDataEntity struct {
     AgentTargetChainID        int       `cql:"agent_target_chain_id"`       // Default chain ID (script can override)
     MaxExecutionTime          int       `cql:"max_execution_time"`          // Script timeout in seconds (default 60)
     ChallengePeriod           int64     `cql:"challenge_period"`            // Challenge period in seconds (default 21600 = 6 hours)
-    
+
     // Common status fields
     IsActive       bool      `cql:"is_active"`        // Job is active (true on creation, false when expiration time is reached)
     LastExecutedAt time.Time `cql:"last_executed_at"` // Last execution time
@@ -209,6 +210,7 @@ type TimeJobDataEntity struct {
 **Primary Key**: `job_id`
 
 **Indexes**:
+
 - `last_executed_at` - For querying jobs by last execution time
 - `next_execution_timestamp` - **Critical**: Used by time scheduler to find jobs due for execution (WHERE next_execution_timestamp >= ? AND next_execution_timestamp <= ?)
 
@@ -228,14 +230,14 @@ type EventJobDataEntity struct {
     JobID                      string    `cql:"job_id"`                       // Unique job identifier (varint in CQL, string in Go)
     TaskDefinitionID           int       `cql:"task_definition_id"`           // Task type (3, 4, or 8)
     Recurring                  bool      `cql:"recurring"`                    // Trigger on every event in time frame or once
-    
+
     // Event trigger fields (common for all)
     TriggerChainID             string    `cql:"trigger_chain_id"`             // Chain to monitor
     TriggerContractAddress     string    `cql:"trigger_contract_address"`     // Contract to watch
     TriggerEvent               string    `cql:"trigger_event"`                // Event signature (e.g., "Transfer(address,address,uint256)")
     EventFilterParaName        string    `cql:"event_filter_para_name"`       // Indexed parameter to filter (e.g., "to")
     EventFilterValue           string    `cql:"event_filter_value"`           // Filter value (e.g., specific address)
-    
+
     // Traditional job fields (TDI 3, 4) - nullable for agent jobs (TDI 8)
     TargetChainID              string    `cql:"target_chain_id"`              // Chain to execute on
     TargetContractAddress      string    `cql:"target_contract_address"`      // Contract to call
@@ -244,7 +246,7 @@ type EventJobDataEntity struct {
     ArgType                    int       `cql:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
     Arguments                  []string  `cql:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
     DynamicArgumentsScriptURL  string    `cql:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-    
+
     // Agent job fields (TDI 8) - nullable for traditional jobs (TDI 3, 4)
     AgentScriptURL             string    `cql:"agent_script_url"`             // IPFS URL of the agent script
     AgentScriptLanguage        string    `cql:"agent_script_language"`        // Script language: 'ts', 'go', 'python', 'javascript'
@@ -252,7 +254,7 @@ type EventJobDataEntity struct {
     AgentTargetChainID         int       `cql:"agent_target_chain_id"`        // Default chain ID (script can override)
     MaxExecutionTime           int       `cql:"max_execution_time"`           // Script timeout in seconds (default 60)
     ChallengePeriod            int64     `cql:"challenge_period"`             // Challenge period in seconds (default 21600 = 6 hours)
-    
+
     // Common status fields
     IsActive       bool      `cql:"is_active"`        // Job is active (true on creation, false when expiration time is reached)
     LastExecutedAt time.Time `cql:"last_executed_at"` // Last execution time
@@ -263,6 +265,7 @@ type EventJobDataEntity struct {
 **Primary Key**: `job_id`
 
 **Indexes**:
+
 - `last_executed_at` - For querying jobs by last execution time
 
 **Field Notes**:
@@ -283,7 +286,7 @@ type ConditionJobDataEntity struct {
     JobID                     string    `cql:"job_id"`                      // Unique job identifier (varint in CQL, string in Go)
     TaskDefinitionID          int       `cql:"task_definition_id"`          // Task type (5, 6, or 9)
     Recurring                 bool      `cql:"recurring"`                   // Trigger on every condition match or once
-    
+
     // Condition trigger fields (common for all)
     ConditionType             string    `cql:"condition_type"`              // "balance", "state", "oracle"
     UpperLimit                float64   `cql:"upper_limit"`                 // Upper threshold (double in CQL)
@@ -291,7 +294,7 @@ type ConditionJobDataEntity struct {
     ValueSourceType           string    `cql:"value_source_type"`           // "api", "oracle", "websocket"
     ValueSourceURL            string    `cql:"value_source_url"`            // API URL or Websocket URL
     SelectedKeyRoute          string    `cql:"selected_key_route"`          // JSON path for API responses
-    
+
     // Traditional job fields (TDI 5, 6) - nullable for agent jobs (TDI 9)
     TargetChainID             string    `cql:"target_chain_id"`             // Chain to execute on
     TargetContractAddress     string    `cql:"target_contract_address"`     // Contract to call
@@ -300,7 +303,7 @@ type ConditionJobDataEntity struct {
     ArgType                   int       `cql:"arg_type"`                    // 0=None, 1=Static, 2=Dynamic
     Arguments                 []string  `cql:"arguments"`                   // Static arguments (if ArgType=1, list<text> in CQL)
     DynamicArgumentsScriptURL string    `cql:"dynamic_arguments_script_url"`// IPFS CID for dynamic arg script
-    
+
     // Agent job fields (TDI 9) - nullable for traditional jobs (TDI 5, 6)
     AgentScriptURL            string    `cql:"agent_script_url"`            // IPFS URL of the agent script
     AgentScriptLanguage       string    `cql:"agent_script_language"`       // Script language: 'ts', 'go', 'python', 'javascript'
@@ -308,7 +311,7 @@ type ConditionJobDataEntity struct {
     AgentTargetChainID        int       `cql:"agent_target_chain_id"`       // Default chain ID (script can override)
     MaxExecutionTime          int       `cql:"max_execution_time"`          // Script timeout in seconds (default 60)
     ChallengePeriod           int64     `cql:"challenge_period"`            // Challenge period in seconds (default 21600 = 6 hours)
-    
+
     // Common status fields
     IsActive       bool      `cql:"is_active"`        // Job is active (true on creation, false when expiration time is reached)
     LastExecutedAt time.Time `cql:"last_executed_at"` // Last execution time
@@ -319,6 +322,7 @@ type ConditionJobDataEntity struct {
 **Primary Key**: `job_id`
 
 **Indexes**:
+
 - `last_executed_at` - For querying jobs by last execution time
 
 **Field Notes**:
@@ -362,6 +366,7 @@ type TaskDataEntity struct {
 **Primary Key**: `task_id`
 
 **Indexes**:
+
 - `job_id` - For querying all tasks for a specific job (WHERE job_id = ? ALLOW FILTERING)
 
 **Field Notes**:
@@ -392,7 +397,7 @@ type KeeperDataEntity struct {
     PeerID            string      `cql:"peer_id"`            // Peer ID for P2P
     Uptime            int64       `cql:"uptime"`             // Total uptime (seconds, bigint in CQL)
     LastCheckedIn     time.Time   `cql:"last_checked_in"`    // Last heartbeat time
-    RewardsBooster    float64     `cql:"rewards_booster"`    // Reward multiplier (for testnets, obsolete for mainnet, double in CQL)
+    RewardsBooster    string      `cql:"rewards_booster"`    // Reward multiplier (for testnets, obsolete for mainnet, text in CQL)
     NoExecutedTasks   int64       `cql:"no_executed_tasks"`  // Total tasks executed (bigint in CQL)
     NoAttestedTasks   int64       `cql:"no_attested_tasks"`  // Total tasks attested (bigint in CQL)
     KeeperPoints      string      `cql:"keeper_points"`      // Total points (Wei, sum of TaskOpxCost executed/attested, daily rewards)
@@ -405,8 +410,9 @@ type KeeperDataEntity struct {
 
 **Field Notes**:
 
-- `OperatorID`: Stored as `int` in CQL (32-bit), but the Go entity uses `int64`. The gocql driver handles the conversion.
+- `OperatorID`: Stored as `int` in CQL (32-bit), matching `int` in Go
 - `RegisteredAt`: List of timestamps in CQL, allowing tracking of multiple registration events
+- `RewardsBooster`: Stored as `text` in CQL, `string` in Go (for testnets, obsolete for mainnet)
 
 ### 10. AgentScriptExecutionsEntity
 
@@ -421,38 +427,38 @@ type AgentScriptExecutionsEntity struct {
     ScheduledTime      time.Time `cql:"scheduled_time"`       // When it was supposed to execute
     ActualTime         time.Time `cql:"actual_time"`          // When it actually executed
     PerformerAddress   string    `cql:"performer_address"`    // Keeper who executed the script
-    
+
     // Input data (for deterministic re-execution)
     InputTimestamp     int64     `cql:"input_timestamp"`      // Timestamp used as input (bigint in CQL)
     InputStorage       string    `cql:"input_storage"`        // JSON snapshot of storage at execution time
     InputHash          string    `cql:"input_hash"`           // Hash of inputs for verification
-    
+
     // Trigger-specific input data (JSON)
     TriggerData        string    `cql:"trigger_data"`         // TDI 7: {scheduled_time}
                                                                // TDI 8: {event_data, block_number, tx_hash, event_params}
                                                                // TDI 9: {condition_value, timestamp, condition_type}
-    
+
     // Output data
     ShouldExecute      bool      `cql:"should_execute"`       // Whether to submit on-chain transaction
     TargetContract     string    `cql:"target_contract"`      // Contract address to call
     Calldata           string    `cql:"calldata"`             // Encoded function call (hex string)
     OutputHash         string    `cql:"output_hash"`          // Hash of outputs for verification
-    
+
     // Metadata (CRITICAL: API calls, contract calls, block numbers)
     ExecutionMetadata  string    `cql:"execution_metadata"`   // JSON containing:
                                                                // - API calls made: [{url, blockNumber, response}, ...]
                                                                // - Contract calls: [{contract, blockNumber, function, response}, ...]
                                                                // - Oracle calls: [{oracle, blockNumber, data}, ...]
-    
+
     // Proof
     ScriptHash         string    `cql:"script_hash"`          // Hash of the script code
     Signature          string    `cql:"signature"`            // Performer's signature
-    
+
     // Execution result
     TxHash             string    `cql:"tx_hash"`              // Transaction hash if executed
     ExecutionStatus    string    `cql:"execution_status"`     // 'success', 'failed', 'no_execution'
     ExecutionError     string    `cql:"execution_error"`      // Error message if failed
-    
+
     // Verification status
     VerificationStatus string    `cql:"verification_status"`  // 'pending', 'verified', 'challenged', 'slashed'
     ChallengeDeadline  time.Time `cql:"challenge_deadline"`   // Deadline for challenges
@@ -465,6 +471,7 @@ type AgentScriptExecutionsEntity struct {
 **Primary Key**: `execution_id`
 
 **Indexes**:
+
 - `job_id` - For querying all executions for a job
 - `task_id` - For linking to task_data
 - `verification_status` - For finding pending/verified/challenged executions
@@ -514,17 +521,17 @@ type ExecutionChallengesEntity struct {
     ExecutionID            string    `cql:"execution_id"`              // Reference to agent_script_executions
     ChallengerAddress      string    `cql:"challenger_address"`        // Address of the challenger
     ChallengeReason        string    `cql:"challenge_reason"`          // 'wrong_output', 'missing_execution', 'invalid_calldata', 'wrong_trigger'
-    
+
     // Challenger's claimed output
     ChallengerOutputHash   string    `cql:"challenger_output_hash"`    // Hash of challenger's claimed output
     ChallengerShouldExecute bool     `cql:"challenger_should_execute"` // Challenger's claim: should execute?
     ChallengerTargetContract string  `cql:"challenger_target_contract"`// Challenger's claimed target contract
     ChallengerCalldata     string    `cql:"challenger_calldata"`       // Challenger's claimed calldata
     ChallengerSignature    string    `cql:"challenger_signature"`      // Challenger's signature
-    
+
     // Challenge bond (prevents spam)
     BondAmount             string    `cql:"bond_amount"`               // Wei-based bond amount
-    
+
     // Resolution
     ResolutionStatus       string    `cql:"resolution_status"`         // 'pending', 'approved', 'rejected', 'inconclusive'
     ResolutionTime         time.Time `cql:"resolution_time"`           // When challenge was resolved
@@ -538,6 +545,7 @@ type ExecutionChallengesEntity struct {
 **Primary Key**: `challenge_id`
 
 **Indexes**:
+
 - `execution_id` - For finding all challenges for an execution
 - `resolution_status` - For filtering by resolution state
 - `challenger_address` - For querying challenges by challenger
@@ -545,7 +553,7 @@ type ExecutionChallengesEntity struct {
 **Field Notes**:
 
 - **Purpose**: Tracks fraud-proof challenges where validators dispute incorrect agent script executions
-- **Challenge Reasons**: 
+- **Challenge Reasons**:
   - `wrong_output`: Output hash doesn't match expected result
   - `missing_execution`: Execution should have happened but didn't
   - `invalid_calldata`: Calldata is malformed or invalid
@@ -563,16 +571,19 @@ type ExecutionChallengesEntity struct {
 The system supports 9 task definition IDs, grouped by trigger type and execution model:
 
 **Time-Based Jobs**:
+
 - **TDI 1** (Time Static): `job_data` + `time_job_data` (traditional fields populated)
 - **TDI 2** (Time Dynamic): `job_data` + `time_job_data` (traditional fields populated)
 - **TDI 7** (Agent Time): `job_data` + `time_job_data` (agent fields populated) + `agent_script_executions` + `script_storage`
 
 **Event-Based Jobs**:
+
 - **TDI 3** (Event Static): `job_data` + `event_job_data` (traditional fields populated)
 - **TDI 4** (Event Dynamic): `job_data` + `event_job_data` (traditional fields populated)
 - **TDI 8** (Agent Event): `job_data` + `event_job_data` (agent fields populated) + `agent_script_executions` + `script_storage`
 
 **Condition-Based Jobs**:
+
 - **TDI 5** (Condition Static): `job_data` + `condition_job_data` (traditional fields populated)
 - **TDI 6** (Condition Dynamic): `job_data` + `condition_job_data` (traditional fields populated)
 - **TDI 9** (Agent Condition): `job_data` + `condition_job_data` (agent fields populated) + `agent_script_executions` + `script_storage`
@@ -602,12 +613,14 @@ The system supports 9 task definition IDs, grouped by trigger type and execution
 ### Execution Flow Comparison
 
 **Traditional (TDI 1-6)**:
-```
+
+```bash
 Scheduler → Creates Task → Keeper → Executes Target Contract
 ```
 
 **Agent (TDI 7-9)**:
-```
+
+```bash
 Scheduler → Creates Task → Keeper → Runs Script → Script Decides
                                               ↓
                                  shouldExecute = true/false
@@ -620,17 +633,19 @@ Scheduler → Creates Task → Keeper → Runs Script → Script Decides
 ### Agent Script Input/Output
 
 **Input Format** (varies by TDI):
+
 - **TDI 7 (Time)**: `{"scheduledTime": "...", "storage": {...}, "jobId": "..."}`
 - **TDI 8 (Event)**: `{"eventData": {...}, "blockNumber": ..., "txHash": "...", "eventSignature": "...", "storage": {...}, "jobId": "..."}`
 - **TDI 9 (Condition)**: `{"conditionValue": ..., "conditionType": "...", "timestamp": "...", "storage": {...}, "jobId": "..."}`
 
 **Output Format**:
+
 ```json
 {
   "shouldExecute": true,
   "targetContract": "0xDeFiProtocol...",
   "calldata": "0x...",
-  "storageUpdates": {"lastPrice": "2050.0", "counter": 43}
+  "storageUpdates": { "lastPrice": "2050.0", "counter": 43 }
 }
 ```
 
@@ -736,7 +751,7 @@ const (
     TaskDefEventBasedDynamic      = 4  // Event based job with dynamic arguments
     TaskDefConditionBasedStatic   = 5  // Condition based job with static arguments
     TaskDefConditionBasedDynamic  = 6  // Condition based job with dynamic arguments
-    
+
     // Agent Jobs (7-9)
     TaskDefTimeBasedAgent         = 7  // Time based job with agentic script
     TaskDefEventBasedAgent        = 8  // Event based job with agentic script
@@ -844,7 +859,7 @@ func IsNegative(x string) bool
 ✅ **No Precision Loss**: Integer arithmetic, no floating-point errors  
 ✅ **Consistency**: Same unit used in smart contracts  
 ✅ **Deterministic**: Exact calculations, reproducible results  
-✅ **Ethereum Compatible**: Direct mapping to blockchain values  
+✅ **Ethereum Compatible**: Direct mapping to blockchain values
 
 ---
 
@@ -857,7 +872,7 @@ TriggerX's data type system provides:
 ✅ **Validation**: Built-in validation rules  
 ✅ **Wei-Based Precision**: No floating-point errors in monetary calculations  
 ✅ **Consistency**: Single source of truth in `pkg/types/`  
-✅ **Extensibility**: Easy to add new fields or types  
+✅ **Extensibility**: Easy to add new fields or types
 
 **Remember**: `pkg/types/db_entity.go` and `pkg/types/db_dto.go` are the authoritative sources. All other data structures should conform to these definitions.
 

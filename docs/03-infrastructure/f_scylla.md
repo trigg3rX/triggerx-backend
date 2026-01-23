@@ -13,16 +13,16 @@
 
 ### Tables
 
-| Table | Purpose | Primary Key |
-|-------|---------|-------------|
-| `user_data` | User profiles, settings | `user_id` |
-| `job_data` | Job definitions | `job_id` |
-| `time_job_data` | Time-based job configs | `job_id` |
-| `event_job_data` | Event-based job configs | `job_id` |
-| `condition_job_data` | Condition-based job configs | `job_id` |
-| `task_data` | Task execution records | `task_id` |
-| `keeper_data` | Keeper registry | `keeper_address` |
-| `apikeys` | API key authentication | `api_key` |
+| Table                | Purpose                     | Primary Key      |
+| -------------------- | --------------------------- | ---------------- |
+| `user_data`          | User profiles, settings     | `user_id`        |
+| `job_data`           | Job definitions             | `job_id`         |
+| `time_job_data`      | Time-based job configs      | `job_id`         |
+| `event_job_data`     | Event-based job configs     | `job_id`         |
+| `condition_job_data` | Condition-based job configs | `job_id`         |
+| `task_data`          | Task execution records      | `task_id`        |
+| `keeper_data`        | Keeper registry             | `keeper_address` |
+| `apikeys`            | API key authentication      | `api_key`        |
 
 ## Datastore Package
 

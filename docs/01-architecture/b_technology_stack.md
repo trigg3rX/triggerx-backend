@@ -8,7 +8,7 @@ TriggerX Backend is built on a foundation of industry-leading technologies, each
 
 ### What is EigenCloud?
 
-EigenCloud (previously known as EigenLayer) is a protocol that enables **restaking** of ETH to secure multiple services simultaneously. It allows Ethereum validators to opt-in to validating additional protocols (called Actively Validated Services or AVS) while earning additional rewards.
+EigenCloud is a protocol that enables **restaking** of ETH to secure multiple services simultaneously. It allows Ethereum validators to opt-in to validating additional protocols (called Actively Validated Services or AVS) while earning additional rewards.
 
 ### EigenCloud in TriggerX
 
@@ -28,10 +28,10 @@ TriggerX leverages EigenCloud for:
 
 ### Benefits
 
-- Shared security with Ethereum  
-- Lower bootstrapping costs for new services  
-- Access to professional validator infrastructure  
-- Proven cryptoeconomic security model  
+- Shared security with Ethereum
+- Lower bootstrapping costs for new services
+- Access to professional validator infrastructure
+- Proven cryptoeconomic security model
 
 **Learn More**: [EigenCloud Documentation](https://docs.eigencloud.xyz/)
 
@@ -287,19 +287,19 @@ We use Pinata as our IPFS provider. It provides **decentralized storage** for ta
 
 ## Technology Selection Rationale
 
-| Requirement | Technology | Reason |
-|------------|-----------|--------|
-| Economic Security | EigenCloud | Proven restaking protocol with strong cryptoeconomic guarantees |
-| Consensus & Validation | Othentic | Modular AVS framework with BFT consensus and proof generation |
-| High-Performance Database | ScyllaDB | Low-latency, high-throughput, horizontally scalable NoSQL |
-| Fast Caching & Messaging | Redis | In-memory speed, rich data structures, Streams for queues |
-| Decentralized Storage | Pinata | Content-addressed, immutable, censorship-resistant storage |
-| Service Communication | gRPC | High performance, type-safe, streaming support |
-| Container Runtime | Docker | Industry standard, secure isolation, rich ecosystem |
-| Observability | OpenTelemetry | Vendor-neutral, standardized tracing and metrics |
+| Requirement               | Technology    | Reason                                                          |
+| ------------------------- | ------------- | --------------------------------------------------------------- |
+| Economic Security         | EigenCloud    | Proven restaking protocol with strong cryptoeconomic guarantees |
+| Consensus & Validation    | Othentic      | Modular AVS framework with BFT consensus and proof generation   |
+| High-Performance Database | ScyllaDB      | Low-latency, high-throughput, horizontally scalable NoSQL       |
+| Fast Caching & Messaging  | Redis         | In-memory speed, rich data structures, Streams for queues       |
+| Decentralized Storage     | Pinata        | Content-addressed, immutable, censorship-resistant storage      |
+| Service Communication     | gRPC          | High performance, type-safe, streaming support                  |
+| Container Runtime         | Docker        | Industry standard, secure isolation, rich ecosystem             |
+| Observability             | OpenTelemetry | Vendor-neutral, standardized tracing and metrics                |
 
 ---
 
 For details on how these technologies are used in each service, see [services](../02-services/a_services.md).
 
-Previous: [System Overview](./../01-architecture/a_system_overview.md) | Next: [Data Types](./../01-architecture/c_data_types.md)
+Previous: [System Overview](./a_system_overview.md) | Next: [Data Types](./c_data_types.md)

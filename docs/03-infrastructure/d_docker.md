@@ -4,10 +4,10 @@ Docker provides sandboxed execution environments for user-provided scripts in Tr
 
 ## Supported Languages
 
-| Language | Image | Use Case |
-|----------|-------|----------|
-| Go | `golang:1.25.5-alpine` | Dynamic argument generation, agent scripts |
-| TypeScript | `node:25.3.0-alpine` | Dynamic argument generation, agent scripts |
+| Language   | Image                  | Use Case                                   |
+| ---------- | ---------------------- | ------------------------------------------ |
+| Go         | `golang:1.25.5-alpine` | Dynamic argument generation, agent scripts |
+| TypeScript | `node:25.3.0-alpine`   | Dynamic argument generation, agent scripts |
 
 ## Container Pool Architecture
 

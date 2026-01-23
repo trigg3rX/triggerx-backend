@@ -6,14 +6,14 @@ TriggerX uses [Upstash Redis](https://upstash.com/redis) for task lifecycle mana
 
 Redis Streams manage task state transitions:
 
-| Stream | Purpose |
-|--------|---------|
+| Stream            | Purpose                                   |
+| ----------------- | ----------------------------------------- |
 | `task:dispatched` | Tasks sent to Keepers (pending execution) |
-| `task:executed` | Tasks executed, awaiting validation |
-| `task:validated` | Tasks validated on-chain |
-| `task:completed` | Final completed state |
-| `task:failed` | Failed tasks |
-| `task:retry` | Tasks queued for retry |
+| `task:executed`   | Tasks executed, awaiting validation       |
+| `task:validated`  | Tasks validated on-chain                  |
+| `task:completed`  | Final completed state                     |
+| `task:failed`     | Failed tasks                              |
+| `task:retry`      | Tasks queued for retry                    |
 
 All streams have a **30-minute TTL** to prevent unbounded growth.
 

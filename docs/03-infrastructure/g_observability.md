@@ -4,14 +4,14 @@ TriggerX uses a Prometheus-based observability stack for metrics, with OpenTelem
 
 ## Stack Components
 
-| Component | Purpose | Port |
-|-----------|---------|------|
-| [Prometheus](https://prometheus.io/) | Metrics collection & storage | 9090 |
-| [Grafana](https://grafana.com/) | Visualization & dashboards | 3000 |
-| [Tempo](https://grafana.com/oss/tempo/) | Distributed tracing | 3200 |
-| [Loki](https://grafana.com/oss/loki/) | Log aggregation | 3100 |
-| [Mimir](https://grafana.com/oss/mimir/) | Long-term metrics storage | 9009 |
-| [OTel Collector](https://opentelemetry.io/docs/collector/) | Telemetry pipeline | 4317/4318 |
+| Component                                                  | Purpose                      | Port      |
+| ---------------------------------------------------------- | ---------------------------- | --------- |
+| [Prometheus](https://prometheus.io/)                       | Metrics collection & storage | 9090      |
+| [Grafana](https://grafana.com/)                            | Visualization & dashboards   | 3000      |
+| [Tempo](https://grafana.com/oss/tempo/)                    | Distributed tracing          | 3200      |
+| [Loki](https://grafana.com/oss/loki/)                      | Log aggregation              | 3100      |
+| [Mimir](https://grafana.com/oss/mimir/)                    | Long-term metrics storage    | 9009      |
+| [OTel Collector](https://opentelemetry.io/docs/collector/) | Telemetry pipeline           | 4317/4318 |
 
 ## Metrics Package
 

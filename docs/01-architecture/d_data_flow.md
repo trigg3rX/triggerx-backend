@@ -78,7 +78,7 @@ Each stage involves multiple services communicating via HTTP, gRPC, or P2P proto
 │  Task Creation  │ 2. Parse cron expression / calculate next interval, update next_execution_timestamp
 │    (ScyllaDB)   │ 3. Create TaskDataEntity in database
 └────────┬────────┘ 4. Add task_id to job's task_ids set
-         │         
+         │
          ▼
 ┌─────────────────┐ 5. Send batch to TaskDispatcher via gRPC
 │ TaskDispatcher  │    (RPC method: submit-task)

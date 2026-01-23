@@ -145,12 +145,14 @@ Handles **condition-based triggers** (TDI 5, 6, 9) and **event-based triggers** 
 #### Job Types Supported
 
 **Condition-Based Jobs (TDI 5, 6, 9)**:
+
 - **API Conditions**: Monitor API endpoints for value thresholds
 - **Oracle Conditions**: Monitor oracle data feeds
 - **WebSocket Conditions**: Monitor WebSocket streams for value changes
 - **Static Conditions**: Test conditions with static values
 
 **Event-Based Jobs (TDI 3, 4, 8)**:
+
 - **Contract Events**: Listen for specific blockchain events (e.g., `Transfer`, `Approval`)
 - **Event Filters**: Filter by indexed parameters (e.g., only transfers to a specific address)
 - **Multi-Chain**: Monitor events across multiple blockchain networks
@@ -169,6 +171,7 @@ Handles **condition-based triggers** (TDI 5, 6, 9) and **event-based triggers** 
 #### Working
 
 **For Condition-Based Jobs (TDI 5, 6, 9)**:
+
 1. Scheduler gets gRPC call from DBServer to schedule a new job
 2. Scheduler creates a condition worker to monitor the trigger (API/Oracle/WebSocket)
 3. Worker polls every 1 second and checks condition
@@ -176,6 +179,7 @@ Handles **condition-based triggers** (TDI 5, 6, 9) and **event-based triggers** 
 5. Scheduler creates a new task (`task_id`) and passes it to the task dispatcher via gRPC
 
 **For Event-Based Jobs (TDI 3, 4, 8)**:
+
 1. Scheduler gets gRPC call from DBServer to schedule a new job
 2. Scheduler registers the event monitoring request with EventMonitor service via gRPC
 3. EventMonitor service handles WebSocket subscriptions and event monitoring
@@ -396,4 +400,4 @@ Coming soon...
 
 ---
 
-For detailed data flow, see [data-flow.md](./data-flow.md).
+For detailed data flow, see [data-flow.md](../01-architecture/d_data_flow.md).

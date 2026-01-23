@@ -100,20 +100,16 @@ The Keeper service is a distributed task execution and validation node that oper
      a. **Trigger Validation**: Validates trigger conditions
      b. **Blockchain Client Setup**: Establishes RPC connection to target chain
      c. **Action Execution**: Executes task based on TaskDefinitionID:
-        - **Traditional Jobs (TDI 1-6)**: 
-          - Static args (1, 3, 5): Use provided arguments
-          - Dynamic args (2, 4, 6): Execute script to generate arguments
-        - **Agent Jobs (TDI 7, 8, 9)**:
-          - Execute agent script in Docker
-          - Parse JSON output: `{shouldExecute, targetContract, calldata, storageUpdates}`
-          - If `shouldExecute=false`, skip transaction submission
-          - Use script-provided `targetContract` and `calldata`
-     d. **Transaction Submission**: Submit on-chain transaction (if applicable)
-     e. **Proof Generation**: Creates TLS-based cryptographic proof
-     f. **Data Signing**: Signs IPFS data with consensus private key
-     g. **IPFS Upload**: Uploads proof data to IPFS network
-     h. **Aggregator Submission**: Broadcasts results to aggregator via P2P
-     i. **Status Reporting**: Reports execution status to TaskMonitor
+     - **Traditional Jobs (TDI 1-6)**:
+       - Static args (1, 3, 5): Use provided arguments
+       - Dynamic args (2, 4, 6): Execute script to generate arguments
+     - **Agent Jobs (TDI 7, 8, 9)**: - Execute agent script in Docker - Parse JSON output: `{shouldExecute, targetContract, calldata, storageUpdates}` - If `shouldExecute=false`, skip transaction submission - Use script-provided `targetContract` and `calldata`
+       d. **Transaction Submission**: Submit on-chain transaction (if applicable)
+       e. **Proof Generation**: Creates TLS-based cryptographic proof
+       f. **Data Signing**: Signs IPFS data with consensus private key
+       g. **IPFS Upload**: Uploads proof data to IPFS network
+       h. **Aggregator Submission**: Broadcasts results to aggregator via P2P
+       i. **Status Reporting**: Reports execution status to TaskMonitor
   5. **Error Handling**: Reports failures to TaskMonitor
   6. **Broadcast Storage**: Stores broadcast data for rebroadcast capability
 
@@ -133,7 +129,7 @@ The Keeper service is a distributed task execution and validation node that oper
   4. **Manager Signature Validation**: Verify TaskDispatcher signature
   5. **Blockchain Connection**: Establish RPC connection to target chain
   6. **Trigger Validation**: Validate trigger conditions
-  7. **Action Validation**: 
+  7. **Action Validation**:
      - Fetch transaction receipt from blockchain
      - Verify transaction success (status = 1)
      - Verify transaction timestamp <= expiration_time + tolerance
@@ -187,7 +183,7 @@ The Keeper service is a distributed task execution and validation node that oper
 1. **Task Reception**: API server receives HTTP POST to `/p2p/message` endpoint
    - Request body: `{"data": "0x<hex-encoded-json>"}`
    - Extract trace context from HTTP headers
-2. **Request Processing**: 
+2. **Request Processing**:
    - Decode hex data to JSON
    - Parse `SendTaskDataToKeeper` structure
    - Verify this keeper is the assigned performer
@@ -197,21 +193,21 @@ The Keeper service is a distributed task execution and validation node that oper
    b. **Manager Signature Validation**: Verify TaskDispatcher signature
    c. **Parallel Target Execution**: Execute all targets concurrently
    d. **For Each Target**:
-      - **Trigger Validation**: Validate trigger conditions
-      - **Action Execution**: 
-        - Traditional (TDI 1-6): Execute contract call with args
-        - Agent (TDI 7-9): Execute script, parse output, submit if `shouldExecute=true`
-      - **Proof Generation**: Generate TLS certificate proof
-      - **IPFS Upload**: Package and upload execution data
-      - **Aggregator Broadcast**: Send to aggregator via P2P
-      - **Status Report**: Report to TaskMonitor
+   - **Trigger Validation**: Validate trigger conditions
+   - **Action Execution**:
+     - Traditional (TDI 1-6): Execute contract call with args
+     - Agent (TDI 7-9): Execute script, parse output, submit if `shouldExecute=true`
+   - **Proof Generation**: Generate TLS certificate proof
+   - **IPFS Upload**: Package and upload execution data
+   - **Aggregator Broadcast**: Send to aggregator via P2P
+   - **Status Report**: Report to TaskMonitor
 4. **Error Handling**: Report failures to TaskMonitor with error details
 
 ### Task Validation Flow (Attestation)
 
 1. **Validation Request**: API server receives HTTP POST to `/task/validate`
    - Request body contains IPFS CID (hex-encoded)
-2. **IPFS Data Retrieval**: 
+2. **IPFS Data Retrieval**:
    - Decode hex data
    - Fetch complete task data from IPFS using CID
    - Continue trace from IPFS data if available
@@ -219,7 +215,7 @@ The Keeper service is a distributed task execution and validation node that oper
 4. **Manager Signature Validation**: Verify TaskDispatcher signature
 5. **Blockchain Connection**: Establish RPC connection to target chain
 6. **Trigger Validation**: Validate trigger conditions
-7. **Action Validation**: 
+7. **Action Validation**:
    - Fetch transaction receipt from blockchain
    - Verify transaction success
    - Verify transaction was executed before expiration time + tolerance
@@ -237,11 +233,11 @@ The Keeper service is a distributed task execution and validation node that oper
    - Sign keeper address with consensus private key
    - Create payload: `{keeper_address, consensus_address, version, peer_id, network, timestamp, signature}`
 3. **HTTP Request**: POST to `/health` endpoint
-4. **Response Processing**: 
+4. **Response Processing**:
    - Health service verifies signature
    - Updates keeper status in database
    - Returns encrypted task execution address
-5. **Error Handling**: 
+5. **Error Handling**:
    - If keeper not verified, initiate graceful shutdown
    - Log errors but continue operation for transient failures
 
@@ -297,4 +293,4 @@ The Keeper service is a distributed task execution and validation node that oper
 2. **Single Function for execution**: Current implementation is 2 functions, with redundant code, we can add a simple if check for dynamic args, and use codeExecutor class if needed.
 3. **Update Condition Based Trigger Validation**: Add support for past values from Oracles and APIs, if supported.
 4. **Update Action Validation**: Current validation checks for tx success, and block time <= ExpirationTime + Tolerance. No calldata and arguments check. Will be successful after implementation of former point.
-5. The TLS server with rotating certificates, as defined in [TLS](../05-infrastructure/database/tls.md).
+5. The TLS server with rotating certificates (documentation pending).

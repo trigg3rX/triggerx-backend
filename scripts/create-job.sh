@@ -137,8 +137,6 @@ JOB_TITLE="$adj $noun"
 
 # Default values for all fields (matching CreateJobData struct)
 # USER_ADDRESS is already derived from PRIVATE_KEY above
-ETHER_BALANCE=50000000000000000
-TOKEN_BALANCE=50000000000000000000
 CUSTOM=true
 LANGUAGE="go"
 RECURRING=false
@@ -401,8 +399,6 @@ fi
 # Use jq to properly construct and escape JSON
 JOB_PAYLOAD=$(jq -n \
   --arg user_address "$USER_ADDRESS" \
-  --argjson ether_balance $ETHER_BALANCE \
-  --argjson token_balance $TOKEN_BALANCE \
   --arg created_chain_id "$CHAIN_ID" \
   --arg job_id "$JOB_ID" \
   --arg job_title "$JOB_TITLE" \
@@ -442,8 +438,6 @@ JOB_PAYLOAD=$(jq -n \
   --argjson task_def_id $TASK_DEFINITION_ID \
   '{
     user_address: $user_address,
-    ether_balance: $ether_balance,
-    token_balance: $token_balance,
     created_chain_id: $created_chain_id,
     job_id: $job_id,
     job_title: $job_title,
