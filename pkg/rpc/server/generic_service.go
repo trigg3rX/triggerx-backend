@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -39,15 +40,54 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 	var request interface{}
 	if req.Payload != nil {
 		if req.Payload.TypeUrl == "application/json" {
-			// Deserialize JSON payload
-			var jsonData map[string]interface{}
-			if err := json.Unmarshal(req.Payload.Value, &jsonData); err != nil {
-				s.logger.Error(ctx, "Failed to deserialize JSON payload", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
-				return &rpcproto.RPCResponse{
-					Error: fmt.Sprintf("failed to deserialize JSON payload: %v", err),
-				}, nil
+			// Get the expected request type from the handler's method definition
+			methods := s.handler.GetMethods()
+			var requestType interface{}
+			for _, method := range methods {
+				if method.Name == req.Method {
+					requestType = method.RequestType
+					break
+				}
 			}
-			request = jsonData
+
+			if requestType != nil {
+				// Create a new instance of the request type using reflection
+				requestTypeValue := reflect.ValueOf(requestType)
+				if requestTypeValue.Kind() == reflect.Ptr {
+					// If it's a pointer, get the element type and create a new instance
+					elemType := requestTypeValue.Elem().Type()
+					newValue := reflect.New(elemType)
+
+					// Unmarshal JSON into the new instance
+					if err := json.Unmarshal(req.Payload.Value, newValue.Interface()); err != nil {
+						s.logger.Error(ctx, "Failed to deserialize JSON payload into expected type", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
+						return &rpcproto.RPCResponse{
+							Error: fmt.Sprintf("failed to deserialize JSON payload: %v", err),
+						}, nil
+					}
+					request = newValue.Interface()
+				} else {
+					// If it's not a pointer, create a new instance directly
+					newValue := reflect.New(requestTypeValue.Type())
+					if err := json.Unmarshal(req.Payload.Value, newValue.Interface()); err != nil {
+						s.logger.Error(ctx, "Failed to deserialize JSON payload into expected type", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
+						return &rpcproto.RPCResponse{
+							Error: fmt.Sprintf("failed to deserialize JSON payload: %v", err),
+						}, nil
+					}
+					request = newValue.Elem().Interface()
+				}
+			} else {
+				// No method definition found, deserialize as map
+				var jsonData map[string]interface{}
+				if err := json.Unmarshal(req.Payload.Value, &jsonData); err != nil {
+					s.logger.Error(ctx, "Failed to deserialize JSON payload", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
+					return &rpcproto.RPCResponse{
+						Error: fmt.Sprintf("failed to deserialize JSON payload: %v", err),
+					}, nil
+				}
+				request = jsonData
+			}
 		} else {
 			// For protobuf messages, pass as-is
 			request = req.Payload
@@ -80,7 +120,7 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 			// For non-proto messages, serialize as JSON
 			jsonData, err := json.Marshal(result)
 			if err != nil {
-				s.logger.Error(ctx, "Failed to serialize result as JSON", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))	
+				s.logger.Error(ctx, "Failed to serialize result as JSON", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
 				return &rpcproto.RPCResponse{
 					Error: fmt.Sprintf("failed to serialize result as JSON: %v", err),
 				}, nil
