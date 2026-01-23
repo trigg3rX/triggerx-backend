@@ -80,7 +80,7 @@ func main() {
 	dbClient := taskManager.GetDatabaseClient()
 
 	// Initialize and start gRPC server
-	rpcServer, err := rpc.StartRPCServer(ctx, logger, taskManager, dbClient, "0.0.0.0", config.GetGRPCPort())
+	rpcServer, err := rpc.StartRPCServer(ctx, logger, taskManager, dbClient)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to start gRPC server", observability.Error(err))
 	}

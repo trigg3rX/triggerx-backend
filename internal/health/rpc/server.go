@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
@@ -19,11 +20,11 @@ type Server struct {
 }
 
 // NewServer creates a new RPC server for health service
-func NewServer(logger observability.Logger, tracer observability.Tracer, stateManager *keeper.StateManager) *Server {
+func NewServer(logger observability.Logger, tracer observability.Tracer, stateManager *keeper.StateManager) (*Server, error) {
 	// Parse port from string to int
 	port, err := strconv.Atoi(config.GetGRPCPort())
 	if err != nil {
-		port = 9003 // Default to 9003 if parsing fails
+		return nil, fmt.Errorf("invalid port %q: %w", config.GetGRPCPort(), err)
 	}
 
 	// Create RPC server config
@@ -52,7 +53,7 @@ func NewServer(logger observability.Logger, tracer observability.Tracer, stateMa
 	return &Server{
 		server: rpcSrv,
 		logger: logger,
-	}
+	}, nil
 }
 
 // Start starts the RPC server
@@ -69,4 +70,3 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) GetServiceInfo() rpcpkg.ServiceInfo {
 	return s.server.GetServiceInfo()
 }
-

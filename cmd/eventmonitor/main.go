@@ -66,7 +66,10 @@ func main() {
 	logger.Info(ctx, "[3/3] Dependency: API Server Initialised")
 
 	// Setup gRPC server
-	rpcSrv := rpc.NewServer(logger, tracer, svc.GetRegistryManager(), svc)
+	rpcSrv, err := rpc.NewServer(logger, tracer, svc.GetRegistryManager(), svc)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to create gRPC server", observability.Error(err))
+	}
 	logger.Info(ctx, "[3/3] Dependency: gRPC Server Initialised")
 
 	metrics.StartMetricsCollection()

@@ -12,17 +12,17 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/api"
-	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/health"
 	dbClient "github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/database"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/health"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/rpc"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
 	rpctracing "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
 )
@@ -182,8 +182,8 @@ func main() {
 		logger.Fatal(ctx, "Failed to convert port to int", observability.Error(err))
 	}
 	serverConfig := rpcserver.Config{
-		Name:    "TaskDispatcher",
-		Version: "1.0.0",
+		Name:    "task-dispatcher",
+		Version: config.GetVersion(),
 		Address: "0.0.0.0",
 		Port:    port,
 	}
@@ -196,7 +196,7 @@ func main() {
 
 	// Create and register the generic RPC handler
 	handler := rpc.NewTaskDispatcherHandler(logger, dispatcher)
-	srv.RegisterHandler("TaskDispatcher", handler)
+	srv.RegisterHandler("task-dispatcher", handler)
 
 	// 6. Start everything
 	// Create context for graceful shutdown

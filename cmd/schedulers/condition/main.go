@@ -95,7 +95,10 @@ func main() {
 	logger.Info(ctx, "[5/6] Dependency: API Server Initialised", observability.String("port", apiPort))
 
 	// Setup RPC server (for schedule/unschedule operations)
-	rpcSrv := conditionrpc.NewServer(logger, tracer, conditionScheduler)
+	rpcSrv, err := conditionrpc.NewServer(logger, tracer, conditionScheduler)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to create RPC server", observability.Error(err))
+	}
 	logger.Info(ctx, "[6/6] Dependency: RPC Server Initialised")
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
@@ -18,9 +19,12 @@ type Server struct {
 }
 
 // NewServer creates a new RPC server for condition scheduler
-func NewServer(logger observability.Logger, tracer observability.Tracer, sched *scheduler.ConditionBasedScheduler) *Server {
+func NewServer(logger observability.Logger, tracer observability.Tracer, sched *scheduler.ConditionBasedScheduler) (*Server, error) {
 	// Parse port from string to int
-	port, _ := strconv.Atoi(config.GetGRPCPort())
+	port, err := strconv.Atoi(config.GetGRPCPort())
+	if err != nil {
+		return nil, fmt.Errorf("invalid port %q: %w", config.GetGRPCPort(), err)
+	}
 
 	// Create RPC server config
 	serverConfig := rpcserver.Config{
@@ -48,7 +52,7 @@ func NewServer(logger observability.Logger, tracer observability.Tracer, sched *
 	return &Server{
 		server: rpcSrv,
 		logger: logger,
-	}
+	}, nil
 }
 
 // Start starts the RPC server
