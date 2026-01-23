@@ -19,7 +19,7 @@ languages:
       max_wait_time: 60s
       health_check_interval: 10m
     docker_config:
-      image: "golang:1.24-alpine"
+      image: "golang:1.25.5-alpine"
       timeout_seconds: 300
       auto_cleanup: true
       memory_limit: "1024m"
@@ -37,7 +37,7 @@ languages:
         - "/tmp/go-cache:/tmp/go-cache"
     language_config:
       language: "go"
-      image_name: "golang:1.24-alpine"
+      image_name: "golang:1.25.5-alpine"
       setup_script: "apk add --no-cache git && go mod init test && go mod tidy"
       run_command: "go run code.go"
       extensions: [".go"]
@@ -49,7 +49,7 @@ languages:
       max_wait_time: 60s
       health_check_interval: 10m
     docker_config:
-      image: "node:22-alpine"
+      image: "node:25.3.0-alpine"
       timeout_seconds: 300
       auto_cleanup: true
       memory_limit: "1024m"
@@ -65,7 +65,7 @@ languages:
         - "/var/run/docker.sock:/var/run/docker.sock"
     language_config:
       language: "ts"
-      image_name: "node:22-alpine"
+      image_name: "node:25.3.0-alpine"
       setup_script: "npm install -g typescript"
       run_command: "node code.js"
       extensions: [".ts"]

@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -442,19 +443,48 @@ func (p *containerPool) initializeContainer(ctx context.Context, containerID str
 		return fmt.Errorf("failed to start initialization exec: %w", err)
 	}
 
+	// Capture output for error logging in a goroutine
+	outputChan := make(chan []byte, 1)
+	go func() {
+		output, _ := io.ReadAll(execAttachResp.Reader)
+		outputChan <- output
+	}()
+
 	// Wait for initialization to complete
+	var inspectResp container.ExecInspect
 	for {
-		inspectResp, err := p.manager.GetDockerClient().ContainerExecInspect(ctx, execResp.ID)
+		var err error
+		inspectResp, err = p.manager.GetDockerClient().ContainerExecInspect(ctx, execResp.ID)
 		if err != nil {
 			return fmt.Errorf("failed to inspect initialization exec: %w", err)
 		}
 		if !inspectResp.Running {
-			if inspectResp.ExitCode != 0 {
-				return fmt.Errorf("container initialization failed with exit code: %d", inspectResp.ExitCode)
-			}
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Read output after exec completes
+	var outputBuf []byte
+	select {
+	case outputBuf = <-outputChan:
+	case <-time.After(2 * time.Second):
+		// Timeout reading output, continue anyway
+	}
+
+	if inspectResp.ExitCode != 0 {
+		// Log the output for debugging
+		if len(outputBuf) > 0 {
+			p.logger.Error(ctx, "Container initialization failed",
+				observability.String("container_id", containerID),
+				observability.Int("exit_code", inspectResp.ExitCode),
+				observability.String("output", string(outputBuf)))
+		} else {
+			p.logger.Error(ctx, "Container initialization failed",
+				observability.String("container_id", containerID),
+				observability.Int("exit_code", inspectResp.ExitCode))
+		}
+		return fmt.Errorf("container initialization failed with exit code: %d", inspectResp.ExitCode)
 	}
 
 	p.logger.Debug(ctx, "Container initialized successfully", observability.String("container_id", containerID))

@@ -71,13 +71,16 @@ func GetCleanupScript(language types.Language) string {
 const goInitializationScript = `#!/bin/sh
 
 set -e
-# Install git (required for go mod to download dependencies from GitHub)
-apk add --no-cache git
+# Update package index and install git (required for go mod to download dependencies from GitHub)
+apk update && apk add --no-cache git
 mkdir -p /code
 cd /code
 # A minimal hello world for a valid initial state.
 echo 'package main; import "fmt"; func main() { fmt.Println("init") }' > code.go
-go mod init code
+# Initialize go module only if go.mod doesn't exist
+if [ ! -f go.mod ]; then
+    go mod init code
+fi
 echo "Go container initialized successfully"
 `
 
