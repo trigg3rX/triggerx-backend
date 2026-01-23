@@ -14,11 +14,9 @@ import (
 type JobRepository interface {
 	CreateNewJob(job *commonTypes.JobData) (*big.Int, error)
 	UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error
-	UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error
 	UpdateJobStatus(jobID *big.Int, status string) error
 	GetJobByID(jobID *big.Int) (*commonTypes.JobData, error)
 	GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error)
-	GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error)
 	GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error)
 	GetJobsBySafeAddress(safeAddress string) ([]commonTypes.JobData, error)
 }
@@ -61,22 +59,6 @@ func (r *jobRepository) UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJ
 	return nil
 }
 
-func (r *jobRepository) UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error {
-	var existingTaskIDs []int64
-	err := r.db.Session().Query(queries.GetTaskIDsByJobIDQuery, jobID).Scan(&existingTaskIDs)
-	if err != nil {
-		return errors.New("failed to get task ids by job id")
-	}
-
-	existingTaskIDs = append(existingTaskIDs, taskID)
-	err = r.db.Session().Query(queries.UpdateJobDataLastExecutedAtQuery,
-		existingTaskIDs, jobCostActual, lastExecutedAt).Exec()
-	if err != nil {
-		return errors.New("failed to update job last executed at")
-	}
-	return nil
-}
-
 func (r *jobRepository) UpdateJobStatus(jobID *big.Int, status string) error {
 	err := r.db.Session().Query(queries.UpdateJobDataStatusQuery,
 		status, time.Now(), jobID).Exec()
@@ -111,25 +93,6 @@ func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error) 
 		return 0, errors.New("failed to get task definition id by job id")
 	}
 	return taskDefinitionID, nil
-}
-
-func (r *jobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error) {
-	session := r.db.Session()
-	iter := session.Query(queries.GetTaskFeesByJobIDQuery, jobID).Iter()
-
-	var results []types.TaskFeeResponse
-	var taskID int64
-	var taskOpxCost float64
-	for iter.Scan(&taskID, &taskOpxCost) {
-		results = append(results, types.TaskFeeResponse{
-			TaskID:      taskID,
-			TaskOpxCost: taskOpxCost,
-		})
-	}
-	if err := iter.Close(); err != nil {
-		return nil, err
-	}
-	return results, nil
 }
 
 func (r *jobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error) {

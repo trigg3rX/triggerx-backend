@@ -13,9 +13,7 @@ import (
 type EventJobRepository interface {
 	CreateEventJob(eventJob *commonTypes.EventJobData) error
 	GetEventJobByJobID(jobID *big.Int) (commonTypes.EventJobData, error)
-	CompleteEventJob(jobID *big.Int) error
 	UpdateEventJobStatus(jobID *big.Int, isActive bool) error
-	GetActiveEventJobs() ([]commonTypes.EventJobData, error)
 }
 
 type eventJobRepository struct {
@@ -60,20 +58,6 @@ func (r *eventJobRepository) GetEventJobByJobID(jobID *big.Int) (commonTypes.Eve
 	return eventJob, nil
 }
 
-func (r *eventJobRepository) CompleteEventJob(jobID *big.Int) error {
-	err := r.db.Session().Query(queries.CompleteEventJobStatusQuery, jobID).Exec()
-	if err != nil {
-		return errors.New("failed to complete event job")
-	}
-
-	err = r.db.Session().Query(queries.UpdateJobDataToCompletedQuery, jobID).Exec()
-	if err != nil {
-		return errors.New("failed to update job_data status to completed")
-	}
-
-	return nil
-}
-
 func (r *eventJobRepository) UpdateEventJobStatus(jobID *big.Int, isActive bool) error {
 	err := r.db.Session().Query(queries.UpdateEventJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
@@ -81,25 +65,4 @@ func (r *eventJobRepository) UpdateEventJobStatus(jobID *big.Int, isActive bool)
 	}
 
 	return nil
-}
-
-func (r *eventJobRepository) GetActiveEventJobs() ([]commonTypes.EventJobData, error) {
-	var eventJobs []commonTypes.EventJobData
-	iter := r.db.Session().Query(queries.GetActiveEventJobsQuery).Iter()
-	var eventJob commonTypes.EventJobData
-	var jobIDBigInt *big.Int
-	for iter.Scan(
-		&jobIDBigInt, &eventJob.ExpirationTime, &eventJob.Recurring,
-		&eventJob.TriggerChainID, &eventJob.TriggerContractAddress, &eventJob.TriggerEvent,
-		&eventJob.EventFilterParaName, &eventJob.EventFilterValue,
-		&eventJob.TargetChainID, &eventJob.TargetContractAddress, &eventJob.TargetFunction,
-		&eventJob.ABI, &eventJob.ArgType, &eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl,
-		&eventJob.IsCompleted, &eventJob.IsActive) {
-		eventJob.JobID = commonTypes.NewBigInt(jobIDBigInt)
-		eventJobs = append(eventJobs, eventJob)
-	}
-	if err := iter.Close(); err != nil {
-		return nil, errors.New("failed to fetch active event jobs")
-	}
-	return eventJobs, nil
 }

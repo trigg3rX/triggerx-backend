@@ -2,8 +2,6 @@ package queries
 
 // Create Queries
 const (
-	GetMaxJobIDQuery = `SELECT MAX(job_id) FROM triggerx.job_data`
-
 	CreateJobDataQuery = `
 			INSERT INTO triggerx.job_data (
 				job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
@@ -19,11 +17,6 @@ const (
 			UPDATE triggerx.job_data 
 			SET job_title = ?, time_frame = ?, recurring = ?, status = ?,
 			job_cost_prediction = ?, updated_at = ?
-			WHERE job_id = ?`
-
-	UpdateJobDataLastExecutedAtQuery = `
-			UPDATE triggerx.job_data 
-			SET task_ids = ?, job_cost_actual = ?, last_executed_at = ?
 			WHERE job_id = ?`
 
 	UpdateJobDataStatusQuery = `
@@ -53,11 +46,6 @@ const (
 	GetTaskIDsByJobIDQuery = `
 			SELECT task_ids FROM triggerx.job_data 
 			WHERE job_id = ?`
-
-	// New query to get task_id and fee for all tasks of a job
-	GetTaskFeesByJobIDQuery = `
-			SELECT task_id, task_opx_cost FROM triggerx.task_data
-			WHERE job_id = ? ALLOW FILTERING`
 
 	// New query: get jobs for a user and a specific created_chain_id
 	GetJobsByUserIDAndChainIDQuery = `

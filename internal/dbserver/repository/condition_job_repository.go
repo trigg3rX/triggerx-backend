@@ -13,9 +13,7 @@ import (
 type ConditionJobRepository interface {
 	CreateConditionJob(conditionJob *commonTypes.ConditionJobData) error
 	GetConditionJobByJobID(jobID *big.Int) (commonTypes.ConditionJobData, error)
-	CompleteConditionJob(jobID *big.Int) error
 	UpdateConditionJobStatus(jobID *big.Int, isActive bool) error
-	GetActiveConditionJobs() ([]commonTypes.ConditionJobData, error)
 }
 
 type conditionJobRepository struct {
@@ -64,20 +62,6 @@ func (r *conditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (commonT
 	return conditionJob, nil
 }
 
-func (r *conditionJobRepository) CompleteConditionJob(jobID *big.Int) error {
-	err := r.db.Session().Query(queries.CompleteConditionJobStatusQuery, jobID).Exec()
-	if err != nil {
-		return errors.New("failed to complete condition job")
-	}
-
-	err = r.db.Session().Query(queries.UpdateJobDataToCompletedQuery, jobID).Exec()
-	if err != nil {
-		return errors.New("failed to update job_data status to completed")
-	}
-
-	return nil
-}
-
 func (r *conditionJobRepository) UpdateConditionJobStatus(jobID *big.Int, isActive bool) error {
 	err := r.db.Session().Query(queries.UpdateConditionJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
@@ -85,25 +69,4 @@ func (r *conditionJobRepository) UpdateConditionJobStatus(jobID *big.Int, isActi
 	}
 
 	return nil
-}
-
-func (r *conditionJobRepository) GetActiveConditionJobs() ([]commonTypes.ConditionJobData, error) {
-	var conditionJobs []commonTypes.ConditionJobData
-	iter := r.db.Session().Query(queries.GetActiveConditionJobsQuery).Iter()
-	var conditionJob commonTypes.ConditionJobData
-	var jobIDBigInt *big.Int
-	for iter.Scan(
-		&jobIDBigInt, &conditionJob.ExpirationTime, &conditionJob.Recurring,
-		&conditionJob.ConditionType, &conditionJob.UpperLimit, &conditionJob.LowerLimit,
-		&conditionJob.ValueSourceType, &conditionJob.ValueSourceUrl, &conditionJob.TargetChainID,
-		&conditionJob.TargetContractAddress, &conditionJob.TargetFunction, &conditionJob.ABI,
-		&conditionJob.ArgType, &conditionJob.Arguments, &conditionJob.DynamicArgumentsScriptUrl,
-		&conditionJob.IsCompleted, &conditionJob.IsActive, &conditionJob.SelectedKeyRoute) {
-		conditionJob.JobID = commonTypes.NewBigInt(jobIDBigInt)
-		conditionJobs = append(conditionJobs, conditionJob)
-	}
-	if err := iter.Close(); err != nil {
-		return nil, errors.New("failed to fetch active condition jobs")
-	}
-	return conditionJobs, nil
 }

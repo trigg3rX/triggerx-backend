@@ -86,10 +86,4 @@ const (
 	GetUserLeaderboardQuery = `
 			SELECT user_id, user_address, total_jobs, total_tasks, user_points 
 			FROM triggerx.user_data`
-
-	// Get User Leaderboard by Address for Frontend Serach functionality
-	GetUserLeaderboardByAddressQuery = `
-			SELECT user_id, user_address, total_jobs, total_tasks, user_points 
-			FROM triggerx.user_data 
-			WHERE user_address = ? ALLOW FILTERING`
 )

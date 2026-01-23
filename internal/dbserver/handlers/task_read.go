@@ -82,6 +82,44 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	h.logger.Debug(c.Request.Context(), "[GetTasksByJobID] Retrieved tasks", observability.String("job_id", jobIDStr), observability.Int("tasks_count", len(tasks)))
 }
 
+func (h *Handler) GetRecentTasks(c *gin.Context) {
+	// Parse limit from query parameter, default to 200
+	limitStr := c.DefaultQuery("limit", "200")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		h.logger.Error(c.Request.Context(), "[GetRecentTasks] Invalid limit parameter", observability.String("limit_str", limitStr))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid limit parameter",
+			"code":  "INVALID_LIMIT",
+		})
+		return
+	}
+
+	// Enforce maximum limit of 200
+	if limit > 200 {
+		limit = 200
+	}
+
+	trackDBOp := metrics.TrackDBOperation("read", "task_data")
+	tasks, err := h.taskRepository.GetRecentTasks(limit)
+	trackDBOp(err)
+	if err != nil {
+		h.logger.Warn(c.Request.Context(), "[GetRecentTasks] Failed to retrieve recent tasks", observability.Int("limit", limit), observability.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve recent tasks",
+			"code":  "TASKS_FETCH_ERROR",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tasks": tasks,
+		"count": len(tasks),
+		"limit": limit,
+	})
+	h.logger.Debug(c.Request.Context(), "[GetRecentTasks] Retrieved recent tasks", observability.Int("tasks_count", len(tasks)), observability.Int("limit", limit))
+}
+
 func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 	userAddress := strings.ToLower(c.Param("user_address"))
 	if userAddress == "" {
@@ -331,42 +369,4 @@ func convertTasksData(tasksData []types.GetTasksByJobID) []types.TasksByJobIDRes
 		}
 	}
 	return tasks
-}
-
-func (h *Handler) GetRecentTasks(c *gin.Context) {
-	// Parse limit from query parameter, default to 200
-	limitStr := c.DefaultQuery("limit", "200")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		h.logger.Error(c.Request.Context(), "[GetRecentTasks] Invalid limit parameter", observability.String("limit_str", limitStr))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid limit parameter",
-			"code":  "INVALID_LIMIT",
-		})
-		return
-	}
-
-	// Enforce maximum limit of 200
-	if limit > 200 {
-		limit = 200
-	}
-
-	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	tasks, err := h.taskRepository.GetRecentTasks(limit)
-	trackDBOp(err)
-	if err != nil {
-		h.logger.Warn(c.Request.Context(), "[GetRecentTasks] Failed to retrieve recent tasks", observability.Int("limit", limit), observability.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve recent tasks",
-			"code":  "TASKS_FETCH_ERROR",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"tasks": tasks,
-		"count": len(tasks),
-		"limit": limit,
-	})
-	h.logger.Debug(c.Request.Context(), "[GetRecentTasks] Retrieved recent tasks", observability.Int("tasks_count", len(tasks)), observability.Int("limit", limit))
 }

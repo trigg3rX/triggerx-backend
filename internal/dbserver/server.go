@@ -10,7 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
@@ -48,7 +47,16 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 
 	// Add tracing middleware before all others
 	// This middleware requires X-Trace-ID header and rejects requests without it
-	router.Use(middleware.TraceMiddleware(tracer))
+	// /status endpoint bypasses this middleware
+	traceMiddleware := middleware.TraceMiddleware(tracer)
+	router.Use(func(c *gin.Context) {
+		// Bypass trace middleware for /status endpoint
+		if c.Request.URL.Path == "/status" {
+			c.Next()
+			return
+		}
+		traceMiddleware(c)
+	})
 
 	// Apply middleware in the correct order
 	router.Use(middleware.RecoveryMiddleware(logger))           // First, to catch panics
@@ -188,9 +196,6 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	// Create handler w/ HTTP client, Redis client, and condition scheduler gRPC client
 	handler := handlers.NewHandler(s.db, s.logger, s.tracer, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient, conditionSchedulerClient)
 
-	// Register metrics endpoint at root level without middleware
-	router.GET("/metrics", gin.WrapH(metrics.NewCollector(s.obsMetrics, s.logger).Handler()))
-
 	// Register status endpoint for Pulsate and nginx
 	router.GET("/status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -205,9 +210,6 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	// Code validation endpoint (raw source)
 	api.POST("/code/validate", handler.ValidateCodeExecutable)
 
-	// Health check route - no authentication required
-	api.GET("/health", handler.HealthCheck)
-
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
@@ -216,17 +218,13 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	protected.POST("/users/email", handler.StoreUserEmail)
 
 	// Apply validation middleware to routes that need it
-	// api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
 	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
-	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
-	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
-	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
+	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress) // unused for now, can be added in SDK
 	protected.GET("/jobs/user/:user_address/chain/:created_chain_id", handler.GetJobsByUserAddressAndChainID)
 	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
 	protected.GET("/jobs/user/:user_address/:job_id", handler.GetJobDataByJobIDForUser)
-	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.GET("/tasks/:id", handler.GetTaskDataByID)
 	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
@@ -235,24 +233,11 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	protected.GET("/tasks/by-apikey/:api_key", handler.GetTasksByApiKey)
 	protected.GET("/tasks/safe-address/:safe_address", handler.GetTasksBySafeAddress)
 
-	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
-	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
-	api.GET("/keepers/performers", handler.GetPerformers)
-	api.GET("/keepers/:id", handler.GetKeeperData)
-	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
-	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
-	api.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
-	api.GET("/keepers/:id/points", handler.GetKeeperPoints)
-
 	protected.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
 	protected.GET("/leaderboard/users", handler.GetUserLeaderboard)
-	protected.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
-	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
 	api.GET("/fees", handler.GetTaskFees)
 
-	api.POST("/keepers/update-chat-id", handler.UpdateKeeperChatID)
-	api.GET("/keepers/com-info/:id", handler.GetKeeperCommunicationInfo)
 	api.POST("/claim-fund", handler.ClaimFund)
 
 	// Admin routes
@@ -270,10 +255,10 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	// WebSocket routes
 	wsHandler := handlers.NewWebSocketHandler(s.wsConnectionManager, s.logger)
 	api.GET("/ws/tasks", wsHandler.HandleWebSocketConnection)
-	api.GET("/ws/stats", wsHandler.GetWebSocketStats)
-	api.GET("/ws/health", wsHandler.GetWebSocketHealth)
+	api.GET("/ws/stats", wsHandler.GetWebSocketStats) // unused for now, can be added in SDK after adding client_id variable
+	api.GET("/ws/health", wsHandler.GetWebSocketHealth) // unused for now, can be added in SDK after adding client_id variable
 
-	protected.GET("/users/safe-addresses/:user_address", handler.GetSafeAddressesByUser)
+	protected.GET("/users/safe-addresses/:user_address", handler.GetSafeAddressesByUser) // unused for now, can be added in SDK
 	protected.GET("/jobs/safe-address/:safe_address", handler.GetJobsBySafeAddress)
 
 	return nil

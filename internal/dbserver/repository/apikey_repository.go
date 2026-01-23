@@ -15,11 +15,7 @@ type ApiKeysRepository interface {
 	CreateApiKey(apiKey *commonTypes.ApiKey) error
 	GetApiKeyDataByOwner(owner string) ([]*commonTypes.ApiKey, error) // changed to return slice
 	GetApiKeyDataByKey(key string) (*commonTypes.ApiKey, error)
-	GetApiKeyCounters(key string) (*types.ApiKeyCounters, error)
-	GetApiKeyByOwner(owner string) (key string, err error)
-	GetApiOwnerByApiKey(key string) (owner string, err error)
 	UpdateApiKey(apiKey *types.UpdateApiKeyRequest) error
-	UpdateApiKeyStatus(apiKey *types.UpdateApiKeyStatusRequest) error
 	UpdateApiKeyLastUsed(key string, isSuccess bool) error
 	DeleteApiKey(key string) error
 }
@@ -86,52 +82,8 @@ func (r *apiKeysRepository) GetApiKeyDataByKey(key string) (*commonTypes.ApiKey,
 	return apiKey, nil
 }
 
-func (r *apiKeysRepository) GetApiKeyCounters(key string) (*types.ApiKeyCounters, error) {
-	callCount := &types.ApiKeyCounters{}
-	err := r.db.Session().Query(queries.GetApiKeyCallCountQuery, key).Scan(&callCount.SuccessCount, &callCount.FailedCount)
-	if err == gocql.ErrNotFound {
-		return nil, errors.New("api key not found")
-	}
-	if err != nil {
-		return nil, err
-	}
-	return callCount, nil
-}
-
-func (r *apiKeysRepository) GetApiKeyByOwner(owner string) (key string, err error) {
-	key = ""
-	err = r.db.Session().Query(queries.GetApiKeyByOwnerQuery, owner).Scan(&key)
-	if err == gocql.ErrNotFound {
-		return "", errors.New("owner not found")
-	}
-	if err != nil {
-		return "", err
-	}
-	return key, nil
-}
-
-func (r *apiKeysRepository) GetApiOwnerByApiKey(key string) (owner string, err error) {
-	owner = ""
-	err = r.db.Session().Query(queries.GetApiOwnerByApiKeyQuery, key).Scan(&owner)
-	if err == gocql.ErrNotFound {
-		return "", errors.New("api key not found")
-	}
-	if err != nil {
-		return "", err
-	}
-	return owner, nil
-}
-
 func (r *apiKeysRepository) UpdateApiKey(apiKey *types.UpdateApiKeyRequest) error {
 	err := r.db.Session().Query(queries.UpdateApiKeyQuery, apiKey.Key, apiKey.IsActive, apiKey.RateLimit).Exec()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *apiKeysRepository) UpdateApiKeyStatus(apiKey *types.UpdateApiKeyStatusRequest) error {
-	err := r.db.Session().Query(queries.UpdateApiKeyStatusQuery, apiKey.IsActive, apiKey.Key).Exec()
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,6 @@ type UserRepository interface {
 	GetUserPointsByAddress(address string) (float64, error)
 	GetUserJobIDsByAddress(address string) (int64, []*big.Int, error)
 	GetUserLeaderboard() ([]types.UserLeaderboardEntry, error)
-	GetUserLeaderboardByAddress(address string) (types.UserLeaderboardEntry, error)
 	UpdateUserEmail(address string, email string) error
 	GetUserIDByAddress(address string) (int64, error)
 }
@@ -211,16 +210,6 @@ func (r *userRepository) GetUserLeaderboard() ([]types.UserLeaderboardEntry, err
 		return leaderboard[i].UserID < leaderboard[j].UserID
 	})
 	return leaderboard, nil
-}
-
-func (r *userRepository) GetUserLeaderboardByAddress(address string) (types.UserLeaderboardEntry, error) {
-	var userEntry types.UserLeaderboardEntry
-	err := r.db.Session().Query(queries.GetUserLeaderboardByAddressQuery, address).Scan(&userEntry.UserID, &userEntry.UserAddress, &userEntry.TotalJobs, &userEntry.TotalTasks, &userEntry.UserPoints)
-	if err != nil {
-		return types.UserLeaderboardEntry{}, err
-	}
-
-	return userEntry, nil
 }
 
 func (r *userRepository) GetUserIDByAddress(address string) (int64, error) {

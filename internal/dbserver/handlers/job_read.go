@@ -231,34 +231,6 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	h.logger.Debug(c.Request.Context(), "[GetJobsByUserAddress] Retrieved jobs", observability.String("user_address", userAddress), observability.Int("jobs_count", len(jobs)))
 }
 
-// GetTaskFeesByJobID handles GET /jobs/:job_id/task-fees
-func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
-	jobIDParam := c.Param("job_id")
-	if jobIDParam == "" {
-		h.logger.Error(c.Request.Context(), "[GetTaskFeesByJobID] job_id param missing")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id param missing"})
-		return
-	}
-
-	jobID := new(big.Int)
-	_, ok := jobID.SetString(jobIDParam, 10)
-	if !ok {
-		h.logger.Error(c.Request.Context(), "[GetTaskFeesByJobID] invalid job_id", observability.String("job_id", jobIDParam))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job_id"})
-		return
-	}
-
-	taskFees, err := h.jobRepository.GetTaskFeesByJobID(jobID)
-	if err != nil {
-		h.logger.Warn(c.Request.Context(), "[GetTaskFeesByJobID] Failed to get task fees", observability.String("job_id", jobIDParam), observability.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get task fees"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"task_fees": taskFees})
-	h.logger.Debug(c.Request.Context(), "[GetTaskFeesByJobID] Retrieved task fees", observability.Int64("job_id", jobID.Int64()))
-}
-
 // GetJobsByApiKey handles GET /jobs/by-apikey
 func (h *Handler) GetJobsByApiKey(c *gin.Context) {
 	apiKey := c.GetHeader("X-Api-Key")
@@ -457,10 +429,3 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 		h.logger.Debug(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Retrieved jobs", observability.String("user_address", userAddress), observability.String("created_chain_id", createdChainIDParam), observability.Int("jobs_count", len(jobs)))
 	}
 }
-
-// parseInt64 is a helper to parse int64 from string
-// func parseInt64(s string) (int64, error) {
-// 	var i int64
-// 	_, err := fmt.Sscan(s, &i)
-// 	return i, err
-// }

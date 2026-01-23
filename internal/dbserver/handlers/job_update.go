@@ -141,13 +141,6 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating time_interval for jobID", observability.String("job_id", updateData.JobID), observability.Error(err))
 		}
-		updatedAt := job.UpdatedAt
-		nextExecution := updatedAt.Add(time.Duration(updateData.TimeInterval) * time.Second)
-		err = h.timeJobRepository.UpdateTimeJobNextExecutionTimestamp(jobID, nextExecution)
-		if err != nil {
-			h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating next_execution_timestamp for jobID", observability.String("job_id", updateData.JobID), observability.Error(err))
-			// Not returning error to client, just logging
-		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -156,81 +149,4 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		"updated_at": time.Now().UTC(),
 	})
 	h.logger.Info(c.Request.Context(), "[UpdateJobDataFromUser] Updated job", observability.String("job_id", updateData.JobID))
-}
-
-func (h *Handler) UpdateJobStatus(c *gin.Context) {
-	jobID := c.Param("job_id")
-	status := c.Param("status")
-
-	// Validate status
-	validStatuses := map[string]bool{
-		"pending":  true,
-		"in-queue": true,
-		"running":  true,
-	}
-
-	if !validStatuses[status] {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid status. Must be one of: pending, in-queue, running",
-			"code":  "INVALID_STATUS",
-		})
-		return
-	}
-
-	// Convert jobID string to *big.Int
-	jobIDBig := new(big.Int)
-	_, ok := jobIDBig.SetString(jobID, 10)
-	if !ok {
-		h.logger.Error(c.Request.Context(), "[UpdateJobStatus] Error converting job ID to *big.Int", observability.String("job_id", jobID))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid job ID format",
-			"code":  "INVALID_JOB_ID",
-		})
-		return
-	}
-
-	// Update the job status
-	trackDBOp := metrics.TrackDBOperation("update", "job_data")
-	if err := h.jobRepository.UpdateJobStatus(jobIDBig, status); err != nil {
-		trackDBOp(err)
-		h.logger.Error(c.Request.Context(), "[UpdateJobStatus] Error updating job status", observability.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	trackDBOp(nil)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":    "Job status updated successfully",
-		"job_id":     jobID,
-		"status":     status,
-		"updated_at": time.Now().UTC(),
-	})
-	h.logger.Info(c.Request.Context(), "[UpdateJobStatus] Updated job status", observability.String("job_id", jobID), observability.String("status", status))
-}
-
-func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
-	var updateData types.UpdateJobLastExecutedAtRequest
-	if err := c.ShouldBindJSON(&updateData); err != nil {
-		h.logger.Error(c.Request.Context(), "[UpdateJobLastExecutedAt] Error decoding request body", observability.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Update main job_data table
-	trackDBOp := metrics.TrackDBOperation("update", "job_data")
-	if err := h.jobRepository.UpdateJobLastExecutedAt(updateData.JobID, updateData.TaskIDs, updateData.JobCostActual, updateData.LastExecutedAt); err != nil {
-		trackDBOp(err)
-		h.logger.Error(c.Request.Context(), "[UpdateJobLastExecutedAt] Error updating job data for jobID", observability.String("job_id", updateData.JobID.String()), observability.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
-		return
-	}
-	trackDBOp(nil)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":          "Last executed time updated successfully",
-		"job_id":           updateData.JobID,
-		"last_executed_at": updateData.LastExecutedAt,
-		"updated_at":       time.Now().UTC(),
-	})
-	h.logger.Info(c.Request.Context(), "[UpdateJobLastExecutedAt] Updated job last executed time", observability.String("job_id", updateData.JobID.String()))
 }
