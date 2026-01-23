@@ -1,72 +1,82 @@
--- Create keyspace
 CREATE KEYSPACE IF NOT EXISTS triggerx
 WITH replication = {
     'class': 'SimpleStrategy',
     'replication_factor': 1
 };
 
--- Switch to keyspace
 USE triggerx;
 
--- Drop existing tables
+DROP TABLE IF EXISTS apikeys;
 DROP TABLE IF EXISTS user_data;
+DROP TABLE IF EXISTS safe_addresses;
 DROP TABLE IF EXISTS job_data;
 DROP TABLE IF EXISTS time_job_data;
 DROP TABLE IF EXISTS event_job_data;
 DROP TABLE IF EXISTS condition_job_data;
-DROP TABLE IF EXISTS task_data;
-DROP TABLE IF EXISTS keeper_data;
-DROP TABLE IF EXISTS apikeys;
-DROP TABLE IF EXISTS safe_addresses;
-DROP TABLE IF EXISTS custom_jobs;
-DROP TABLE IF EXISTS custom_script_executions;
+DROP TABLE IF EXISTS agent_script_executions;
 DROP TABLE IF EXISTS script_storage;
 DROP TABLE IF EXISTS execution_challenges;
+DROP TABLE IF EXISTS task_data;
+DROP TABLE IF EXISTS keeper_data;
 
--- Create User_data table (without counters)
+CREATE TABLE IF NOT EXISTS apikeys (
+    key text,
+    owner text,
+    is_active boolean,
+    rate_limit int,
+    success_count bigint,
+    failed_count bigint,
+    last_used timestamp,
+    created_at timestamp,
+    PRIMARY KEY (key)
+);
+
 CREATE TABLE IF NOT EXISTS user_data (
-    user_id bigint,
     user_address text,
-    job_ids set<varint>,
-    ether_balance varint,
-    token_balance varint,
-    user_points double,
+    email_id text,
+    job_ids set<text>,
+    user_points text,
     total_jobs bigint,
     total_tasks bigint,
     created_at timestamp,
     last_updated_at timestamp,
-    email_id text,
-    PRIMARY KEY (user_id)
+    PRIMARY KEY (user_address)
 );
 
--- Create Job_data table    
+CREATE TABLE IF NOT EXISTS safe_addresses (
+    user_address text,
+    safe_address text,
+    safe_name text,
+    created_at timestamp,
+    PRIMARY KEY (user_address, safe_address)
+);
+
 CREATE TABLE IF NOT EXISTS job_data (
-    job_id varint,
+    job_id text,
     job_title text,
     task_definition_id int,
-    user_id bigint,
-    link_job_id varint,
+    created_chain_id text,
+    user_address text,
+    link_job_id text,
     chain_status int,
-    custom boolean,
+    safe_address text,
+    timezone text,
+    is_imua boolean,
+    job_type text,
     time_frame bigint,
     recurring boolean,
-    status text,  -- 'pending', 'in-queue', 'running'
-    job_cost_prediction double,
-    job_cost_actual double,
+    status text,
+    job_cost_prediction text,
+    job_cost_actual text,
     task_ids set<bigint>,
     created_at timestamp,
     updated_at timestamp,
     last_executed_at timestamp,
-    timezone text,
-    is_imua boolean,
-    created_chain_id text,
-    safe_address text,
     PRIMARY KEY (job_id)
 );
 
--- Create Time_Job_data table
 CREATE TABLE IF NOT EXISTS time_job_data (
-    job_id varint,
+    job_id text,
     task_definition_id int,
     schedule_type text,
     time_interval bigint,
@@ -81,18 +91,20 @@ CREATE TABLE IF NOT EXISTS time_job_data (
     arg_type int,
     arguments list<text>,
     dynamic_arguments_script_url text,
-    is_completed boolean,
+    agent_script_url text,
+    agent_script_language text,
+    agent_script_hash text,
+    agent_target_chain_id int,
+    max_execution_time int,
+    challenge_period bigint,
     is_active boolean,
-    created_at timestamp,
-    updated_at timestamp,
     last_executed_at timestamp,
     expiration_time timestamp,
     PRIMARY KEY (job_id)
 );
 
--- Create Event_Job_data table
 CREATE TABLE IF NOT EXISTS event_job_data (
-    job_id varint,
+    job_id text,
     task_definition_id int,
     recurring boolean,
     trigger_chain_id text,
@@ -107,19 +119,20 @@ CREATE TABLE IF NOT EXISTS event_job_data (
     arg_type int,
     arguments list<text>,
     dynamic_arguments_script_url text,
-    is_completed boolean,
+    agent_script_url text,
+    agent_script_language text,
+    agent_script_hash text,
+    agent_target_chain_id int,
+    max_execution_time int,
+    challenge_period bigint,
     is_active boolean,
-    created_at timestamp,
-    updated_at timestamp,
     last_executed_at timestamp,
     expiration_time timestamp,
-    timezone text,
     PRIMARY KEY (job_id)
 );
 
--- Create Condition_Job_data table
 CREATE TABLE IF NOT EXISTS condition_job_data (
-    job_id varint,
+    job_id text,
     task_definition_id int,
     recurring boolean,
     condition_type text,
@@ -127,6 +140,7 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
     lower_limit double,
     value_source_type text,
     value_source_url text,
+    selected_key_route text,
     target_chain_id text,
     target_contract_address text,
     target_function text,
@@ -134,266 +148,144 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
     arg_type int,
     arguments list<text>,
     dynamic_arguments_script_url text,
-    is_completed boolean,
+    agent_script_url text,
+    agent_script_language text,
+    agent_script_hash text,
+    agent_target_chain_id int,
+    max_execution_time int,
+    challenge_period bigint,
     is_active boolean,
-    created_at timestamp,
-    updated_at timestamp,
     last_executed_at timestamp,
     expiration_time timestamp,
-    timezone text,
-    selected_key_route text, 
     PRIMARY KEY (job_id)
 );
 
--- Create Task_data table
-CREATE TABLE IF NOT EXISTS task_data (
+CREATE TABLE IF NOT EXISTS triggerx.agent_script_executions (
+    execution_id text PRIMARY KEY,
+    job_id text,
     task_id bigint,
-    task_number bigint,
-    task_status text,
-    task_error text,
-    job_id varint,
     task_definition_id int,
-    created_at timestamp,
-    task_opx_predicted_cost double,
-    task_opx_cost double,
-    execution_timestamp timestamp,
-    execution_tx_hash text,
-    converted_arguments list<text>,
-    task_performer_id bigint,
-    task_attester_ids list<bigint>,
-    proof_of_task text,
-    tp_signature blob,
-    ta_signature blob,
-    task_submission_tx_hash text,
-    is_successful boolean,
-    is_accepted boolean,
-    is_imua boolean,
-    PRIMARY KEY (task_id)
-);
-
--- Create Keeper_data table
-CREATE TABLE IF NOT EXISTS keeper_data (
-    keeper_id bigint,
-    keeper_address text,
-    keeper_name text,
-    consensus_address text,
-    registered_tx text,
-    operator_id bigint,
-    rewards_address text,
-    rewards_booster double,
-    voting_power bigint,
-    keeper_points double,
-    connection_address text,
-    peer_id text,
-    strategies list<text>,
-    whitelisted boolean,
-    registered boolean,
-    online boolean,
-    version text,
-    network text,
-    no_executed_tasks bigint,
-    no_attested_tasks bigint,
-    chat_id bigint,
-    email_id text,
-    last_checked_in timestamp,
-    on_imua boolean,
-    uptime bigint,
-    PRIMARY KEY (keeper_id)
-);
-
--- Create ApiKey table
-CREATE TABLE IF NOT EXISTS apikeys (
-    key text,
-    owner text,
-    is_active boolean,
-    rate_limit int,
-    success_count bigint,
-    failed_count bigint,
-    last_used timestamp,
-    created_at timestamp,
-    PRIMARY KEY (key)
-);
-
--- Create Safe_addresses table
-CREATE TABLE IF NOT EXISTS safe_addresses (
-    user_address text,
-    safe_address text,
-    safe_name text,
-    created_at timestamp,
-    PRIMARY KEY (user_address, safe_address)
-);
-
--- Drop existing indexes if they exist
-DROP INDEX IF EXISTS triggerx.job_data_status_idx;
-DROP INDEX IF EXISTS triggerx.job_data_created_at_idx;
-DROP INDEX IF EXISTS triggerx.job_data_updated_at_idx;
-DROP INDEX IF EXISTS triggerx.job_data_last_executed_at_idx;
-DROP INDEX IF EXISTS triggerx.job_data_timezone_idx;
-
-DROP INDEX IF EXISTS triggerx.time_job_data_created_at_idx;
-DROP INDEX IF EXISTS triggerx.time_job_data_updated_at_idx;
-DROP INDEX IF EXISTS triggerx.time_job_data_last_executed_at_idx;
-DROP INDEX IF EXISTS triggerx.time_job_data_next_execution_timestamp_idx;
-DROP INDEX IF EXISTS triggerx.time_job_data_timezone_idx;
-
-DROP INDEX IF EXISTS triggerx.event_job_data_created_at_idx;
-DROP INDEX IF EXISTS triggerx.event_job_data_updated_at_idx;
-DROP INDEX IF EXISTS triggerx.event_job_data_last_executed_at_idx;
-DROP INDEX IF EXISTS triggerx.event_job_data_timezone_idx;
-
-DROP INDEX IF EXISTS triggerx.condition_job_data_created_at_idx;
-DROP INDEX IF EXISTS triggerx.condition_job_data_updated_at_idx;
-DROP INDEX IF EXISTS triggerx.condition_job_data_last_executed_at_idx;
-DROP INDEX IF EXISTS triggerx.condition_job_data_timezone_idx;
-
--- Create indexes for job_data table
-CREATE INDEX IF NOT EXISTS job_data_status_idx ON triggerx.job_data (status);
-CREATE INDEX IF NOT EXISTS job_data_created_at_idx ON triggerx.job_data (created_at);
-CREATE INDEX IF NOT EXISTS job_data_updated_at_idx ON triggerx.job_data (updated_at);
-CREATE INDEX IF NOT EXISTS job_data_last_executed_at_idx ON triggerx.job_data (last_executed_at);
-CREATE INDEX IF NOT EXISTS job_data_timezone_idx ON triggerx.job_data (timezone);
-
--- Create indexes for time_job_data table
-CREATE INDEX IF NOT EXISTS time_job_data_created_at_idx ON triggerx.time_job_data (created_at);
-CREATE INDEX IF NOT EXISTS time_job_data_updated_at_idx ON triggerx.time_job_data (updated_at);
-CREATE INDEX IF NOT EXISTS time_job_data_last_executed_at_idx ON triggerx.time_job_data (last_executed_at);
-CREATE INDEX IF NOT EXISTS time_job_data_timezone_idx ON triggerx.time_job_data (timezone);
-CREATE INDEX IF NOT EXISTS time_job_data_next_execution_timestamp_idx ON triggerx.time_job_data (next_execution_timestamp);
-
--- Create indexes for event_job_data table
-CREATE INDEX IF NOT EXISTS event_job_data_created_at_idx ON triggerx.event_job_data (created_at);
-CREATE INDEX IF NOT EXISTS event_job_data_updated_at_idx ON triggerx.event_job_data (updated_at);
-CREATE INDEX IF NOT EXISTS event_job_data_last_executed_at_idx ON triggerx.event_job_data (last_executed_at);
-CREATE INDEX IF NOT EXISTS event_job_data_timezone_idx ON triggerx.event_job_data (timezone);
-
--- Create indexes for condition_job_data table
-CREATE INDEX IF NOT EXISTS condition_job_data_created_at_idx ON triggerx.condition_job_data (created_at);
-CREATE INDEX IF NOT EXISTS condition_job_data_updated_at_idx ON triggerx.condition_job_data (updated_at);
-CREATE INDEX IF NOT EXISTS condition_job_data_last_executed_at_idx ON triggerx.condition_job_data (last_executed_at);
-CREATE INDEX IF NOT EXISTS condition_job_data_timezone_idx ON triggerx.condition_job_data (timezone);
-
--- Custom Script Jobs Schema
--- TaskDefinitionID = 7
-
--- Custom jobs table (extends existing job pattern)
-CREATE TABLE IF NOT EXISTS triggerx.custom_jobs (
-    job_id varint PRIMARY KEY,
-    task_definition_id int,
-    recurring boolean,
-    custom_script_url text,
-    time_interval bigint,              -- Execution interval in seconds
-    is_completed boolean,
-    is_active boolean,
-    target_chain_id text,
-    created_at timestamp,
-    updated_at timestamp,
-    last_executed_at timestamp,
-    expiration_time timestamp,
-    -- Script metadata
-    script_language text,              -- 'ts', 'go', 'python', 'javascript'
-    script_hash text,                  -- keccak256(scriptCode) for verification
-    next_execution_time timestamp,     -- Next scheduled execution
-    max_execution_time int,            -- Script timeout in seconds (default 60)
-    challenge_period bigint            -- Challenge period in seconds (default 21600 = 6 hours)
-);
-
--- Indexes for scheduler queries
-CREATE INDEX IF NOT EXISTS custom_jobs_active_idx
-ON triggerx.custom_jobs (is_active);
-
--- Script executions tracking table
-CREATE TABLE IF NOT EXISTS triggerx.custom_script_executions (
-    execution_id text PRIMARY KEY,     -- Unique execution identifier (UUID)
-    job_id varint,
-    task_id bigint,                    -- Link to task_data table
-    scheduled_time timestamp,          -- When it was supposed to execute
-    actual_time timestamp,             -- When it actually executed
+    scheduled_time timestamp,
+    actual_time timestamp,
     performer_address text,
-
-    -- Input data (for deterministic re-execution)
     input_timestamp bigint,
-    input_storage text,                -- JSON snapshot of storage at execution time
-    input_hash text,                   -- Hash of inputs for verification
-
-    -- Output data
+    input_storage text,
+    input_hash text,
+    trigger_data text,
     should_execute boolean,
-    target_contract text,              -- Contract address to call
-    calldata text,                     -- Encoded function call
-    output_hash text,                  -- Hash of outputs for verification
-
-    -- Metadata (CRITICAL: API calls, contract calls, block numbers)
-    execution_metadata text,           -- JSON containing:
-                                       -- - API calls made: [{url, blockNumber, response}, ...]
-                                       -- - Contract calls: [{contract, blockNumber, function, response}, ...]
-                                       -- - Oracle calls: [{oracle, blockNumber, data}, ...]
-
-    -- Proof
+    target_contract text,
+    calldata text,
+    output_hash text,
+    execution_metadata text,
     script_hash text,
-    signature text,                    -- Performer's signature
-
-    -- Execution result
-    tx_hash text,                      -- Transaction hash if executed
-    execution_status text,             -- 'success', 'failed', 'no_execution'
-    execution_error text,              -- Error message if failed
-
-    -- Verification status
-    verification_status text,          -- 'pending', 'verified', 'challenged', 'slashed'
-    challenge_deadline timestamp,      -- Deadline for challenges
+    signature text,
+    tx_hash text,
+    execution_status text,
+    execution_error text,
+    verification_status text,
+    challenge_deadline timestamp,
     is_challenged boolean,
     challenge_count int,
-
     created_at timestamp
 );
 
--- Indexes for execution queries
-CREATE INDEX IF NOT EXISTS executions_job_id_idx
-ON triggerx.custom_script_executions (job_id);
-
-CREATE INDEX IF NOT EXISTS executions_verification_status_idx
-ON triggerx.custom_script_executions (verification_status);
-
-CREATE INDEX IF NOT EXISTS executions_performer_idx
-ON triggerx.custom_script_executions (performer_address);
-
-CREATE INDEX IF NOT EXISTS executions_task_id_idx
-ON triggerx.custom_script_executions (task_id);
-
--- Script storage table (persistent key-value storage per job)
 CREATE TABLE IF NOT EXISTS triggerx.script_storage (
-    job_id varint,
+    job_id text,
     storage_key text,
     storage_value text,
     updated_at timestamp,
     PRIMARY KEY (job_id, storage_key)
 );
 
--- Execution challenges table
 CREATE TABLE IF NOT EXISTS triggerx.execution_challenges (
     challenge_id text PRIMARY KEY,
     execution_id text,
     challenger_address text,
-    challenge_reason text,             -- 'wrong_output', 'missing_execution', 'invalid_calldata'
-
-    -- Challenger's claimed output
+    challenge_reason text,
     challenger_output_hash text,
     challenger_should_execute boolean,
     challenger_target_contract text,
     challenger_calldata text,
     challenger_signature text,
-
-    -- Resolution
-    resolution_status text,            -- 'pending', 'approved', 'rejected'
+    bond_amount text,
+    resolution_status text,
     resolution_time timestamp,
     validator_count int,
     approve_count int,
     reject_count int,
-
     created_at timestamp
 );
 
-CREATE INDEX IF NOT EXISTS challenges_execution_idx
-ON triggerx.execution_challenges (execution_id);
+CREATE TABLE IF NOT EXISTS task_data (
+    task_id bigint,
+    task_number bigint,
+    task_status text,
+    task_error text,
+    job_id text,
+    task_definition_id int,
+    created_at timestamp,
+    executed_at timestamp,
+    submitted_at timestamp,
+    task_opx_predicted_cost text,
+    task_opx_actual_cost text,
+    execution_tx_hash text,
+    submission_tx_hash text,
+    converted_arguments list<text>,
+    task_performer_address list<text>,
+    task_attester_address list<text>,
+    proof_of_task text,
+    is_successful boolean,
+    is_accepted boolean,
+    is_imua boolean,
+    PRIMARY KEY (task_id)
+);
 
-CREATE INDEX IF NOT EXISTS challenges_status_idx
-ON triggerx.execution_challenges (resolution_status);
+CREATE TABLE IF NOT EXISTS keeper_data (
+    keeper_address text,
+    keeper_name text,
+    rewards_address text,
+    consensus_address text,
+    operator_id int,
+    voting_power text,
+    registered boolean,
+    registered_at list<timestamp>,
+    online boolean,
+    version text,
+    network text,
+    connection_address text,
+    peer_id text,
+    uptime bigint,
+    last_checked_in timestamp,
+    rewards_booster double,
+    no_executed_tasks bigint,
+    no_attested_tasks bigint,
+    keeper_points text,
+    chat_id bigint,
+    email_id text,
+    PRIMARY KEY (keeper_address)
+);
 
+CREATE INDEX IF NOT EXISTS job_data_status_idx ON triggerx.job_data (status);
+CREATE INDEX IF NOT EXISTS job_data_created_at_idx ON triggerx.job_data (created_at);
+CREATE INDEX IF NOT EXISTS job_data_updated_at_idx ON triggerx.job_data (updated_at);
+CREATE INDEX IF NOT EXISTS job_data_last_executed_at_idx ON triggerx.job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS job_data_safe_address_idx ON triggerx.job_data (safe_address);
+
+CREATE INDEX IF NOT EXISTS time_job_data_last_executed_at_idx ON triggerx.time_job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS time_job_data_next_execution_timestamp_idx ON triggerx.time_job_data (next_execution_timestamp);
+
+CREATE INDEX IF NOT EXISTS event_job_data_last_executed_at_idx ON triggerx.event_job_data (last_executed_at);
+
+CREATE INDEX IF NOT EXISTS condition_job_data_last_executed_at_idx ON triggerx.condition_job_data (last_executed_at);
+
+CREATE INDEX IF NOT EXISTS task_data_job_id_idx ON triggerx.task_data (job_id);
+
+CREATE INDEX IF NOT EXISTS agent_exec_job_id_idx ON triggerx.agent_script_executions (job_id);
+CREATE INDEX IF NOT EXISTS agent_exec_task_id_idx ON triggerx.agent_script_executions (task_id);
+CREATE INDEX IF NOT EXISTS agent_exec_verification_status_idx ON triggerx.agent_script_executions (verification_status);
+CREATE INDEX IF NOT EXISTS agent_exec_performer_idx ON triggerx.agent_script_executions (performer_address);
+CREATE INDEX IF NOT EXISTS agent_exec_tdi_idx ON triggerx.agent_script_executions (task_definition_id);
+
+CREATE INDEX IF NOT EXISTS challenges_execution_idx ON triggerx.execution_challenges (execution_id);
+CREATE INDEX IF NOT EXISTS challenges_status_idx ON triggerx.execution_challenges (resolution_status);
+CREATE INDEX IF NOT EXISTS challenges_challenger_idx ON triggerx.execution_challenges (challenger_address);

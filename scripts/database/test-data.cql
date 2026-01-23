@@ -3,28 +3,21 @@ USE triggerx;
 
 -- API key
 INSERT INTO apikeys 
-    (key, created_at, is_active, owner, rate_limit) 
+    (key, created_at, is_active, owner, rate_limit, success_count, failed_count, last_used) 
     VALUES 
-    ('ADMIN', '2025-08-01 00:00:00', true, 'admin', 1000);
+    ('ADMIN', '2025-08-01 00:00:00', true, 'admin', 1000, 0, 0, '2025-08-01 00:00:00');
 
 -- Keepers
 INSERT INTO keeper_data 
-    (keeper_id, keeper_address, keeper_name, operator_id, 
-    rewards_booster, keeper_points, registered, on_imua) 
+    (keeper_address, keeper_name, rewards_address, operator_id, 
+    registered, registered_at, network, rewards_booster) 
     VALUES 
-    (100, '0xbae997efc6e496d8a34181c2443d97b491a3f057', 'aggregator', 1, 
-    0.0, 0.0, true, false);
+    ('0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e', 'zoro', '0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e', 3, 
+    true, ['2025-08-01 00:00:00'], 'sepolia', 1.2);
 
 INSERT INTO keeper_data 
-    (keeper_id, keeper_address, keeper_name, operator_id, 
-    rewards_booster, keeper_points, registered, whitelisted, on_imua) 
+    (keeper_address, keeper_name, rewards_address, operator_id, 
+    registered, registered_at, network, rewards_booster) 
     VALUES 
-    (101, '0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e', 'zoro', 3, 
-    1.5, 0.0, true, true, false);
-
-INSERT INTO keeper_data 
-    (keeper_id, keeper_address, keeper_name, operator_id, 
-    rewards_booster, keeper_points, whitelisted, registered, on_imua) 
-    VALUES 
-    (102, '0x011fcbae5f306cd793456ab7d4c0cc86756c693d', 'luffy', 2,
-    1.0, 0, true, true, false);
+    ('0x011fcbae5f306cd793456ab7d4c0cc86756c693d', 'luffy', '0x011fcbae5f306cd793456ab7d4c0cc86756c693d', 2, 
+    true, ['2025-08-01 00:00:00'], 'sepolia', 1.6);
