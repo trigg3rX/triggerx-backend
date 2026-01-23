@@ -9,14 +9,18 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/api"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/health"
+	dbClient "github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/rpc"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
@@ -103,8 +107,47 @@ func main() {
 	}
 	logger.Info(ctx, "[5/7] Dependency: Health Client Initialised")
 
+	dbConfig := &database.Config{
+		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Keyspace:    "triggerx",
+		Consistency: gocql.Quorum,
+		Timeout:     config.GetDatabaseTimeout(),
+		Retries:     config.GetDatabaseRetries(),
+		ConnectWait: config.GetDatabaseConnectWait(),
+		RetryConfig: retry.DefaultRetryConfig(),
+	}
+
+	// Configure authentication if provided
+	if config.GetDatabaseUsername() != "" && config.GetDatabasePassword() != "" {
+		dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
+	}
+
+	// Configure SSL/TLS if enabled
+	if config.GetDatabaseSSLEnabled() {
+		dbConfig.WithSSLCertificates(
+			config.GetDatabaseSSLCertPath(),
+			config.GetDatabaseSSLKeyPath(),
+			config.GetDatabaseSSLCAPath(),
+			config.GetDatabaseSSLInsecureSkipVerify(),
+		)
+	}
+
+	conn, err := database.NewConnection(dbConfig, logger)
+	if err != nil || conn == nil {
+		logger.Fatal(ctx, "Failed to initialize main database connection", observability.Error(err))
+	}
+	defer conn.Close()
+	logger.Info(ctx, "[5/7] Dependency: Database Connection Initialised")
+
+	// Initialize database client
+	databaseClient := dbClient.NewDatabaseClient(logger, conn)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to create database client", observability.Error(err))
+	}
+	logger.Info(ctx, "[5/7] Dependency: Database Client Initialised")
+
 	// Initialize task stream manager for orchestration
-	taskStreamMgr, err := tasks.NewTaskStreamManager(ctx, redisClient, aggClient, testAggClient, logger)
+	taskStreamMgr, err := tasks.NewTaskStreamManager(ctx, redisClient, databaseClient, aggClient, testAggClient, logger)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskStreamManager", observability.Error(err))
 	}

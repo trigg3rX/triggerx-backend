@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 
@@ -23,11 +24,12 @@ type TaskStreamManager struct {
 	consumerGroups       map[string]bool
 	mu                   sync.RWMutex
 	startTime            time.Time
+	databaseClient       *database.DatabaseClient
 	aggregatorClient     *aggregator.AggregatorClient
 	testAggregatorClient *aggregator.AggregatorClient
 }
 
-func NewTaskStreamManager(ctx context.Context, client redisClient.RedisClientInterface, aggClient *aggregator.AggregatorClient, testAggregatorClient *aggregator.AggregatorClient, logger observability.Logger) (*TaskStreamManager, error) {
+func NewTaskStreamManager(ctx context.Context, client redisClient.RedisClientInterface, databaseClient *database.DatabaseClient, aggClient *aggregator.AggregatorClient, testAggregatorClient *aggregator.AggregatorClient, logger observability.Logger) (*TaskStreamManager, error) {
 	logger.Info(ctx, "Initializing TaskStreamManager...")
 
 	tsm := &TaskStreamManager{
@@ -35,6 +37,7 @@ func NewTaskStreamManager(ctx context.Context, client redisClient.RedisClientInt
 		logger:               logger,
 		consumerGroups:       make(map[string]bool),
 		startTime:            time.Now(),
+		databaseClient:       databaseClient,
 		aggregatorClient:     aggClient,
 		testAggregatorClient: testAggregatorClient,
 	}

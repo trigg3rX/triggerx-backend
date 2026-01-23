@@ -107,7 +107,9 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize aggregator client", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/7] Dependency: Aggregator Client Initialised")
+	logger.Info(ctx, "[3/7] Dependency: Aggregator Client Initialised",
+		observability.String("network", config.GetNetwork()),
+		observability.String("aggregator_rpc_url", config.GetAggregatorRPCUrl()))
 
 	dockerManager, err := dockerexecutor.NewDockerExecutorFromFile("config/services/docker-executor.yaml", logger)
 	if err != nil {

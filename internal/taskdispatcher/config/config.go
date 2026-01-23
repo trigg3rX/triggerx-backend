@@ -18,6 +18,9 @@ type Config struct {
 	httpPort string
 	grpcPort string
 
+	// Database Connection Configuration (from env)
+	dbConnection env.DatabaseConfig
+
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
@@ -44,6 +47,7 @@ type Config struct {
 
 	// YAML-loaded settings
 	redis    RedisConfig
+	databaseOperations yaml.DatabaseOperationsConfig
 	metrics              yaml.MetricsConfig
 	shutdown             yaml.ShutdownConfig
 	version              yaml.VersionConfig
@@ -65,6 +69,7 @@ type RedisConfig struct {
 
 type YAMLConfig struct {
 	Redis    RedisConfig    `yaml:"redis"`
+	DatabaseOperations yaml.DatabaseOperationsConfig `yaml:"database"`
 	Metrics  yaml.MetricsConfig  `yaml:"metrics"`
 	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
 	Version  yaml.VersionConfig  `yaml:"version"`
@@ -88,6 +93,7 @@ func Init(configPath string) error {
 		devMode:               env.GetEnvBool("DEV_MODE", false),
 		httpPort:              env.GetEnvString("TASK_DISPATCHER_HTTP_PORT", "9007"),
 		grpcPort:              env.GetEnvString("TASK_DISPATCHER_GRPC_PORT", "9017"),
+		dbConnection:          env.GetDatabaseConfig(),
 		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
 		serviceID:             env.GetEnvString("TASK_DISPATCHER_SERVICE_ID", "1"),
 		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "localhost:9014"),
@@ -100,6 +106,7 @@ func Init(configPath string) error {
 		upstashURL:            env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashToken:          env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		redis:                 yamlConfig.Redis,
+		databaseOperations:    yamlConfig.DatabaseOperations,
 		metrics:               yamlConfig.Metrics,
 		shutdown:              yamlConfig.Shutdown,
 		version:               yamlConfig.Version,
@@ -119,6 +126,12 @@ func validateConfig() error {
 	}
 	if !env.IsValidPort(cfg.grpcPort) {
 		return fmt.Errorf("invalid Task Dispatcher gRPC Port: %s", cfg.grpcPort)
+	}
+	if !env.IsValidIPAddress(cfg.dbConnection.HostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.dbConnection.HostAddress)
+	}
+	if !env.IsValidPort(cfg.dbConnection.HostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.dbConnection.HostPort)
 	}
 	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
 		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
@@ -167,6 +180,42 @@ func GetHTTPPort() string {
 
 func GetGRPCPort() string {
 	return cfg.grpcPort
+}
+
+func GetDatabaseHostAddress() string {
+	return cfg.dbConnection.HostAddress
+}
+
+func GetDatabaseHostPort() string {
+	return cfg.dbConnection.HostPort
+}
+
+func GetDatabaseUsername() string {
+	return cfg.dbConnection.Username
+}
+
+func GetDatabasePassword() string {
+	return cfg.dbConnection.Password
+}
+
+func GetDatabaseSSLEnabled() bool {
+	return cfg.dbConnection.SSLEnabled
+}
+
+func GetDatabaseSSLCertPath() string {
+	return cfg.dbConnection.SSLCertPath
+}
+
+func GetDatabaseSSLKeyPath() string {
+	return cfg.dbConnection.SSLKeyPath
+}
+
+func GetDatabaseSSLCAPath() string {
+	return cfg.dbConnection.SSLCAPath
+}
+
+func GetDatabaseSSLInsecureSkipVerify() bool {
+	return cfg.dbConnection.SSLInsecureSkipVerify
 }
 
 func GetOTELExporterEndpoint() string {
@@ -289,6 +338,20 @@ func GetInitializationTimeout() time.Duration {
 func GetMaxRetryBackoff() time.Duration {
 	return cfg.redis.MaxRetryBackoff.ToDuration()
 }
+
+func GetDatabaseTimeout() time.Duration {
+	return cfg.databaseOperations.Timeout.ToDuration()
+}
+
+func GetDatabaseConnectWait() time.Duration {
+	return cfg.databaseOperations.ConnectWait.ToDuration()
+}
+
+func GetDatabaseRetries() int {
+	return cfg.databaseOperations.Retries
+}
+
+
 
 func GetShutdownTimeout() time.Duration {
 	return cfg.shutdown.Timeout.ToDuration()
