@@ -154,7 +154,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		return types.PerformerActionData{}, false, fmt.Errorf("error packing arguments to function call: %v", err)
 	}
 
-	skipArgumentProcessing:
+skipArgumentProcessing:
 	// Create transaction data for execution contract
 	privateKey, err := crypto.HexToECDSA(config.GetPrivateKeyController())
 	if err != nil {
@@ -167,10 +167,13 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		return types.PerformerActionData{}, false, fmt.Errorf("failed to parse execution contract ABI: %v", err)
 	}
 
-	// Convert *BigInt to *big.Int for ABI packing
+	// Convert string to *big.Int for ABI packing
 	var jobIDBigInt *big.Int
-	if targetData.JobID != nil {
-		jobIDBigInt = targetData.JobID.ToBigInt()
+	if targetData.JobID != "" {
+		jobIDBigInt = types.ConvertToBigInt(targetData.JobID)
+		if err != nil {
+			return types.PerformerActionData{}, false, fmt.Errorf("failed to parse job ID: %v", err)
+		}
 	} else {
 		jobIDBigInt = big.NewInt(0)
 	}
@@ -233,7 +236,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		BlockRead:          result.Stats.BlockRead,
 		BlockWrite:         result.Stats.BlockWrite,
 		BandwidthRate:      result.Stats.BandwidthRate,
-		TotalFee:           result.Stats.TotalCost,
+		TotalFee:           result.Stats.TotalCost.String(), // Convert *big.Int to string (Wei)
 		StaticComplexity:   result.Stats.StaticComplexity,
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),

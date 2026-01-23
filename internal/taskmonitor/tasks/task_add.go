@@ -28,7 +28,7 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 	task.ValidatedAt = &[]time.Time{time.Now()}[0]
 
 	// Add to completed stream
-	err = tsm.addTaskToStream(ctx, StreamTaskValidated, task)
+	err = tsm.addTaskToStream(ctx, types.StreamTaskValidated, task)
 	if err != nil {
 		tsm.logger.Error(ctx, "failed to add to completed stream", observability.Error(err))
 		// return err
@@ -36,7 +36,7 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 
 	// Remove from processing stream (acknowledge) using the messageID
 	if messageID != "" {
-		err = tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "task-processors", messageID)
+		err = tsm.AckTaskProcessed(ctx, types.StreamTaskDispatched, "task-processors", messageID)
 		if err != nil {
 			tsm.logger.Error(ctx, "failed to acknowledge task",
 				observability.Int64("task_id", taskID),
@@ -76,7 +76,7 @@ func (tsm *TaskStreamManager) MarkTaskExecuted(ctx context.Context, taskID int64
 		observability.Int64("task_id", taskID))
 
 	// Try to find task in dispatched stream first
-	task, messageID, err := tsm.taskIndex.FindTaskByIDInStream(ctx, taskID, StreamTaskDispatched)
+	task, messageID, err := tsm.taskIndex.FindTaskByIDInStream(ctx, taskID, types.StreamTaskDispatched)
 	if err != nil {
 		// Task might not be in dispatched stream (e.g., if it was added directly)
 		// Create a minimal task entry for executed stream
@@ -86,7 +86,7 @@ func (tsm *TaskStreamManager) MarkTaskExecuted(ctx context.Context, taskID int64
 		// Create minimal task data - we'll need task definition ID from database
 		// For now, we'll create a basic entry
 		now := time.Now()
-		task = &TaskStreamData{
+		task = &types.TaskStreamData{
 			CreatedAt:  now,
 			ExecutedAt: &now,
 			SendTaskDataToKeeper: types.SendTaskDataToKeeper{
@@ -101,7 +101,7 @@ func (tsm *TaskStreamManager) MarkTaskExecuted(ctx context.Context, taskID int64
 	}
 
 	// Add to executed stream
-	messageIDExecuted, err := tsm.addTaskToStreamWithMessageID(ctx, StreamTaskExecuted, task)
+	messageIDExecuted, err := tsm.addTaskToStreamWithMessageID(ctx, types.StreamTaskExecuted, task)
 	if err != nil {
 		tsm.logger.Error(ctx, "failed to add to executed stream", observability.Error(err))
 		return err
@@ -128,7 +128,7 @@ func (tsm *TaskStreamManager) MarkTaskExecuted(ctx context.Context, taskID int64
 
 	// Remove from dispatched stream if it was there
 	if messageID != "" {
-		err = tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "task-processors", messageID)
+		err = tsm.AckTaskProcessed(ctx, types.StreamTaskDispatched, "task-processors", messageID)
 		if err != nil {
 			tsm.logger.Warn(ctx, "failed to acknowledge task from dispatched stream",
 				observability.Int64("task_id", taskID),
@@ -179,7 +179,7 @@ func (tsm *TaskStreamManager) MarkTaskFailed(ctx context.Context, taskID int64, 
 
 	// Acknowledge the task if we have the messageID
 	if messageID != "" {
-		err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "task-processors", messageID)
+		err := tsm.AckTaskProcessed(ctx, types.StreamTaskDispatched, "task-processors", messageID)
 		if err != nil {
 			tsm.logger.Error(ctx, "Failed to acknowledge failed task",
 				observability.Int64("task_id", taskID),
@@ -213,7 +213,7 @@ func (tsm *TaskStreamManager) MarkTaskFailed(ctx context.Context, taskID int64, 
 }
 
 // findTaskInStream finds a specific task in a given stream (fallback method when index is not available)
-func (tsm *TaskStreamManager) findTaskInStream(taskID int64, stream string) (*TaskStreamData, error) {
+func (tsm *TaskStreamManager) findTaskInStream(taskID int64, stream string) (*types.TaskStreamData, error) {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
 	defer cancel()
@@ -238,7 +238,7 @@ func (tsm *TaskStreamManager) findTaskInStream(taskID int64, stream string) (*Ta
 			continue
 		}
 
-		var task TaskStreamData
+		var task types.TaskStreamData
 		if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
 			tsm.logger.Error(ctx, "Failed to unmarshal task data",
 				observability.String("message_id", message.ID),
@@ -256,7 +256,7 @@ func (tsm *TaskStreamManager) findTaskInStream(taskID int64, stream string) (*Ta
 }
 
 // addTaskToStreamWithMessageID adds a task to a stream and returns the message ID
-func (tsm *TaskStreamManager) addTaskToStreamWithMessageID(ctx context.Context, stream string, task *TaskStreamData) (string, error) {
+func (tsm *TaskStreamManager) addTaskToStreamWithMessageID(ctx context.Context, stream string, task *types.TaskStreamData) (string, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
 	defer cancel()
@@ -296,18 +296,18 @@ func (tsm *TaskStreamManager) addTaskToStreamWithMessageID(ctx context.Context, 
 	// Add entry to expiration tracking with stream-specific TTL
 	var entryTTL time.Duration
 	switch stream {
-	case StreamTaskDispatched:
-		entryTTL = TasksProcessingTTL
-	case StreamTaskExecuted:
-		entryTTL = TasksExecutedTTL
-	case StreamTaskValidated:
-		entryTTL = TasksValidatedTTL
-	case StreamTaskFailed:
-		entryTTL = TasksFailedTTL
-	case StreamTaskRetry:
-		entryTTL = TasksRetryTTL
+	case types.StreamTaskDispatched:
+		entryTTL = types.TasksProcessingTTL
+	case types.StreamTaskExecuted:
+		entryTTL = types.TasksExecutedTTL
+	case types.StreamTaskValidated:
+		entryTTL = types.TasksValidatedTTL
+	case types.StreamTaskFailed:
+		entryTTL = types.TasksFailedTTL
+	case types.StreamTaskRetry:
+		entryTTL = types.TasksRetryTTL
 	default:
-		entryTTL = TasksProcessingTTL // Default fallback
+		entryTTL = types.TasksProcessingTTL // Default fallback
 	}
 
 	// Track expiration for this stream entry
@@ -336,7 +336,7 @@ func (tsm *TaskStreamManager) addTaskToStreamWithMessageID(ctx context.Context, 
 	return res, nil
 }
 
-func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string, task *TaskStreamData) error {
+func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string, task *types.TaskStreamData) error {
 	_, err := tsm.addTaskToStreamWithMessageID(ctx, stream, task)
 	return err
 }

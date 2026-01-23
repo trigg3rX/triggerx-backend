@@ -14,7 +14,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
+	eventTypes "github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -22,7 +22,7 @@ import (
 
 // Worker polls blockchain for events and distributes to subscribers
 type Worker struct {
-	entry         *types.RegistryEntry
+	entry         *eventTypes.RegistryEntry
 	nodeClient    *nodeclient.NodeClient
 	webhookClient webhook.NotificationClient
 	logger        observability.Logger
@@ -33,7 +33,7 @@ type Worker struct {
 
 // NewWorker creates a new event worker
 func NewWorker(
-	entry *types.RegistryEntry,
+	entry *eventTypes.RegistryEntry,
 	nodeClient *nodeclient.NodeClient,
 	webhookClient webhook.NotificationClient,
 	logger observability.Logger,
@@ -225,7 +225,7 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 
 	// Get subscribers
 	w.entry.Mu.RLock()
-	subscribers := make([]*types.Subscriber, 0, len(w.entry.Subscribers))
+	subscribers := make([]*eventTypes.Subscriber, 0, len(w.entry.Subscribers))
 	for _, sub := range w.entry.Subscribers {
 		subscribers = append(subscribers, sub)
 	}
@@ -280,7 +280,7 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 			observability.String("request_id", subscriber.RequestID),
 			observability.String("webhook_url", subscriber.WebhookURL))
 		/*
-			go func(sub *types.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
+			go func(sub *eventTypes.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
 				if err := w.webhookClient.Send(traceCtx, sub.WebhookURL, notif); err != nil {
 					triggerSpan.RecordError(err, observability.WithErrorAttributes(
 						attribute.String("error.type", "webhook_delivery_failed"),
@@ -301,7 +301,7 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 }
 
 // matchesFilter checks if a log matches the subscriber's filter
-func (w *Worker) matchesFilter(log nodeclient.Log, subscriber *types.Subscriber) bool {
+func (w *Worker) matchesFilter(log nodeclient.Log, subscriber *eventTypes.Subscriber) bool {
 	if subscriber.FilterParam == "" || subscriber.FilterValue == "" {
 		return true // No filter, match all
 	}

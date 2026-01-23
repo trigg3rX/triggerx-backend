@@ -9,13 +9,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
+	eventTypes "github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // RegistryManager manages the registry of monitoring requests
 type RegistryManager struct {
-	registry map[string]*types.RegistryEntry
+	registry map[string]*eventTypes.RegistryEntry
 	mu       sync.RWMutex
 	logger   observability.Logger
 	ctx      context.Context
@@ -24,7 +25,7 @@ type RegistryManager struct {
 // NewRegistryManager creates a new registry manager
 func NewRegistryManager(ctx context.Context, logger observability.Logger) *RegistryManager {
 	return &RegistryManager{
-		registry: make(map[string]*types.RegistryEntry),
+		registry: make(map[string]*eventTypes.RegistryEntry),
 		logger:   logger,
 		ctx:      ctx,
 	}
@@ -57,12 +58,12 @@ func (rm *RegistryManager) Register(req *types.MonitoringRequest) error {
 	if !exists {
 		// Create new entry
 		ctx, cancel := context.WithCancel(context.Background())
-		entry = &types.RegistryEntry{
+		entry = &eventTypes.RegistryEntry{
 			Key:          key,
 			ChainID:      req.ChainID,
 			ContractAddr: contractAddr,
 			EventSig:     eventSigHash,
-			Subscribers:  make(map[string]*types.Subscriber),
+			Subscribers:  make(map[string]*eventTypes.Subscriber),
 			LastBlock:    0,
 			WorkerCtx:    ctx,
 			WorkerCancel: cancel,
@@ -73,7 +74,7 @@ func (rm *RegistryManager) Register(req *types.MonitoringRequest) error {
 
 	// Add subscriber
 	entry.Mu.Lock()
-	entry.Subscribers[req.RequestID] = &types.Subscriber{
+	entry.Subscribers[req.RequestID] = &eventTypes.Subscriber{
 		RequestID:   req.RequestID,
 		WebhookURL:  req.WebhookURL,
 		ExpiresAt:   req.ExpiresAt,
@@ -99,7 +100,7 @@ func (rm *RegistryManager) Unregister(requestID string) error {
 	defer rm.mu.Unlock()
 
 	// Find the entry containing this request ID
-	var foundEntry *types.RegistryEntry
+	var foundEntry *eventTypes.RegistryEntry
 	var foundKey string
 
 	for key, entry := range rm.registry {
@@ -155,7 +156,7 @@ func (rm *RegistryManager) updateMetrics() {
 }
 
 // GetEntry returns a registry entry by key
-func (rm *RegistryManager) GetEntry(key string) (*types.RegistryEntry, bool) {
+func (rm *RegistryManager) GetEntry(key string) (*eventTypes.RegistryEntry, bool) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
@@ -164,7 +165,7 @@ func (rm *RegistryManager) GetEntry(key string) (*types.RegistryEntry, bool) {
 }
 
 // GetEntryByRequestID returns a registry entry by request ID
-func (rm *RegistryManager) GetEntryByRequestID(requestID string) (*types.RegistryEntry, string, bool) {
+func (rm *RegistryManager) GetEntryByRequestID(requestID string) (*eventTypes.RegistryEntry, string, bool) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
@@ -181,12 +182,12 @@ func (rm *RegistryManager) GetEntryByRequestID(requestID string) (*types.Registr
 }
 
 // GetAllEntries returns all registry entries
-func (rm *RegistryManager) GetAllEntries() map[string]*types.RegistryEntry {
+func (rm *RegistryManager) GetAllEntries() map[string]*eventTypes.RegistryEntry {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
 	// Return a copy to avoid external modification
-	result := make(map[string]*types.RegistryEntry)
+	result := make(map[string]*eventTypes.RegistryEntry)
 	for k, v := range rm.registry {
 		result[k] = v
 	}

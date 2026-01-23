@@ -26,6 +26,7 @@ func (v *TaskValidator) ValidateManagerSignature(ctx context.Context, task *type
 		TargetData:    task.TargetData,
 		TriggerData:   task.TriggerData,
 		SchedulerID:   task.SchedulerID,
+		Network:       task.Network,
 	}
 
 	// Convert the task data to JSON message format (same as signing process)

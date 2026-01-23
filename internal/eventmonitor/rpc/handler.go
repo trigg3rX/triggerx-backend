@@ -13,9 +13,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/registry"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Handler implements RPCHandler for event monitor RPC operations

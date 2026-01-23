@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // GetSafeAddressesByUser handles GET /users/safe-addresses/:user_address
@@ -70,44 +70,44 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 
 		// Check task_definition_id to determine job type
 		switch jobData.TaskDefinitionID {
-		case 1, 2:
-			// Time-based job
+		case 1, 2, 7:
+			// Time-based job (TDI 1, 2) or Agent job (TDI 7)
 			trackDBOp = metrics.TrackDBOperation("read", "time_job")
-			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobData.JobID.ToBigInt())
+			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobData.JobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting time job data for jobID", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting time job data for jobID", observability.String("job_id", jobData.JobID), observability.Error(err))
 				hasErrors = true
 				continue
 			}
-			jobResponse.TimeJobData = &timeJobData
+			jobResponse.TimeJobData = timeJobData
 
-		case 3, 4:
-			// Event-based job
+		case 3, 4, 8:
+			// Event-based job (TDI 3, 4) or Agent job (TDI 8)
 			trackDBOp = metrics.TrackDBOperation("read", "event_job")
-			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobData.JobID.ToBigInt())
+			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobData.JobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting event job data for jobID", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting event job data for jobID", observability.String("job_id", jobData.JobID), observability.Error(err))
 				hasErrors = true
 				continue
 			}
-			jobResponse.EventJobData = &eventJobData
+			jobResponse.EventJobData = eventJobData
 
-		case 5, 6:
-			// Condition-based job
+		case 5, 6, 9:
+			// Condition-based job (TDI 5, 6) or Agent job (TDI 9)
 			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
-			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobData.JobID.ToBigInt())
+			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobData.JobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting condition job data for jobID", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting condition job data for jobID", observability.String("job_id", jobData.JobID), observability.Error(err))
 				hasErrors = true
 				continue
 			}
-			jobResponse.ConditionJobData = &conditionJobData
+			jobResponse.ConditionJobData = conditionJobData
 
 		default:
-			h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Unknown task definition ID for jobID", observability.Int64("task_definition_id", int64(jobData.TaskDefinitionID)), observability.String("job_id", jobData.JobID.String()))
+			h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Unknown task definition ID for jobID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.String("job_id", jobData.JobID))
 			hasErrors = true
 			continue
 		}

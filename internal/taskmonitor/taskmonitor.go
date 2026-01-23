@@ -18,12 +18,12 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/events"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
-	taskmonitorTypes "github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 const (
@@ -181,7 +181,7 @@ func (tm *TaskManager) Initialize() error {
 // ReportTaskStatus handles task status reports from keepers
 // This is called after the aggregator submission attempt (regardless of success or failure)
 // ProofCID contains all execution data (task data, action data, proof, signatures)
-func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTypes.ReportTaskStatusRequest) (*taskmonitorTypes.ReportTaskStatusResponse, error) {
+func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error) {
 	tm.logger.Info(ctx, "Received task status report",
 		observability.Int64("task_id", req.TaskID),
 		observability.String("keeper_address", req.KeeperAddress),
@@ -197,7 +197,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 			tm.logger.Error(ctx, "Failed to update task failure in database",
 				observability.Int64("task_id", req.TaskID),
 				observability.Error(err))
-			return &taskmonitorTypes.ReportTaskStatusResponse{
+			return &types.ReportTaskStatusResponse{
 				Success: false,
 				Message: fmt.Sprintf("failed to update task failure: %v", err),
 			}, nil
@@ -214,7 +214,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 			observability.String("execution_tx_hash", req.ExecutionTxHash),
 			observability.String("error", req.Error))
 
-		return &taskmonitorTypes.ReportTaskStatusResponse{
+		return &types.ReportTaskStatusResponse{
 			Success: true,
 			Message: "Task failure recorded",
 		}, nil
@@ -226,7 +226,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 		tm.logger.Error(ctx, "Failed to update task success in database",
 			observability.Int64("task_id", req.TaskID),
 			observability.Error(err))
-		return &taskmonitorTypes.ReportTaskStatusResponse{
+		return &types.ReportTaskStatusResponse{
 			Success: false,
 			Message: fmt.Sprintf("failed to update task success: %v", err),
 		}, nil
@@ -234,7 +234,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 
 	// Mark task as executed and add to executed stream with timeout
 	// Timeout: 15 minutes for validation (from TasksExecutedTTL constant)
-	if err := tm.taskStreamManager.MarkTaskExecuted(ctx, req.TaskID, tasks.TasksExecutedTTL); err != nil {
+	if err := tm.taskStreamManager.MarkTaskExecuted(ctx, req.TaskID, types.TasksExecutedTTL); err != nil {
 		tm.logger.Error(ctx, "Failed to mark task as executed",
 			observability.Int64("task_id", req.TaskID),
 			observability.Error(err))
@@ -247,7 +247,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 		observability.String("execution_tx_hash", req.ExecutionTxHash),
 		observability.String("proof_cid", req.ProofCID))
 
-	return &taskmonitorTypes.ReportTaskStatusResponse{
+	return &types.ReportTaskStatusResponse{
 		Success: true,
 		Message: "Task status updated, pending on-chain confirmation",
 	}, nil
@@ -255,7 +255,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 
 // ReportConsensusEvent handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
 // The request now contains IPFS data (with trace context) directly from eventmonitor
-func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *taskmonitorTypes.ReportConsensusEventRequest) (*taskmonitorTypes.ReportConsensusEventResponse, error) {
+func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.ReportConsensusEventRequest) (*types.ReportConsensusEventResponse, error) {
 	// Extract task ID from IPFS data (ActionData has single task ID)
 	taskID := int64(0)
 	if req.IPFSData != nil && req.IPFSData.ActionData != nil {
@@ -289,14 +289,14 @@ func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *taskmonito
 	if err := taskHandler.ProcessConsensusEventFromIPFS(ctx, req.TxHash, req.IsAccepted, req.IPFSData, req.IPFSCID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to process consensus event")
-		return &taskmonitorTypes.ReportConsensusEventResponse{
+		return &types.ReportConsensusEventResponse{
 			Success: false,
 			Message: err.Error(),
 		}, nil
 	}
 
 	span.SetStatus(codes.Ok, "consensus event processed")
-	return &taskmonitorTypes.ReportConsensusEventResponse{
+	return &types.ReportConsensusEventResponse{
 		Success: true,
 		Message: "Consensus event processed",
 	}, nil

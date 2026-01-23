@@ -14,11 +14,11 @@ import (
 	// "github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// ExecuteCustomScript handles custom script execution (TaskDefinitionID = 7)
+// ExecuteCustomScript handles agent script execution (TaskDefinitionID = 7, 8, 9)
 // Returns: script output, storage updates, execution result (with fees), error
 //
 // Phase 1: Scripts execute without environment variable injection
@@ -31,8 +31,9 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	triggerData *types.TaskTriggerData,
 ) (*types.CustomScriptOutput, map[string]string, *dockertypes.ExecutionResult, error) {
 	// Execute script in Docker (Phase 1: no env var injection)
-	scriptURL := targetData.DynamicArgumentsScriptUrl
-	scriptLanguage := targetData.ScriptLanguage
+	// For agent jobs (TDI 7, 8, 9), use agent fields
+	scriptURL := targetData.AgentScriptURL
+	scriptLanguage := targetData.AgentScriptLanguage
 	if scriptLanguage == "" {
 		scriptLanguage = string(dockertypes.LanguageTS) // Default
 	}
@@ -68,7 +69,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	// Parse script output (JSON from stdout)
 	// Trim whitespace and extract JSON (may have extra content before/after)
 	cleanOutput := strings.TrimSpace(result.Output)
-	
+
 	// Try to find JSON object in the output (handle cases where there's extra text)
 	jsonStart := strings.Index(cleanOutput, "{")
 	if jsonStart == -1 {
@@ -95,7 +96,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		jsonEnd = len(jsonStr)
 	}
 	jsonStr = jsonStr[:jsonEnd]
-	
+
 	var scriptOutput types.CustomScriptOutput
 	err = json.Unmarshal([]byte(jsonStr), &scriptOutput)
 	if err != nil {
@@ -104,7 +105,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		if len(outputPreview) > 500 {
 			outputPreview = outputPreview[:500] + "..."
 		}
-		e.logger.Error(ctx, "Failed to parse script output", 
+		e.logger.Error(ctx, "Failed to parse script output",
 			observability.String("output_preview", outputPreview),
 			observability.Error(err))
 		return nil, nil, nil, fmt.Errorf("failed to parse script output: %w", err)
@@ -123,7 +124,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		storageUpdates = make(map[string]string)
 	}
 	// if len(storageUpdates) > 0 {
-		// e.logger.Debug(ctx, "[CustomScript] Found storage updates", observability.Int("storage_updates", len(storageUpdates)))
+	// e.logger.Debug(ctx, "[CustomScript] Found storage updates", observability.Int("storage_updates", len(storageUpdates)))
 	// }
 
 	// Log the calculated fees from Docker execution

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"io"
-	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,10 +15,9 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
@@ -43,8 +41,20 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	var existingUser commonTypes.UserData
+	var existingUser *types.UserDataDTO
 	var err error
+	userWasNewlyCreated := false
+
+	// Calculate total points from all task definition IDs upfront
+	var totalPointsToAdd float64
+	for _, job := range tempJobs {
+		pointsToAdd := 10.0
+		if job.TaskDefinitionID == 7 || job.TaskDefinitionID == 8 || job.TaskDefinitionID == 9 {
+			pointsToAdd = 20.0 // Agent jobs get more points
+		}
+		totalPointsToAdd += pointsToAdd
+	}
+	totalPointsStr := strconv.FormatFloat(totalPointsToAdd, 'f', -1, 64)
 
 	// Span: Get or create user
 	ctx, userSpan := h.tracer.Start(ctx, "db.get_user",
@@ -57,18 +67,19 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		),
 	)
 	trackDBOp := metrics.TrackDBOperation("read", "users")
-	_, existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
+	existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
 	trackDBOp(err)
 	userSpan.End()
 
 	if err != nil && err != gocql.ErrNotFound {
-		h.logger.Error(ctx, "[CreateJobData] Error getting user ID for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
+		h.logger.Error(ctx, "[CreateJobData] Error getting user for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	if err == gocql.ErrNotFound {
-		// Span: Create new user
+		userWasNewlyCreated = true
+		// Span: Create new user with calculated points
 		ctx, createUserSpan := h.tracer.Start(ctx, "db.create_user",
 			observability.WithSpanKind(trace.SpanKindClient),
 			observability.WithAttributes(
@@ -81,70 +92,98 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		var newUser types.CreateUserDataRequest
 		newUser.UserAddress = strings.ToLower(tempJobs[0].UserAddress)
-		newUser.EtherBalance = commonTypes.NewBigInt(tempJobs[0].EtherBalance)
-		newUser.TokenBalance = commonTypes.NewBigInt(tempJobs[0].TokenBalance)
-		newUser.UserPoints = 0.0
+		newUser.EmailID = ""
+		newUser.UserPoints = totalPointsStr // Set calculated points when creating user
 
 		trackDBOp = metrics.TrackDBOperation("create", "users")
-		existingUser, err = h.userRepository.CreateNewUser(&newUser)
-		trackDBOp(err)
+		err = h.userRepository.CreateNewUser(&newUser)
+		if err != nil {
+			trackDBOp(err)
+			createUserSpan.RecordError(err)
+			createUserSpan.SetStatus(codes.Error, "failed to create user")
+			createUserSpan.End()
+			h.logger.Error(ctx, "[CreateJobData] Error creating new user for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+		trackDBOp(nil)
 		createUserSpan.End()
 
+		// Fetch the newly created user
+		existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
 		if err != nil {
-			h.logger.Error(ctx, "[CreateJobData] Error creating new user for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
+			h.logger.Error(ctx, "[CreateJobData] Error fetching newly created user", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 	}
 
 	createdJobs := types.CreateJobResponse{
-		UserID:            existingUser.UserID,
-		AccountBalance:    existingUser.EtherBalance.ToBigInt(),
-		TokenBalance:      existingUser.TokenBalance.ToBigInt(),
-		JobIDs:            make([]*commonTypes.BigInt, len(tempJobs)),
+		JobIDs:            make([]string, len(tempJobs)),
 		TaskDefinitionIDs: make([]int, len(tempJobs)),
 		TimeFrames:        make([]int64, len(tempJobs)),
 	}
 
+	// Calculate final user points (existing + new points)
+	var finalUserPoints string
+	var currentPointsFloat float64
+	if existingUser.UserPoints != "" {
+		if parsed, err := strconv.ParseFloat(existingUser.UserPoints, 64); err == nil {
+			currentPointsFloat = parsed
+		}
+	}
+	finalPointsFloat := currentPointsFloat + totalPointsToAdd
+	finalUserPoints = strconv.FormatFloat(finalPointsFloat, 'f', -1, 64)
+
 	for i := len(tempJobs) - 1; i >= 0; i-- {
 		chainStatus := 1
-		var linkJobID *big.Int = nil
+		var linkJobID = ""
 
 		if i == 0 {
 			chainStatus = 0
 		}
 		if i < len(tempJobs)-1 {
-			linkJobID = createdJobs.JobIDs[i+1].ToBigInt()
+			linkJobID = createdJobs.JobIDs[i+1]
 		}
 
-		jobID := new(big.Int)
-		if _, ok := jobID.SetString(tempJobs[i].JobID, 10); !ok {
+		jobID := tempJobs[i].JobID
+		if jobID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
 			return
 		}
 
-		jobData := &commonTypes.JobData{
-			JobID:             commonTypes.FromBigInt(jobID),
+		// Convert JobCostPrediction from float64 to string (Wei-based)
+		jobCostPredictionStr := strconv.FormatFloat(tempJobs[i].JobCostPrediction, 'f', -1, 64)
+
+		jobData := &types.JobDataEntity{
+			JobID:             jobID,
 			JobTitle:          tempJobs[i].JobTitle,
 			TaskDefinitionID:  tempJobs[i].TaskDefinitionID,
-			UserID:            existingUser.UserID,
-			LinkJobID:         commonTypes.FromBigInt(linkJobID),
+			UserAddress:       strings.ToLower(tempJobs[0].UserAddress),
+			LinkJobID:         linkJobID,
 			ChainStatus:       chainStatus,
-			Custom:            tempJobs[i].Custom,
+			JobType:           "frontend", // Default job type
 			TimeFrame:         tempJobs[i].TimeFrame,
 			Recurring:         tempJobs[i].Recurring,
 			Status:            "pending",
-			JobCostPrediction: tempJobs[i].JobCostPrediction,
+			JobCostPrediction: jobCostPredictionStr,
 			Timezone:          tempJobs[i].Timezone,
 			IsImua:            tempJobs[i].IsImua,
 			CreatedChainID:    tempJobs[i].CreatedChainID,
 			SafeAddress:       "",
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
 		}
 
-		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6,7 & DynamicArgumentsScriptUrl)
-		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 7) && tempJobs[i].DynamicArgumentsScriptUrl != "" {
-			// Parse CID or gateway URL if needed
-			ipfsUrl := tempJobs[i].DynamicArgumentsScriptUrl
+		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6,7 & DynamicArgumentsScriptUrl or AgentScriptURL)
+		ipfsUrl := ""
+		if tempJobs[i].TaskDefinitionID == 7 {
+			ipfsUrl = tempJobs[i].AgentScriptURL
+		} else {
+			ipfsUrl = tempJobs[i].DynamicArgumentsScriptUrl
+		}
+
+		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 7) && ipfsUrl != "" {
 			resp, err := h.httpClient.Get(ctx, ipfsUrl)
 			if err != nil {
 				h.logger.Error(c.Request.Context(), "[CreateJobData] Failed to download file", observability.Error(err))
@@ -173,7 +212,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 			valReq := ValidateCodeRequest{
 				Code:             ipfsCode,
-				Language:         tempJobs[i].Language,
+				Language:         tempJobs[i].AgentScriptLanguage,
 				SelectedSafe:     tempJobs[i].SafeAddress,
 				TargetFunction:   tempJobs[i].TargetFunction,
 				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
@@ -237,29 +276,26 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			),
 		)
 		trackDBOp = metrics.TrackDBOperation("create", "jobs")
-		jobID, err := h.jobRepository.CreateNewJob(jobData)
+		err = h.jobRepository.CreateNewJob(jobData)
 		trackDBOp(err)
 		if err != nil {
 			createJobSpan.RecordError(err)
 			createJobSpan.SetStatus(codes.Error, "failed to create job")
-		}
-		createJobSpan.SetAttributes(attribute.String("job.id", jobID.String()))
-		createJobSpan.End()
-
-		if err != nil {
-			h.logger.Error(jobCtx, "[CreateJobData] Error creating job", observability.String("job_id", jobID.String()), observability.Error(err))
+			createJobSpan.End()
+			h.logger.Error(jobCtx, "[CreateJobData] Error creating job", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
+		createJobSpan.SetAttributes(attribute.String("job.id", jobID))
+		createJobSpan.End()
 
-		createdJobs.JobIDs[i] = commonTypes.NewBigInt(jobID)
+		createdJobs.JobIDs[i] = jobID
 		expirationTime := time.Now().Add(time.Duration(tempJobs[i].TimeFrame) * time.Second)
-		var scheduleConditionJobData commonTypes.ScheduleConditionJobData
+		var scheduleConditionJobData types.ScheduleConditionJobData
 
 		switch tempJobs[i].TaskDefinitionID {
-		case 1, 2:
-			// Time-based job
-
+		case 1, 2, 7:
+			// Time-based job (TDI 1, 2) or Agent job (TDI 7)
 			var nextExecutionTimestamp time.Time
 			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(time.Now(), "interval", tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule)
 			if err != nil {
@@ -267,15 +303,14 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				nextExecutionTimestamp = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
 			}
 
-			timeJobData := commonTypes.TimeJobData{
-				JobID:            commonTypes.NewBigInt(jobID),
-				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
-				ExpirationTime:   expirationTime,
-				// Recurring:                 tempJobs[i].Recurring,
+			timeJobData := &types.TimeJobDataEntity{
+				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
+				ScheduleType:              tempJobs[i].ScheduleType,
 				TimeInterval:              tempJobs[i].TimeInterval,
-				ScheduleType:              "interval",
 				CronExpression:            tempJobs[i].CronExpression,
 				SpecificSchedule:          tempJobs[i].SpecificSchedule,
+				Timezone:                  tempJobs[i].Timezone,
 				NextExecutionTimestamp:    nextExecutionTimestamp,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
@@ -283,9 +318,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				ABI:                       tempJobs[i].ABI,
 				ArgType:                   tempJobs[i].ArgType,
 				Arguments:                 tempJobs[i].Arguments,
-				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
-				IsCompleted:               false,
-				IsActive:                  true,
+				DynamicArgumentsScriptURL: tempJobs[i].DynamicArgumentsScriptUrl,
+				// Agent job fields (TDI 7)
+				AgentScriptURL:      tempJobs[i].AgentScriptURL,
+				AgentScriptLanguage: tempJobs[i].AgentScriptLanguage,
+				AgentScriptHash:     "", // Will be calculated if needed
+				AgentTargetChainID:  tempJobs[i].AgentTargetChainID,
+				MaxExecutionTime:    tempJobs[i].MaxExecutionTime,
+				ChallengePeriod:     tempJobs[i].ChallengePeriod,
+				IsActive:            true,
+				LastExecutedAt:      time.Time{},
+				ExpirationTime:      expirationTime,
 			}
 
 			// Span: Create time job
@@ -295,28 +338,27 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 					attribute.String("db.system", "cassandra"),
 					attribute.String("db.operation", "insert"),
 					attribute.String("db.collection", "time_jobs"),
-					attribute.String("job.id", jobID.String()),
+					attribute.String("job.id", jobID),
 				),
 			)
 			trackDBOp = metrics.TrackDBOperation("create", "time_jobs")
-			if err := h.timeJobRepository.CreateTimeJob(&timeJobData); err != nil {
+			if err := h.timeJobRepository.CreateTimeJob(timeJobData); err != nil {
 				trackDBOp(err)
 				timeJobSpan.RecordError(err)
 				timeJobSpan.SetStatus(codes.Error, "failed to create time job")
 				timeJobSpan.End()
-				h.logger.Error(jobCtx, "[CreateJobData] Error inserting time job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(jobCtx, "[CreateJobData] Error inserting time job data for jobID", observability.String("job_id", jobID), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			trackDBOp(nil)
 			timeJobSpan.End()
 
-		case 3, 4:
-			// Event-based job
-			eventJobData := commonTypes.EventJobData{
-				JobID:                     commonTypes.NewBigInt(jobID),
+		case 3, 4, 8:
+			// Event-based job (TDI 3, 4) or Agent job (TDI 8)
+			eventJobData := &types.EventJobDataEntity{
+				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
-				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
 				TriggerChainID:            tempJobs[i].TriggerChainID,
 				TriggerContractAddress:    tempJobs[i].TriggerContractAddress,
@@ -329,9 +371,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				ABI:                       tempJobs[i].ABI,
 				ArgType:                   tempJobs[i].ArgType,
 				Arguments:                 tempJobs[i].Arguments,
-				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
-				IsCompleted:               false,
-				IsActive:                  true,
+				DynamicArgumentsScriptURL: tempJobs[i].DynamicArgumentsScriptUrl,
+				// Agent job fields (TDI 8)
+				AgentScriptURL:      tempJobs[i].AgentScriptURL,
+				AgentScriptLanguage: tempJobs[i].AgentScriptLanguage,
+				AgentScriptHash:     "",
+				AgentTargetChainID:  tempJobs[i].AgentTargetChainID,
+				MaxExecutionTime:    tempJobs[i].MaxExecutionTime,
+				ChallengePeriod:     tempJobs[i].ChallengePeriod,
+				IsActive:            true,
+				LastExecutedAt:      time.Time{},
+				ExpirationTime:      expirationTime,
 			}
 
 			// Span: Create event job
@@ -341,23 +391,23 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 					attribute.String("db.system", "cassandra"),
 					attribute.String("db.operation", "insert"),
 					attribute.String("db.collection", "event_jobs"),
-					attribute.String("job.id", jobID.String()),
+					attribute.String("job.id", jobID),
 				),
 			)
-			if err := h.eventJobRepository.CreateEventJob(&eventJobData); err != nil {
+			if err := h.eventJobRepository.CreateEventJob(eventJobData); err != nil {
 				eventJobSpan.RecordError(err)
 				eventJobSpan.SetStatus(codes.Error, "failed to create event job")
 				eventJobSpan.End()
-				h.logger.Error(jobCtx, "[CreateJobData] Error inserting event job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(jobCtx, "[CreateJobData] Error inserting event job data for jobID", observability.String("job_id", jobID), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			eventJobSpan.End()
-			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
+			scheduleConditionJobData.JobID = jobID
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
-			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
-				JobID:                     commonTypes.NewBigInt(jobID),
+			scheduleConditionJobData.TaskTargetData = types.TaskTargetData{
+				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
@@ -367,8 +417,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				Arguments:                 tempJobs[i].Arguments,
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
-			scheduleConditionJobData.EventWorkerData = commonTypes.EventWorkerData{
-				JobID:                  commonTypes.NewBigInt(jobID),
+			scheduleConditionJobData.EventWorkerData = types.EventWorkerData{
+				JobID:                  jobID,
 				ExpirationTime:         expirationTime,
 				Recurring:              tempJobs[i].Recurring,
 				TriggerChainID:         tempJobs[i].TriggerChainID,
@@ -378,28 +428,35 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				EventFilterValue:       tempJobs[i].EventFilterValue,
 			}
 
-		case 5, 6:
-			// Condition-based job
-			conditionJobData := commonTypes.ConditionJobData{
-				JobID:                     commonTypes.NewBigInt(jobID),
+		case 5, 6, 9:
+			// Condition-based job (TDI 5, 6) or Agent job (TDI 9)
+			conditionJobData := &types.ConditionJobDataEntity{
+				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
-				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
 				ConditionType:             tempJobs[i].ConditionType,
 				UpperLimit:                tempJobs[i].UpperLimit,
 				LowerLimit:                tempJobs[i].LowerLimit,
 				ValueSourceType:           tempJobs[i].ValueSourceType,
-				ValueSourceUrl:            tempJobs[i].ValueSourceUrl,
+				ValueSourceURL:            tempJobs[i].ValueSourceUrl,
+				SelectedKeyRoute:          tempJobs[i].SelectedKeyRoute,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
 				TargetFunction:            tempJobs[i].TargetFunction,
 				ABI:                       tempJobs[i].ABI,
 				ArgType:                   tempJobs[i].ArgType,
 				Arguments:                 tempJobs[i].Arguments,
-				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
-				IsCompleted:               false,
-				IsActive:                  true,
-				SelectedKeyRoute:          tempJobs[i].SelectedKeyRoute,
+				DynamicArgumentsScriptURL: tempJobs[i].DynamicArgumentsScriptUrl,
+				// Agent job fields (TDI 9)
+				AgentScriptURL:      tempJobs[i].AgentScriptURL,
+				AgentScriptLanguage: tempJobs[i].AgentScriptLanguage,
+				AgentScriptHash:     "",
+				AgentTargetChainID:  tempJobs[i].AgentTargetChainID,
+				MaxExecutionTime:    tempJobs[i].MaxExecutionTime,
+				ChallengePeriod:     tempJobs[i].ChallengePeriod,
+				IsActive:            true,
+				LastExecutedAt:      time.Time{},
+				ExpirationTime:      expirationTime,
 			}
 
 			// Span: Create condition job
@@ -409,23 +466,23 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 					attribute.String("db.system", "cassandra"),
 					attribute.String("db.operation", "insert"),
 					attribute.String("db.collection", "condition_jobs"),
-					attribute.String("job.id", jobID.String()),
+					attribute.String("job.id", jobID),
 				),
 			)
-			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {
+			if err := h.conditionJobRepository.CreateConditionJob(conditionJobData); err != nil {
 				conditionJobSpan.RecordError(err)
 				conditionJobSpan.SetStatus(codes.Error, "failed to create condition job")
 				conditionJobSpan.End()
-				h.logger.Error(jobCtx, "[CreateJobData] Error inserting condition job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(jobCtx, "[CreateJobData] Error inserting condition job data for jobID", observability.String("job_id", jobID), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			conditionJobSpan.End()
-			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
+			scheduleConditionJobData.JobID = jobID
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
-			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
-				JobID:                     commonTypes.NewBigInt(jobID),
+			scheduleConditionJobData.TaskTargetData = types.TaskTargetData{
+				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
@@ -435,8 +492,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				Arguments:                 tempJobs[i].Arguments,
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
-			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
-				JobID:            commonTypes.NewBigInt(jobID),
+			scheduleConditionJobData.ConditionWorkerData = types.ConditionWorkerData{
+				JobID:            jobID,
 				ExpirationTime:   expirationTime,
 				Recurring:        tempJobs[i].Recurring,
 				ConditionType:    tempJobs[i].ConditionType,
@@ -447,53 +504,6 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				SelectedKeyRoute: tempJobs[i].SelectedKeyRoute,
 			}
 
-		case 7:
-			// Custom script job (TaskDefinitionID = 7)
-			var nextExecutionTime time.Time
-			nextExecutionTime, err := parser.CalculateNextExecutionTime(time.Now(), "interval", tempJobs[i].TimeInterval, "", "")
-			if err != nil {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error calculating next execution time for custom job", observability.Error(err))
-				nextExecutionTime = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
-			}
-
-			customJobData := commonTypes.CustomJobData{
-				JobID:             commonTypes.NewBigInt(jobID),
-				TargetChainID:     tempJobs[i].TargetChainID,
-				TaskDefinitionID:  7,
-				ExpirationTime:    expirationTime,
-				Recurring:         tempJobs[i].Recurring,
-				CustomScriptUrl:   tempJobs[i].DynamicArgumentsScriptUrl,
-				TimeInterval:      tempJobs[i].TimeInterval,
-				ScriptLanguage:    tempJobs[i].Language,
-				NextExecutionTime: nextExecutionTime,
-				LastExecutedAt:    time.Now(),
-				IsCompleted:       false,
-				IsActive:          true,
-			}
-
-			// Span: Create custom job
-			_, customJobSpan := h.tracer.Start(jobCtx, "db.create_custom_job",
-				observability.WithSpanKind(trace.SpanKindClient),
-				observability.WithAttributes(
-					attribute.String("db.system", "cassandra"),
-					attribute.String("db.operation", "insert"),
-					attribute.String("db.collection", "custom_jobs"),
-					attribute.String("job.id", jobID.String()),
-				),
-			)
-			trackDBOp = metrics.TrackDBOperation("create", "custom_jobs")
-			if err := h.customJobRepository.CreateCustomJob(&customJobData); err != nil {
-				trackDBOp(err)
-				customJobSpan.RecordError(err)
-				customJobSpan.SetStatus(codes.Error, "failed to create custom job")
-				customJobSpan.End()
-				h.logger.Error(jobCtx, "[CreateJobData] Error inserting custom job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-				return
-			}
-			trackDBOp(nil)
-			customJobSpan.End()
-
 		default:
 			h.logger.Error(c.Request.Context(), "[CreateJobData] Invalid task definition ID for job", observability.Int("task_definition_id", tempJobs[i].TaskDefinitionID), observability.Int("job_index", i))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
@@ -503,41 +513,11 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 {
 			success, err := h.notifyConditionScheduler(jobCtx, jobID, scheduleConditionJobData)
 			if !success {
-				h.logger.Error(jobCtx, "[CreateJobData] Error notifying condition scheduler for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(jobCtx, "[CreateJobData] Error notifying condition scheduler for jobID", observability.String("job_id", jobID), observability.Error(err))
 			}
 		}
 
-		pointsToAdd := 10.0
-		if tempJobs[i].Custom {
-			pointsToAdd = 20.0
-		}
-
-		var currentPoints = existingUser.UserPoints
-		newPoints := currentPoints + pointsToAdd
-		// Span: Update user points
-		_, updatePointsSpan := h.tracer.Start(jobCtx, "db.update_user_points",
-			observability.WithSpanKind(trace.SpanKindClient),
-			observability.WithAttributes(
-				attribute.String("db.system", "cassandra"),
-				attribute.String("db.operation", "update"),
-				attribute.String("db.collection", "users"),
-				attribute.Int64("user.id", existingUser.UserID),
-			),
-		)
-		trackDBOp = metrics.TrackDBOperation("update", "users")
-		if err := h.userRepository.UpdateUserTasksAndPoints(existingUser.UserID, 0, newPoints); err != nil {
-			trackDBOp(err)
-			updatePointsSpan.RecordError(err)
-			updatePointsSpan.SetStatus(codes.Error, "failed to update user points")
-			updatePointsSpan.End()
-			h.logger.Error(jobCtx, "[CreateJobData] Error updating user points for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-			return
-		}
-		trackDBOp(nil)
-		updatePointsSpan.End()
-
-		createdJobs.JobIDs[i] = commonTypes.NewBigInt(jobID)
+		createdJobs.JobIDs[i] = jobID
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
 		createdJobs.TimeFrames[i] = tempJobs[i].TimeFrame
 	}
@@ -549,29 +529,53 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			attribute.String("db.system", "cassandra"),
 			attribute.String("db.operation", "update"),
 			attribute.String("db.collection", "users"),
-			attribute.Int64("user.id", existingUser.UserID),
+			attribute.String("user.address", existingUser.UserAddress),
 			attribute.Int("jobs.count", len(createdJobs.JobIDs)),
 		),
 	)
 	allJobIDs := append(existingUser.JobIDs, createdJobs.JobIDs...)
-	// Convert BigInt slice to big.Int slice for repository
-	bigIntJobIDs := make([]*big.Int, len(allJobIDs))
-	for i, jobID := range allJobIDs {
-		bigIntJobIDs[i] = jobID.ToBigInt()
-	}
 	trackDBOp = metrics.TrackDBOperation("update", "users")
-	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, bigIntJobIDs); err != nil {
+	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserAddress, allJobIDs); err != nil {
 		trackDBOp(err)
 		updateJobIDsSpan.RecordError(err)
 		updateJobIDsSpan.SetStatus(codes.Error, "failed to update user job IDs")
 		updateJobIDsSpan.End()
-		h.logger.Error(ctx, "[CreateJobData] Error updating user job IDs for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
+		h.logger.Error(ctx, "[CreateJobData] Error updating user job IDs for userAddress", observability.String("user_address", existingUser.UserAddress), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	trackDBOp(nil)
 	updateJobIDsSpan.End()
 
+	// Update user points once after all jobs are created (only if user already existed before job creation)
+	if !userWasNewlyCreated {
+		// Span: Update user points
+		_, updatePointsSpan := h.tracer.Start(ctx, "db.update_user_points",
+			observability.WithSpanKind(trace.SpanKindClient),
+			observability.WithAttributes(
+				attribute.String("db.system", "cassandra"),
+				attribute.String("db.operation", "update"),
+				attribute.String("db.collection", "users"),
+				attribute.String("user.address", existingUser.UserAddress),
+			),
+		)
+		trackDBOp = metrics.TrackDBOperation("update", "users")
+		if err := h.userRepository.UpdateUserPoints(existingUser.UserAddress, finalUserPoints); err != nil {
+			trackDBOp(err)
+			updatePointsSpan.RecordError(err)
+			updatePointsSpan.SetStatus(codes.Error, "failed to update user points")
+			updatePointsSpan.End()
+			h.logger.Error(ctx, "[CreateJobData] Error updating user points for userAddress", observability.String("user_address", existingUser.UserAddress), observability.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+		trackDBOp(nil)
+		updatePointsSpan.End()
+	}
+
+	// Set the final user points in the response
+	createdJobs.UserPoints = finalUserPoints
+
 	c.JSON(http.StatusOK, createdJobs)
-	h.logger.Info(ctx, "[CreateJobData] Successfully created jobs", observability.Int64("user_id", existingUser.UserID), observability.Int("jobs_count", len(tempJobs)))
+	h.logger.Info(ctx, "[CreateJobData] Successfully created jobs", observability.String("user_address", existingUser.UserAddress), observability.Int("jobs_count", len(tempJobs)))
 }

@@ -10,7 +10,7 @@ import (
 
 func TestTimeoutWorker_TimeoutThreshold(t *testing.T) {
 	// Test that the timeout threshold is correctly set to 1 hour
-	assert.Equal(t, 1*time.Hour, TasksProcessingTTL)
+	assert.Equal(t, 1*time.Hour, types.TasksProcessingTTL)
 }
 
 func TestTimeoutWorker_StaleTaskDetection(t *testing.T) {
@@ -18,7 +18,7 @@ func TestTimeoutWorker_StaleTaskDetection(t *testing.T) {
 	now := time.Now()
 	oldCreatedAt := now.Add(-2 * time.Hour)
 
-	task := TaskStreamData{
+	task := types.TaskStreamData{
 		SendTaskDataToKeeper: types.SendTaskDataToKeeper{
 			TaskID: []int64{123},
 		},
@@ -27,7 +27,7 @@ func TestTimeoutWorker_StaleTaskDetection(t *testing.T) {
 	}
 
 	// This task should be considered stale since it's older than TasksProcessingTTL
-	assert.True(t, task.CreatedAt.Add(TasksProcessingTTL).Before(now))
+	assert.True(t, task.CreatedAt.Add(types.TasksProcessingTTL).Before(now))
 }
 
 func TestTimeoutWorker_RecentTaskNotTimedOut(t *testing.T) {
@@ -35,7 +35,7 @@ func TestTimeoutWorker_RecentTaskNotTimedOut(t *testing.T) {
 	now := time.Now()
 	recentDispatchedAt := now.Add(-30 * time.Minute) // Less than 1 hour
 
-	task := TaskStreamData{
+	task := types.TaskStreamData{
 		SendTaskDataToKeeper: types.SendTaskDataToKeeper{
 			TaskID: []int64{456},
 		},
@@ -45,5 +45,5 @@ func TestTimeoutWorker_RecentTaskNotTimedOut(t *testing.T) {
 
 	// This task should NOT be considered timed out
 	dispatchedDuration := now.Sub(*task.DispatchedAt)
-	assert.False(t, dispatchedDuration > TasksProcessingTTL)
+	assert.False(t, dispatchedDuration > types.TasksProcessingTTL)
 }

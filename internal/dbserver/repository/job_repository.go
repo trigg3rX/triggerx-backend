@@ -2,23 +2,21 @@ package repository
 
 import (
 	"errors"
-	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type JobRepository interface {
-	CreateNewJob(job *commonTypes.JobData) (*big.Int, error)
-	UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error
-	UpdateJobStatus(jobID *big.Int, status string) error
-	GetJobByID(jobID *big.Int) (*commonTypes.JobData, error)
-	GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error)
-	GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error)
-	GetJobsBySafeAddress(safeAddress string) ([]commonTypes.JobData, error)
+	CreateNewJob(job *types.JobDataEntity) error
+	UpdateJobFromUserInDB(jobID string, job *types.UpdateJobDataFromUserRequest) error
+	UpdateJobStatus(jobID string, status string) error
+	GetJobByID(jobID string) (*types.JobDataDTO, error)
+	GetTaskDefinitionIDByJobID(jobID string) (int, error)
+	GetJobsByUserAddressAndChainID(userAddress string, createdChainID string) ([]types.JobDataDTO, error)
+	GetJobsBySafeAddress(safeAddress string) ([]types.JobDataDTO, error)
 }
 
 type jobRepository struct {
@@ -32,25 +30,17 @@ func NewJobRepository(db *database.Connection) JobRepository {
 	}
 }
 
-func (r *jobRepository) CreateNewJob(job *commonTypes.JobData) (*big.Int, error) {
-	// var lastJobID int64
-	// err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
-	// if err == gocql.ErrNotFound {
-	// 	return -1, nil
-	// }
-
+func (r *jobRepository) CreateNewJob(job *types.JobDataEntity) error {
 	err := r.db.Session().Query(queries.CreateJobDataQuery,
-		job.JobID.ToBigInt(), job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID.ToBigInt(), job.ChainStatus,
-		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone, job.IsImua, job.CreatedChainID, job.SafeAddress).Exec()
+		job.JobID, job.JobTitle, job.TaskDefinitionID, job.CreatedChainID, job.UserAddress,
+		job.LinkJobID, job.ChainStatus, job.SafeAddress, job.Timezone, job.IsImua,
+		job.JobType, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction,
+		job.CreatedAt, job.UpdatedAt).Exec()
 
-	if err != nil {
-		return nil, err
-	}
-
-	return job.JobID.Int, nil
+	return err
 }
 
-func (r *jobRepository) UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error {
+func (r *jobRepository) UpdateJobFromUserInDB(jobID string, job *types.UpdateJobDataFromUserRequest) error {
 	err := r.db.Session().Query(queries.UpdateJobDataFromUserQuery,
 		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), jobID).Exec()
 	if err != nil {
@@ -59,7 +49,7 @@ func (r *jobRepository) UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJ
 	return nil
 }
 
-func (r *jobRepository) UpdateJobStatus(jobID *big.Int, status string) error {
+func (r *jobRepository) UpdateJobStatus(jobID string, status string) error {
 	err := r.db.Session().Query(queries.UpdateJobDataStatusQuery,
 		status, time.Now(), jobID).Exec()
 	if err != nil {
@@ -68,25 +58,24 @@ func (r *jobRepository) UpdateJobStatus(jobID *big.Int, status string) error {
 	return nil
 }
 
-func (r *jobRepository) GetJobByID(jobID *big.Int) (*commonTypes.JobData, error) {
-	var jobData commonTypes.JobData
-	var jobIDBigInt, linkJobIDBigInt *big.Int
+func (r *jobRepository) GetJobByID(jobID string) (*types.JobDataDTO, error) {
+	var entity types.JobDataEntity
 	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(
-		&jobIDBigInt, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
-		&linkJobIDBigInt, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
-		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.JobCostActual,
-		&jobData.TaskIDs, &jobData.CreatedAt, &jobData.UpdatedAt, &jobData.LastExecutedAt,
-		&jobData.Timezone, &jobData.IsImua, &jobData.CreatedChainID, &jobData.SafeAddress)
+		&entity.JobID, &entity.JobTitle, &entity.TaskDefinitionID, &entity.CreatedChainID,
+		&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
+		&entity.Timezone, &entity.IsImua, &entity.JobType, &entity.TimeFrame,
+		&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
+		&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt)
 
 	if err != nil {
 		return nil, err
 	}
-	jobData.JobID = commonTypes.NewBigInt(jobIDBigInt)
-	jobData.LinkJobID = commonTypes.NewBigInt(linkJobIDBigInt)
-	return &jobData, nil
+
+	dto := types.JobDataEntityToDTO(&entity)
+	return dto, nil
 }
 
-func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error) {
+func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID string) (int, error) {
 	var taskDefinitionID int
 	err := r.db.Session().Query(queries.GetTaskDefinitionIDByJobIDQuery, jobID).Scan(&taskDefinitionID)
 	if err != nil {
@@ -95,29 +84,24 @@ func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error) 
 	return taskDefinitionID, nil
 }
 
-func (r *jobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error) {
+func (r *jobRepository) GetJobsByUserAddressAndChainID(userAddress string, createdChainID string) ([]types.JobDataDTO, error) {
 	session := r.db.Session()
-	iter := session.Query(queries.GetJobsByUserIDAndChainIDQuery, userID, createdChainID).Iter()
+	iter := session.Query(queries.GetJobsByUserAddressAndChainIDQuery, userAddress, createdChainID).Iter()
 
-	var jobs []commonTypes.JobData
+	var jobs []types.JobDataDTO
 	for {
-		var (
-			jobIDBigInt     *big.Int
-			linkJobIDBigInt *big.Int
-			job             commonTypes.JobData
-		)
+		var entity types.JobDataEntity
 		if !iter.Scan(
-			&jobIDBigInt, &job.JobTitle, &job.TaskDefinitionID, &job.UserID,
-			&linkJobIDBigInt, &job.ChainStatus, &job.Custom, &job.TimeFrame,
-			&job.Recurring, &job.Status, &job.JobCostPrediction, &job.JobCostActual,
-			&job.TaskIDs, &job.CreatedAt, &job.UpdatedAt, &job.LastExecutedAt,
-			&job.Timezone, &job.IsImua, &job.CreatedChainID, &job.SafeAddress,
+			&entity.JobID, &entity.JobTitle, &entity.TaskDefinitionID, &entity.CreatedChainID,
+			&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
+			&entity.Timezone, &entity.IsImua, &entity.JobType, &entity.TimeFrame,
+			&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
+			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt,
 		) {
 			break
 		}
-		job.JobID = commonTypes.NewBigInt(jobIDBigInt)
-		job.LinkJobID = commonTypes.NewBigInt(linkJobIDBigInt)
-		jobs = append(jobs, job)
+		dto := types.JobDataEntityToDTO(&entity)
+		jobs = append(jobs, *dto)
 	}
 
 	if err := iter.Close(); err != nil {
@@ -126,29 +110,24 @@ func (r *jobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID s
 	return jobs, nil
 }
 
-func (r *jobRepository) GetJobsBySafeAddress(safeAddress string) ([]commonTypes.JobData, error) {
+func (r *jobRepository) GetJobsBySafeAddress(safeAddress string) ([]types.JobDataDTO, error) {
 	session := r.db.Session()
 	iter := session.Query(queries.GetJobsBySafeAddressQuery, safeAddress).Iter()
 
-	var jobs []commonTypes.JobData
+	var jobs []types.JobDataDTO
 	for {
-		var (
-			jobIDBigInt     *big.Int
-			linkJobIDBigInt *big.Int
-			job             commonTypes.JobData
-		)
+		var entity types.JobDataEntity
 		if !iter.Scan(
-			&jobIDBigInt, &job.JobTitle, &job.TaskDefinitionID, &job.UserID,
-			&linkJobIDBigInt, &job.ChainStatus, &job.Custom, &job.TimeFrame,
-			&job.Recurring, &job.Status, &job.JobCostPrediction, &job.JobCostActual,
-			&job.TaskIDs, &job.CreatedAt, &job.UpdatedAt, &job.LastExecutedAt,
-			&job.Timezone, &job.IsImua, &job.CreatedChainID, &job.SafeAddress,
+			&entity.JobID, &entity.JobTitle, &entity.TaskDefinitionID, &entity.CreatedChainID,
+			&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
+			&entity.Timezone, &entity.IsImua, &entity.JobType, &entity.TimeFrame,
+			&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
+			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt,
 		) {
 			break
 		}
-		job.JobID = commonTypes.NewBigInt(jobIDBigInt)
-		job.LinkJobID = commonTypes.NewBigInt(linkJobIDBigInt)
-		jobs = append(jobs, job)
+		dto := types.JobDataEntityToDTO(&entity)
+		jobs = append(jobs, *dto)
 	}
 
 	if err := iter.Close(); err != nil {

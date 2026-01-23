@@ -1,14 +1,13 @@
 package handlers
 
 import (
-	"math/big"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) DeleteJobData(c *gin.Context) {
@@ -22,20 +21,9 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		return
 	}
 
-	jobIDBig := new(big.Int)
-	_, ok := jobIDBig.SetString(jobID, 10)
-	if !ok {
-		h.logger.Error(c.Request.Context(), "[DeleteJobData] Invalid job ID format", observability.String("job_id", jobID))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid job ID format",
-			"code":  "INVALID_JOB_ID",
-		})
-		return
-	}
-
 	// Track database operation
 	trackDBOp := metrics.TrackDBOperation("read", "job_data")
-	taskDefinitionID, err := h.jobRepository.GetTaskDefinitionIDByJobID(jobIDBig)
+	taskDefinitionID, err := h.jobRepository.GetTaskDefinitionIDByJobID(jobID)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Error(c.Request.Context(), "[DeleteJobData] Error getting job data for jobID", observability.String("job_id", jobID), observability.Error(err))
@@ -48,7 +36,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 
 	// Track job status update
 	trackDBOp = metrics.TrackDBOperation("update", "job_data")
-	err = h.jobRepository.UpdateJobStatus(jobIDBig, "deleted")
+	err = h.jobRepository.UpdateJobStatus(jobID, "deleted")
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating job status for jobID", observability.String("job_id", jobID), observability.Error(err))
@@ -57,18 +45,20 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	}
 
 	switch taskDefinitionID {
-	case 1, 2:
+	case 1, 2, 7:
+		// Time-based job (TDI 1, 2) or Agent job (TDI 7)
 		trackDBOp = metrics.TrackDBOperation("update", "time_job")
-		err = h.timeJobRepository.UpdateTimeJobStatus(jobIDBig, false)
+		err = h.timeJobRepository.UpdateTimeJobStatus(jobID, false)
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating time job status for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating time job status: " + err.Error()})
 			return
 		}
-	case 3, 4:
+	case 3, 4, 8:
+		// Event-based job (TDI 3, 4) or Agent job (TDI 8)
 		trackDBOp = metrics.TrackDBOperation("update", "event_job")
-		err = h.eventJobRepository.UpdateEventJobStatus(jobIDBig, false)
+		err = h.eventJobRepository.UpdateEventJobStatus(jobID, false)
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating event job status for jobID", observability.String("job_id", jobID), observability.Error(err))
@@ -76,15 +66,16 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 			return
 		}
 
-		_, err = h.notifyPauseToConditionScheduler(c.Request.Context(), jobIDBig)
+		_, err = h.notifyPauseToConditionScheduler(c.Request.Context(), jobID)
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error sending pause to event scheduler for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending pause to event scheduler: " + err.Error()})
 			return
 		}
-	case 5, 6:
+	case 5, 6, 9:
+		// Condition-based job (TDI 5, 6) or Agent job (TDI 9)
 		trackDBOp = metrics.TrackDBOperation("update", "condition_job")
-		err = h.conditionJobRepository.UpdateConditionJobStatus(jobIDBig, false)
+		err = h.conditionJobRepository.UpdateConditionJobStatus(jobID, false)
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating condition job status for jobID", observability.String("job_id", jobID), observability.Error(err))
@@ -92,7 +83,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 			return
 		}
 
-		_, err = h.notifyPauseToConditionScheduler(c.Request.Context(), jobIDBig)
+		_, err = h.notifyPauseToConditionScheduler(c.Request.Context(), jobID)
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error sending pause to condition scheduler for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending pause to condition scheduler: " + err.Error()})
@@ -115,11 +106,7 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		return
 	}
 
-	jobID := new(big.Int)
-	if _, ok := jobID.SetString(updateData.JobID, 10); !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
-		return
-	}
+	jobID := updateData.JobID
 
 	trackDBOp := metrics.TrackDBOperation("update", "job_data")
 	err := h.jobRepository.UpdateJobFromUserInDB(jobID, &updateData)
@@ -135,8 +122,8 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 
 	// Fetch the job to get its task_definition_id
 	job, err := h.jobRepository.GetJobByID(jobID)
-	if err == nil && (job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2) {
-		// For time-based jobs, update time_interval and next_execution_timestamp
+	if err == nil && (job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2 || job.TaskDefinitionID == 7) {
+		// For time-based jobs (including agent jobs TDI 7), update time_interval and next_execution_timestamp
 		err = h.timeJobRepository.UpdateTimeJobInterval(jobID, updateData.TimeInterval)
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating time_interval for jobID", observability.String("job_id", updateData.JobID), observability.Error(err))

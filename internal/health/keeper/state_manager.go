@@ -138,7 +138,7 @@ func (sm *StateManager) GetDetailedKeeperInfo(ctx context.Context) []types.Keepe
 			PeerID:           state.PeerID,
 			LastCheckedIn:    state.LastCheckedIn,
 			IsActive:         state.IsActive,
-			IsImua:           state.IsImua,
+			Network:          state.Network,
 		}
 		keeperInfoList = append(keeperInfoList, info)
 	}

@@ -125,11 +125,11 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 	}
 }
 
-func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKey, error) {
+func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKeyDataDTO, error) {
 	query := `SELECT key, owner, is_active, rate_limit, last_used, created_at 
 			  FROM triggerx.apikeys WHERE key = ? AND is_active = ? ALLOW FILTERING`
 
-	var apiKey types.ApiKey
+	var apiKey types.ApiKeyDataDTO
 
 	err := a.db.Session().Query(query, key, true).Scan(
 		&apiKey.Key,
@@ -171,7 +171,7 @@ func (a *ApiKeyAuth) isKeeperApiKey(key string) (bool, error) {
 // Public wrapper methods for WebSocket authentication
 
 // GetApiKey validates and retrieves API key data (public wrapper for getApiKey)
-func (a *ApiKeyAuth) GetApiKey(ctx context.Context, key string) (*types.ApiKey, error) {
+func (a *ApiKeyAuth) GetApiKey(ctx context.Context, key string) (*types.ApiKeyDataDTO, error) {
 	return a.getApiKey(ctx, key)
 }
 

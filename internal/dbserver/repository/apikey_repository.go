@@ -6,15 +6,14 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type ApiKeysRepository interface {
-	CreateApiKey(apiKey *commonTypes.ApiKey) error
-	GetApiKeyDataByOwner(owner string) ([]*commonTypes.ApiKey, error) // changed to return slice
-	GetApiKeyDataByKey(key string) (*commonTypes.ApiKey, error)
+	CreateApiKey(apiKey *types.ApiKeyDataEntity) error
+	GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyDataDTO, error)
+	GetApiKeyDataByKey(key string) (*types.ApiKeyDataDTO, error)
 	UpdateApiKey(apiKey *types.UpdateApiKeyRequest) error
 	UpdateApiKeyLastUsed(key string, isSuccess bool) error
 	DeleteApiKey(key string) error
@@ -30,34 +29,28 @@ func NewApiKeysRepository(db *database.Connection) ApiKeysRepository {
 	}
 }
 
-func (r *apiKeysRepository) CreateApiKey(apiKey *commonTypes.ApiKey) error {
-	err := r.db.Session().Query(queries.CreateApiKeyQuery, apiKey.Key, apiKey.Owner, apiKey.IsActive, apiKey.RateLimit, apiKey.LastUsed, apiKey.CreatedAt).Exec()
+func (r *apiKeysRepository) CreateApiKey(apiKey *types.ApiKeyDataEntity) error {
+	err := r.db.Session().Query(queries.CreateApiKeyQuery,
+		apiKey.Key, apiKey.Owner, apiKey.IsActive, apiKey.RateLimit,
+		apiKey.SuccessCount, apiKey.FailedCount, apiKey.LastUsed, apiKey.CreatedAt).Exec()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*commonTypes.ApiKey, error) {
+func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyDataDTO, error) {
 	iter := r.db.Session().Query(queries.GetApiKeyDataByOwnerQuery, owner).Iter()
-	var apiKeys []*commonTypes.ApiKey
-	var key, ownerVal string
-	var isActive bool
-	var rateLimit int
-	var successCount, failedCount int64
-	var lastUsed, createdAt time.Time
-	for iter.Scan(&key, &ownerVal, &isActive, &rateLimit, &successCount, &failedCount, &lastUsed, &createdAt) {
-		apiKeys = append(apiKeys, &commonTypes.ApiKey{
-			Key:          key,
-			Owner:        ownerVal,
-			IsActive:     isActive,
-			RateLimit:    rateLimit,
-			SuccessCount: successCount,
-			FailedCount:  failedCount,
-			LastUsed:     lastUsed,
-			CreatedAt:    createdAt,
-		})
+	var apiKeys []*types.ApiKeyDataDTO
+
+	var entity types.ApiKeyDataEntity
+	for iter.Scan(
+		&entity.Key, &entity.Owner, &entity.IsActive, &entity.RateLimit,
+		&entity.SuccessCount, &entity.FailedCount, &entity.LastUsed, &entity.CreatedAt) {
+		dto := types.ApiKeyDataEntityToDTO(&entity)
+		apiKeys = append(apiKeys, dto)
 	}
+
 	if err := iter.Close(); err != nil {
 		return nil, err
 	}
@@ -67,23 +60,52 @@ func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*commonTypes.A
 	return apiKeys, nil
 }
 
-func (r *apiKeysRepository) GetApiKeyDataByKey(key string) (*commonTypes.ApiKey, error) {
-	apiKey := &commonTypes.ApiKey{}
-	var successCount, failedCount int64
-	err := r.db.Session().Query(queries.GetApiKeyDataByApiKeyQuery, key).Scan(&apiKey.Key, &apiKey.Owner, &apiKey.IsActive, &apiKey.RateLimit, &successCount, &failedCount, &apiKey.LastUsed, &apiKey.CreatedAt)
-	apiKey.SuccessCount = successCount
-	apiKey.FailedCount = failedCount
+func (r *apiKeysRepository) GetApiKeyDataByKey(key string) (*types.ApiKeyDataDTO, error) {
+	var entity types.ApiKeyDataEntity
+	err := r.db.Session().Query(queries.GetApiKeyDataByApiKeyQuery, key).Scan(
+		&entity.Key, &entity.Owner, &entity.IsActive, &entity.RateLimit,
+		&entity.SuccessCount, &entity.FailedCount, &entity.LastUsed, &entity.CreatedAt)
+
 	if err == gocql.ErrNotFound {
 		return nil, errors.New("api key not found")
 	}
 	if err != nil {
 		return nil, err
 	}
-	return apiKey, nil
+
+	dto := types.ApiKeyDataEntityToDTO(&entity)
+	return dto, nil
 }
 
 func (r *apiKeysRepository) UpdateApiKey(apiKey *types.UpdateApiKeyRequest) error {
-	err := r.db.Session().Query(queries.UpdateApiKeyQuery, apiKey.Key, apiKey.IsActive, apiKey.RateLimit).Exec()
+	// Handle nullable fields - need to get current values first if not provided
+	var isActive bool
+	var rateLimit int
+
+	if apiKey.IsActive != nil {
+		isActive = *apiKey.IsActive
+	} else {
+		// Get current value
+		current, err := r.GetApiKeyDataByKey(apiKey.Key)
+		if err != nil {
+			return err
+		}
+		isActive = current.IsActive
+	}
+
+	if apiKey.RateLimit != nil {
+		rateLimit = *apiKey.RateLimit
+	} else {
+		// Get current value
+		current, err := r.GetApiKeyDataByKey(apiKey.Key)
+		if err != nil {
+			return err
+		}
+		rateLimit = current.RateLimit
+	}
+
+	err := r.db.Session().Query(queries.UpdateApiKeyQuery,
+		isActive, rateLimit, apiKey.Key).Exec()
 	if err != nil {
 		return err
 	}
@@ -91,13 +113,18 @@ func (r *apiKeysRepository) UpdateApiKey(apiKey *types.UpdateApiKeyRequest) erro
 }
 
 func (r *apiKeysRepository) UpdateApiKeyLastUsed(key string, isSuccess bool) error {
+	now := time.Now()
 	if isSuccess {
-		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery, time.Now(), 1, 0, key).Exec()
+		// Increment success_count, reset failed_count to 0
+		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery,
+			now, 1, 0, key).Exec()
 		if err != nil {
 			return err
 		}
 	} else {
-		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery, time.Now(), 0, 1, key).Exec()
+		// Increment failed_count, keep success_count
+		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery,
+			now, 0, 1, key).Exec()
 		if err != nil {
 			return err
 		}

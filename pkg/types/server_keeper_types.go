@@ -1,12 +1,13 @@
 package types
 
+// CreateKeeperData represents the request to create a new keeper
 type CreateKeeperData struct {
 	KeeperName    string `json:"keeper_name"`
 	KeeperAddress string `json:"keeper_address"`
 	EmailID       string `json:"email_id"`
 }
 
-// Create New Keeper from Google Form (google script)
+// GoogleFormCreateKeeperData represents keeper creation data from Google Form
 type GoogleFormCreateKeeperData struct {
 	KeeperAddress  string `json:"keeper_address" validate:"required,ethereum_address"`
 	RewardsAddress string `json:"rewards_address" validate:"required,ethereum_address"`
@@ -15,19 +16,21 @@ type GoogleFormCreateKeeperData struct {
 	OnImua         bool   `json:"on_imua"`
 }
 
+// UpdateKeeperChatIDRequest represents the request to update keeper chat ID
 type UpdateKeeperChatIDRequest struct {
 	KeeperAddress string `json:"keeper_address"`
 	ChatID        int64  `json:"chat_id"`
 }
 
+// KeeperCommunicationInfo represents keeper communication information
 type KeeperCommunicationInfo struct {
 	ChatID     int64  `json:"chat_id"`
 	KeeperName string `json:"keeper_name"`
 	EmailID    string `json:"email_id"`
 }
 
+// KeeperLeaderboardEntry represents a keeper leaderboard entry
 type KeeperLeaderboardEntry struct {
-	KeeperID        int64   `json:"keeper_id"`
 	KeeperAddress   string  `json:"keeper_address"`
 	KeeperName      string  `json:"keeper_name"`
 	NoExecutedTasks int64   `json:"no_executed_tasks"`
@@ -36,9 +39,7 @@ type KeeperLeaderboardEntry struct {
 	OnImua          bool    `json:"on_imua"`
 }
 
-///////////////////////////////////////////////////
-
+// GetPerformerData represents performer data
 type GetPerformerData struct {
-	KeeperID      int64  `json:"keeper_id"`
 	KeeperAddress string `json:"keeper_address"`
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // StartTimeoutWorker monitors processing tasks for timeouts
@@ -73,7 +74,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 
 		// CRITICAL: Check if task is already validated FIRST - if so, don't rebroadcast
 		// Task in validated stream should never be rebroadcasted, regardless of timeout tracking state
-		validatedTask, _, validatedErr := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, StreamTaskValidated)
+		validatedTask, _, validatedErr := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, types.StreamTaskValidated)
 		if validatedErr == nil && validatedTask != nil {
 			// Task was already validated, just clean up timeout tracking
 			taskSpan.AddEvent("task.already_validated")
@@ -92,11 +93,11 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 		}
 
 		// Find the task in executed stream using the efficient index lookup
-		task, messageID, err := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, StreamTaskExecuted)
+		task, messageID, err := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, types.StreamTaskExecuted)
 		if err != nil {
 
 			// Check if task is in failed stream (already processed)
-			failedTask, _, failedErr := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, StreamTaskFailed)
+			failedTask, _, failedErr := tsm.taskIndex.FindTaskByIDInStream(taskCtx, taskID, types.StreamTaskFailed)
 			if failedErr == nil && failedTask != nil {
 				// Task was already moved to failed, just clean up timeout tracking
 				taskSpan.AddEvent("task.already_failed")
@@ -158,7 +159,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 
 				// Acknowledge the old message to remove it from PEL
 				if messageID != "" {
-					if err := tsm.AckTaskProcessed(taskCtx, StreamTaskExecuted, "timeout-checker", messageID); err != nil {
+					if err := tsm.AckTaskProcessed(taskCtx, types.StreamTaskExecuted, "timeout-checker", messageID); err != nil {
 						tsm.logger.Warn(taskCtx, "Failed to acknowledge old message after rebroadcast",
 							observability.Int64("task_id", taskID),
 							observability.String("message_id", messageID),
@@ -166,7 +167,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 					}
 
 					// Add new entry to stream with updated rebroadcast info
-					newMessageID, err := tsm.addTaskToStreamWithMessageID(taskCtx, StreamTaskExecuted, task)
+					newMessageID, err := tsm.addTaskToStreamWithMessageID(taskCtx, types.StreamTaskExecuted, task)
 					if err != nil {
 						tsm.logger.Warn(taskCtx, "Failed to add task with rebroadcast info to stream",
 							observability.Int64("task_id", taskID),
@@ -189,7 +190,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 				// Remove from current timeout tracking
 				processedTaskIDs = append(processedTaskIDs, taskID)
 				// Re-add to timeout tracking with a new timeout
-				if err := tsm.expirationManager.AddExecutedTaskTimeout(taskCtx, taskID, TasksExecutedTTL); err != nil {
+				if err := tsm.expirationManager.AddExecutedTaskTimeout(taskCtx, taskID, types.TasksExecutedTTL); err != nil {
 					tsm.logger.Warn(taskCtx, "Failed to re-add task to timeout tracking after rebroadcast",
 						observability.Int64("task_id", taskID),
 						observability.Error(err))
@@ -223,7 +224,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 
 		// Acknowledge the timed-out task if we have the messageID
 		if messageID != "" {
-			err := tsm.AckTaskProcessed(taskCtx, StreamTaskExecuted, "timeout-checker", messageID)
+			err := tsm.AckTaskProcessed(taskCtx, types.StreamTaskExecuted, "timeout-checker", messageID)
 			if err != nil {
 				taskSpan.RecordError(err)
 				tsm.logger.Error(taskCtx, "Failed to acknowledge timed-out task",
@@ -378,12 +379,12 @@ func (tsm *TaskStreamManager) AckTaskProcessedWithDelete(ctx context.Context, st
 }
 
 // moveTaskToFailed moves a task to the failed stream or retry stream
-func (tsm *TaskStreamManager) moveTaskToFailed(ctx context.Context, task TaskStreamData, errorMsg string) error {
+func (tsm *TaskStreamManager) moveTaskToFailed(ctx context.Context, task types.TaskStreamData, errorMsg string) error {
 	task.LastError = errorMsg
 	task.RetryCount++
 
 	// Move to failed stream permanently
-	err := tsm.addTaskToStream(ctx, StreamTaskFailed, &task)
+	err := tsm.addTaskToStream(ctx, types.StreamTaskFailed, &task)
 	if err != nil {
 		return fmt.Errorf("failed to add to failed stream: %w", err)
 	}

@@ -3,14 +3,13 @@ package types
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
 )
 
 // Target Data for all task types
 // DEVNOTE: I separated this from all schedule data types to accomodate multiple target calls on same trigger in future
 type TaskTargetData struct {
-	JobID                     *BigInt  `json:"job_id"`
+	JobID                     string   `json:"job_id"`
 	TaskID                    int64    `json:"task_id"`
 	TaskDefinitionID          int      `json:"task_definition_id"`
 	TargetChainID             string   `json:"target_chain_id"`
@@ -21,14 +20,19 @@ type TaskTargetData struct {
 	Arguments                 []string `json:"arguments"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url"`
 	IsImua                    bool     `json:"is_imua"`
-	// Custom script fields (TaskDefinitionID = 7)
-	ScriptStorage  map[string]string `json:"script_storage,omitempty"`  // Storage passed from scheduler
-	ScriptLanguage string            `json:"script_language,omitempty"` // typescript, go, python
+	// Agent job fields (TDI 7, 8, 9) - nullable for traditional jobs (TDI 1-6)
+	AgentScriptURL      string            `json:"agent_script_url,omitempty"`      // IPFS URL of the agent script
+	AgentScriptLanguage string            `json:"agent_script_language,omitempty"` // Script language: 'ts', 'go', 'python', 'javascript'
+	AgentScriptHash     string            `json:"agent_script_hash,omitempty"`     // keccak256(scriptCode) for verification
+	AgentTargetChainID  int               `json:"agent_target_chain_id,omitempty"` // Default chain ID (script can override)
+	MaxExecutionTime    int               `json:"max_execution_time,omitempty"`    // Script timeout in seconds (default 60)
+	ChallengePeriod     int64             `json:"challenge_period,omitempty"`      // Challenge period in seconds (default 21600 = 6 hours)
+	ScriptStorage       map[string]string `json:"script_storage,omitempty"`        // Storage passed from scheduler (for agent jobs)
 }
 
 // Monitoring Data for even and condition workers
 type EventWorkerData struct {
-	JobID                  *BigInt   `json:"job_id"`
+	JobID                  string    `json:"job_id"`
 	ExpirationTime         time.Time `json:"expiration_time"`
 	Recurring              bool      `json:"recurring"`
 	TriggerChainID         string    `json:"trigger_chain_id"`
@@ -38,7 +42,7 @@ type EventWorkerData struct {
 	EventFilterValue       string    `json:"event_filter_value"`
 }
 type ConditionWorkerData struct {
-	JobID            *BigInt   `json:"job_id"`
+	JobID            string    `json:"job_id"`
 	ExpirationTime   time.Time `json:"expiration_time"`
 	Recurring        bool      `json:"recurring"`
 	ConditionType    string    `json:"condition_type"`
@@ -66,7 +70,7 @@ type ScheduleTimeTaskData struct {
 
 // Data to pass to condition scheduler
 type ScheduleConditionJobData struct {
-	JobID               *BigInt             `json:"job_id"`
+	JobID               string              `json:"job_id"`
 	TaskDefinitionID    int                 `json:"task_definition_id"`
 	LastExecutedAt      time.Time           `json:"last_executed_at"`
 	TaskTargetData      TaskTargetData      `json:"task_target_data"`
@@ -103,12 +107,6 @@ type TaskTriggerData struct {
 	ConditionSatisfiedValue int    `json:"condition_satisfied_value"`
 }
 
-type PerformerData struct {
-	OperatorID    int64  `json:"operator_id"`
-	KeeperAddress string `json:"keeper_address"`
-	IsImua        bool   `json:"is_imua"`
-}
-
 type SendTaskDataToKeeper struct {
 	TaskID           []int64           `json:"task_id"`
 	PerformerData    PerformerData     `json:"performer_data"`
@@ -116,6 +114,7 @@ type SendTaskDataToKeeper struct {
 	TriggerData      []TaskTriggerData `json:"trigger_data"`
 	SchedulerID      string            `json:"scheduler_id"`
 	ManagerSignature string            `json:"manager_signature"`
+	Network          KeeperNetwork     `json:"network"` // Network: mainnet, sepolia, or imua
 }
 
 // UnmarshalJSON custom unmarshaler to handle scheduler_id as both string and number (for backward compatibility)
@@ -177,7 +176,7 @@ type BroadcastDataForPerformer struct {
 }
 
 type CreateTaskDataRequest struct {
-	JobID            *big.Int `json:"job_id" validate:"required"`
-	TaskDefinitionID int      `json:"task_definition_id" validate:"required"`
-	IsImua           bool     `json:"is_imua"`
+	JobID            string `json:"job_id" validate:"required"`
+	TaskDefinitionID int    `json:"task_definition_id" validate:"required"`
+	IsImua           bool   `json:"is_imua"`
 }

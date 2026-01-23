@@ -21,7 +21,7 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	userID, userData, err := h.userRepository.GetUserDataByAddress(userAddress)
+	userData, err := h.userRepository.GetUserDataByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Warn(c.Request.Context(), "[GetUserDataByAddress] Failed to retrieve user", observability.String("user_address", userAddress), observability.Error(err))
@@ -33,25 +33,25 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, userData)
-	h.logger.Debug(c.Request.Context(), "[GetUserDataByAddress] Retrieved user data", observability.Int64("user_id", userID), observability.String("user_address", userAddress))
+	h.logger.Debug(c.Request.Context(), "[GetUserDataByAddress] Retrieved user data", observability.String("user_address", userAddress))
 }
 
 func (h *Handler) GetWalletPoints(c *gin.Context) {
 	walletAddress := strings.ToLower(c.Param("address"))
 
-	var userPoints float64
-	var keeperPoints float64
+	var userPoints string
+	var keeperPoints string
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
 	userPoints, err := h.userRepository.GetUserPointsByAddress(walletAddress)
 	trackDBOp(err)
 	if err != nil {
-		userPoints = 0
+		userPoints = "0"
 	}
 
 	// keeperPoints, err := h.userRepository.GetKeeperPointsByAddress(walletAddress)
 	// if err != nil {
-	// 	keeperPoints = 0
+	// 	keeperPoints = "0"
 	// }
 
 	totalPoints := userPoints + keeperPoints
@@ -59,7 +59,7 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"total_points": totalPoints,
 	})
-	h.logger.Debug(c.Request.Context(), "[GetWalletPoints] Retrieved wallet points", observability.String("wallet_address", walletAddress), observability.Float64("total_points", totalPoints))
+	h.logger.Debug(c.Request.Context(), "[GetWalletPoints] Retrieved wallet points", observability.String("wallet_address", walletAddress), observability.String("total_points", totalPoints))
 }
 
 func (h *Handler) StoreUserEmail(c *gin.Context) {

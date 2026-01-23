@@ -2,88 +2,61 @@ package queries
 
 // Create Queries
 const (
-	GetMaxUserIDQuery = `SELECT MAX(user_id) FROM triggerx.user_data`
-
 	CreateUserDataQuery = `
 			INSERT INTO triggerx.user_data (
-				user_id, user_address, 
-				ether_balance, token_balance, user_points, 
-				total_jobs, total_tasks, created_at
+				user_address, email_id, job_ids, user_points,
+				total_jobs, total_tasks, created_at, last_updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
 // Write Queries
 const (
-	// Update User Balance on Job Creation, Task Execution, Deposit Withdrawal
-	UpdateUserBalanceQuery = `
-			UPDATE triggerx.user_data 
-			SET ether_balance = ?, token_balance = ?
-			WHERE user_id = ?`
-
 	// Update User Job IDs on Job Creation
 	UpdateUserJobIDsQuery = `
 			UPDATE triggerx.user_data 
 			SET job_ids = ?, total_jobs = ?, last_updated_at = ?
-			WHERE user_id = ?`
-
-	// Update User Tasks and Points on Task Execution
-	UpdateUserTasksAndPointsQuery = `
-			UPDATE triggerx.user_data 
-			SET total_tasks = ?, user_points = ?
-			WHERE user_id = ?`
+			WHERE user_address = ?`
 
 	UpdateUserEmailByAddressQuery = `
 		UPDATE triggerx.user_data
-		SET email_id = ?
-		WHERE user_address = ? ALLOW FILTERING`
+		SET email_id = ?, last_updated_at = ?
+		WHERE user_address = ?`
 
-	UpdateUserEmailByIDQuery = `
-		UPDATE triggerx.user_data
-		SET email_id = ?
-		WHERE user_id = ?`
+	// Update User Points
+	UpdateUserPointsQuery = `
+		UPDATE triggerx.user_data 
+		SET user_points = ?, last_updated_at = ?
+		WHERE user_address = ?`
 )
 
 // Read Queries
 const (
-	GetUserIDByAddressQuery = `
-			SELECT user_id
+	// Get User Data by Address
+	GetUserDataByAddressQuery = `
+			SELECT user_address, email_id, job_ids, user_points,
+				total_jobs, total_tasks, created_at, last_updated_at
 			FROM triggerx.user_data 
-			WHERE user_address = ? ALLOW FILTERING`
+			WHERE user_address = ?`
 
-	// Get User Data by ID
-	GetUserDataByIDQuery = `
-			SELECT user_id, user_address, 
-				job_ids, total_jobs, total_tasks, 
-				ether_balance, token_balance, user_points, 
-				created_at, last_updated_at
-			FROM triggerx.user_data 
-			WHERE user_id = ?`
-
-	// Get User Points by ID for Update after Task Execution
-	GetUserPointsByIDQuery = `
+	// Get User Points by Address for Update after Task Execution
+	GetUserPointsByAddressQuery = `
 			SELECT user_points 
 			FROM triggerx.user_data 
-			WHERE user_id = ?`
-
-	// Get User Points by Address for Frontend Display
-	GetUserPointsByAddressQuery = `
-			SELECT user_points
-			FROM triggerx.user_data 
-			WHERE user_address = ? ALLOW FILTERING`
+			WHERE user_address = ?`
 
 	// Get User Job IDs by Address for Frontend Display
 	GetUserJobIDsByAddressQuery = `
-			SELECT user_id, job_ids
+			SELECT job_ids
 			FROM triggerx.user_data 
-			WHERE user_address = ? ALLOW FILTERING`
+			WHERE user_address = ?`
 
-	GetUserCountersByIDQuery = `
+	GetUserCountersByAddressQuery = `
 			SELECT total_jobs, total_tasks
 			FROM triggerx.user_data 
-			WHERE user_id = ?`
+			WHERE user_address = ?`
 
 	// Get User Leaderboard for Frontend Display
 	GetUserLeaderboardQuery = `
-			SELECT user_id, user_address, total_jobs, total_tasks, user_points 
+			SELECT user_address, total_jobs, total_tasks, user_points 
 			FROM triggerx.user_data`
 )

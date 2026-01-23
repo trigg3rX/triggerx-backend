@@ -58,23 +58,10 @@ func (h *Handler) Handle(ctx context.Context, method string, request interface{}
 	}
 }
 
-// GetPerformerRequest represents the request for getting a performer
-type GetPerformerRequest struct {
-	IsImua    bool `json:"is_imua"`
-	IsMainnet bool `json:"is_mainnet"`
-}
-
-// GetPerformerResponse represents the response for getting a performer
-type GetPerformerResponse struct {
-	Performer types.PerformerData `json:"performer"`
-	Success   bool                `json:"success"`
-	Error     string              `json:"error,omitempty"`
-}
-
 // handleGetPerformer handles the get-performer RPC method
 func (h *Handler) handleGetPerformer(ctx context.Context, request interface{}) (interface{}, error) {
 	// Convert request to GetPerformerRequest
-	var req GetPerformerRequest
+	var req types.GetPerformerRequest
 
 	// Handle JSON request - convert map to JSON bytes then unmarshal
 	jsonBytes, err := json.Marshal(request)
@@ -87,12 +74,12 @@ func (h *Handler) handleGetPerformer(ctx context.Context, request interface{}) (
 
 	// For now, use hardcoded values (same as HTTP endpoint)
 	// TODO: Implement Redis-based round-robin selection when ready
-	if req.IsMainnet {
-		return GetPerformerResponse{
+	if string(req.Network) == string(types.NetworkMainnet) {
+		return types.GetPerformerResponse{
 			Performer: types.PerformerData{
 				OperatorID:    1002,
 				KeeperAddress: "0x235813b36eea7e48b7069821a78c0bc8384a3c79",
-				IsImua:        false,
+				Network:       types.NetworkMainnet,
 			},
 			Success: true,
 		}, nil
@@ -103,39 +90,38 @@ func (h *Handler) handleGetPerformer(ctx context.Context, request interface{}) (
 		{
 			OperatorID:    2,
 			KeeperAddress: "0x0a067a261c5F5e8C4c0b9137430b4FE1255EB62e",
-			IsImua:        false,
+			Network:       types.NetworkSepolia,
 		},
 		{
 			OperatorID:    1,
 			KeeperAddress: "0xcacce39134e3b9d5d9220d87fc546c6f0fb9cc37",
-			IsImua:        true,
+			Network:       types.NetworkImua,
 		},
 	}
 
 	// Filter by Imua status
 	var filteredPerformer types.PerformerData
 	for _, performer := range fallbackPerformers {
-		if performer.IsImua == req.IsImua {
+		if string(performer.Network) == string(req.Network) {
 			filteredPerformer = performer
 			break
 		}
 	}
 
 	if filteredPerformer == (types.PerformerData{}) {
-		return GetPerformerResponse{
+		return types.GetPerformerResponse{
 			Success: false,
-			Error:   fmt.Sprintf("no suitable performers available for isImua=%v", req.IsImua),
+			Error:   fmt.Sprintf("no suitable performers available for network=%s", string(req.Network)),
 		}, nil
 	}
 
 	h.logger.Debug(ctx, "Selected performer via gRPC",
 		observability.Int64("operator_id", filteredPerformer.OperatorID),
 		observability.String("keeper_address", filteredPerformer.KeeperAddress),
-		observability.Bool("is_imua", filteredPerformer.IsImua),
-		observability.Bool("is_mainnet", req.IsMainnet),
+		observability.String("network", string(filteredPerformer.Network)),
 	)
 
-	return GetPerformerResponse{
+	return types.GetPerformerResponse{
 		Performer: filteredPerformer,
 		Success:   true,
 	}, nil
@@ -163,8 +149,8 @@ func (h *Handler) GetMethods() []rpcpkg.RPCMethod {
 		{
 			Name:         "get-performer",
 			Description:  "Get a performer based on isImua and isMainnet flags",
-			RequestType:  GetPerformerRequest{},
-			ResponseType: GetPerformerResponse{},
+			RequestType:  types.GetPerformerRequest{},
+			ResponseType: types.GetPerformerResponse{},
 			Timeout:      config.GetRPCGetPerformerTimeout(),
 		},
 		{

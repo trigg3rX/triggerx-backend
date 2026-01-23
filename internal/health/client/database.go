@@ -5,7 +5,7 @@ import (
 	"context"
 
 	// "encoding/json"
-	"errors"
+
 	"fmt"
 
 	// "net/http"
@@ -70,7 +70,7 @@ func GetInstance() *DatabaseManager {
 }
 
 // KeeperRegistered registers a new keeper or updates an existing one (status = true)
-func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth types.KeeperHealthCheckInRequest, isActive bool) error {
 	// Start a span for the database update operation
 	ctx, span := dm.tracer.Start(ctx, "db.update_keeper_health",
 		observability.WithSpanKind(trace.SpanKindClient),
@@ -99,7 +99,6 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		keeperHealth.KeeperAddress = "0x" + keeperHealth.KeeperAddress
 	}
 
-	var keeperID int64
 	var prevOnline bool
 	var prevLastCheckedIn time.Time
 	var prevUptime int64
@@ -115,13 +114,13 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		),
 	)
 	err := dm.db.Session().Query(`
-		SELECT keeper_id, online, last_checked_in, uptime FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
-		keeperHealth.KeeperAddress).Scan(&keeperID, &prevOnline, &prevLastCheckedIn, &prevUptime)
+		SELECT online, last_checked_in, uptime FROM triggerx.keeper_data WHERE keeper_address = ?`,
+		keeperHealth.KeeperAddress).Scan(&prevOnline, &prevLastCheckedIn, &prevUptime)
 	selectSpan.End()
 	metrics.RecordDBOperationDuration(ctx, "select", time.Since(selectStart))
 	if err != nil {
 		selectSpan.SetStatus(codes.Error, err.Error())
-		dm.logger.Error(ctx, "Failed to retrieve keeper_id and previous status",
+		dm.logger.Error(ctx, "Failed to retrieve keeper previous status",
 			observability.String("keeper", keeperHealth.KeeperAddress),
 			observability.Error(err),
 		)
@@ -129,13 +128,6 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		return err
 	}
 	selectSpan.SetStatus(codes.Ok, "")
-
-	if keeperID == 0 {
-		dm.logger.Error(ctx, "No keeper found with address",
-			observability.String("keeper", keeperHealth.KeeperAddress),
-		)
-		return errors.New("keeper not found")
-	}
 
 	if keeperHealth.PeerID == "" {
 		keeperHealth.PeerID = "no-peer-id"
@@ -164,21 +156,20 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 				attribute.String("db.system", "cassandra"),
 				attribute.String("db.operation", "update"),
 				attribute.String("db.collection", "keeper_data"),
-				attribute.Int64("keeper.id", keeperID),
+				attribute.String("keeper.address", keeperHealth.KeeperAddress),
 			),
 		)
 		err = dm.db.Session().Query(`
 			UPDATE triggerx.keeper_data 
 			SET uptime = ?
-			WHERE keeper_id = ?`,
-			newUptime, keeperID).Exec()
+			WHERE keeper_address = ?`,
+			newUptime, keeperHealth.KeeperAddress).Exec()
 		uptimeSpan.End()
 		metrics.RecordDBOperationDuration(uptimeCtx, "update", time.Since(uptimeStart))
 		if err != nil {
 			uptimeSpan.SetStatus(codes.Error, err.Error())
 			dm.logger.Error(uptimeCtx, "Failed to update keeper uptime",
 				observability.Error(err),
-				observability.Int64("keeper_id", keeperID),
 				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
 			span.SetStatus(codes.Error, err.Error())
@@ -203,21 +194,20 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 				attribute.String("db.system", "cassandra"),
 				attribute.String("db.operation", "update"),
 				attribute.String("db.collection", "keeper_data"),
-				attribute.Int64("keeper.id", keeperID),
+				attribute.String("keeper.address", keeperHealth.KeeperAddress),
 			),
 		)
 		err = dm.db.Session().Query(`
 			UPDATE triggerx.keeper_data 
 			SET online = ?
-			WHERE keeper_id = ?`,
-			false, keeperID).Exec()
+			WHERE keeper_address = ?`,
+			false, keeperHealth.KeeperAddress).Exec()
 		updateSpan.End()
 		metrics.RecordDBOperationDuration(updateCtx, "update", time.Since(updateStart))
 		if err != nil {
 			updateSpan.SetStatus(codes.Error, err.Error())
 			dm.logger.Error(updateCtx, "Failed to update keeper inactive status",
 				observability.Error(err),
-				observability.Int64("keeper_id", keeperID),
 				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
 			span.SetStatus(codes.Error, err.Error())
@@ -236,7 +226,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 			attribute.String("db.system", "cassandra"),
 			attribute.String("db.operation", "update"),
 			attribute.String("db.collection", "keeper_data"),
-			attribute.Int64("keeper.id", keeperID),
+			attribute.String("keeper.address", keeperHealth.KeeperAddress),
 		),
 	)
 	// Default network to "mainnet" if not provided (backward compatibility)
@@ -248,15 +238,15 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 	err = dm.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ?, network = ? 
-		WHERE keeper_id = ?`,
-		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, network, keeperID).Exec()
+		WHERE keeper_address = ?`,
+		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, network, keeperHealth.KeeperAddress).Exec()
 	updateActiveSpan.End()
 	metrics.RecordDBOperationDuration(updateActiveCtx, "update", time.Since(updateActiveStart))
 	if err != nil {
 		updateActiveSpan.SetStatus(codes.Error, err.Error())
 		dm.logger.Error(updateActiveCtx, "Failed to update keeper status",
 			observability.Error(err),
-			observability.Int64("keeper_id", keeperID),
+			observability.String("keeper", keeperHealth.KeeperAddress),
 		)
 		span.SetStatus(codes.Error, err.Error())
 		return err
@@ -265,7 +255,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 	span.SetStatus(codes.Ok, "")
 
 	if !isActive {
-		go dm.checkAndNotifyOfflineKeeper(ctx, keeperID)
+		go dm.checkAndNotifyOfflineKeeper(ctx, keeperHealth.KeeperAddress)
 	}
 
 	// dm.logger.Info(ctx, "Successfully updated keeper status",
@@ -275,22 +265,22 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 	return nil
 }
 
-func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keeperID int64) {
+func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keeperAddress string) {
 	time.Sleep(config.GetNotificationOfflineDelay())
 
 	// dm.logger.Debug(ctx, "Checking current status for offline keeper",
-	// 	observability.Int64("keeper_id", keeperID),
+	// 	observability.String("keeper", keeperAddress),
 	// )
 
 	var online bool
 	err := dm.db.Session().Query(`
-		SELECT online FROM triggerx.keeper_data WHERE keeper_id = ?`,
-		keeperID).Scan(&online)
+		SELECT online FROM triggerx.keeper_data WHERE keeper_address = ?`,
+		keeperAddress).Scan(&online)
 
 	if err != nil {
 		dm.logger.Error(ctx, "Failed to check keeper online status",
 			observability.Error(err),
-			observability.Int64("keeper_id", keeperID),
+			observability.String("keeper", keeperAddress),
 		)
 		return
 	}
@@ -301,13 +291,13 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keep
 		err := dm.db.Session().Query(`
 			SELECT chat_id, keeper_name, email_id 
 			FROM triggerx.keeper_data 
-			WHERE keeper_id = ?`,
-			keeperID).Scan(&chatID, &keeperName, &emailID)
+			WHERE keeper_address = ?`,
+			keeperAddress).Scan(&chatID, &keeperName, &emailID)
 
 		if err != nil {
 			dm.logger.Error(ctx, "Failed to fetch keeper communication info",
 				observability.Error(err),
-				observability.Int64("keeper_id", keeperID),
+				observability.String("keeper", keeperAddress),
 			)
 			return
 		}
@@ -318,22 +308,15 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keep
 				dm.logger.Error(ctx, "Failed to send Telegram notification",
 					observability.Error(err),
 					observability.String("keeper", keeperName),
-					observability.Int64("keeper_id", keeperID),
+					observability.String("keeper", keeperAddress),
 				)
 			} else {
-				// Record successful telegram notification
-				// We need to get keeper address from keeperName or keeperID
-				var keeperAddress string
-				if err := dm.db.Session().Query(`
-					SELECT keeper_address FROM triggerx.keeper_data WHERE keeper_id = ?`,
-					keeperID).Scan(&keeperAddress); err == nil {
-					metrics.RecordTelegramNotification(ctx, keeperAddress)
-				}
+				metrics.RecordTelegramNotification(ctx, keeperAddress)
 			}
 		} else {
 			dm.logger.Warn(ctx, "No Telegram chat ID found",
 				observability.String("keeper", keeperName),
-				observability.Int64("keeper_id", keeperID),
+				observability.String("keeper", keeperAddress),
 			)
 		}
 
@@ -349,23 +332,23 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keep
 				dm.logger.Error(ctx, "Failed to send email notification",
 					observability.Error(err),
 					observability.String("keeper", keeperName),
-					observability.Int64("keeper_id", keeperID),
+					observability.String("keeper", keeperAddress),
 				)
 			}
 		} else {
 			dm.logger.Warn(ctx, "No email address found",
 				observability.String("keeper", keeperName),
-				observability.Int64("keeper_id", keeperID),
+				observability.String("keeper", keeperAddress),
 			)
 		}
 
 		dm.logger.Debug(ctx, "Completed notification process for offline keeper",
 			observability.String("keeper", keeperName),
-			observability.Int64("keeper_id", keeperID),
+			observability.String("keeper", keeperAddress),
 		)
 	} else {
 		dm.logger.Debug(ctx, "Keeper is back online",
-			observability.Int64("keeper_id", keeperID),
+			observability.String("keeper", keeperAddress),
 		)
 	}
 }
@@ -432,16 +415,15 @@ func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.Keep
 	var keepers []types.KeeperInfo
 
 	iter := dm.db.Session().Query(`
-		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in, on_imua
+		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in, network
 		FROM triggerx.keeper_data 
-		WHERE registered = true AND whitelisted = true 
+		WHERE registered = true 
 		ALLOW FILTERING`).Iter()
 
-	var keeperName, keeperAddress, consensusAddress, operatorID, version, peerID string
+	var keeperName, keeperAddress, consensusAddress, operatorID, version, peerID, network string
 	var lastCheckedIn time.Time
-	var isImua bool
 
-	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn, &isImua) {
+	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn, &network) {
 		keepers = append(keepers, types.KeeperInfo{
 			KeeperName:       keeperName,
 			KeeperAddress:    keeperAddress,
@@ -450,7 +432,7 @@ func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.Keep
 			Version:          version,
 			PeerID:           peerID,
 			LastCheckedIn:    lastCheckedIn,
-			IsImua:           isImua,
+			Network:          network,
 		})
 	}
 
@@ -486,7 +468,7 @@ func (dm *DatabaseManager) GetKeeperUptimes(ctx context.Context) (map[string]int
 	iter := dm.db.Session().Query(`
 		SELECT keeper_address, uptime
 		FROM triggerx.keeper_data 
-		WHERE registered = true AND whitelisted = true 
+		WHERE registered = true 
 		ALLOW FILTERING`).Iter()
 
 	var keeperAddress string

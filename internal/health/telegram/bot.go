@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
@@ -87,26 +86,16 @@ func (b *Bot) Start(ctx context.Context) {
 }
 
 func (b *Bot) updateKeeperChatID(ctx context.Context, keeperAddress string, chatID int64) error {
-	b.logger.Debug(ctx, "Finding keeper ID for keeper", observability.String("keeper", keeperAddress))
-
-	var keeperID string
-	if err := b.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data 
-		WHERE keeper_address = ? ALLOW FILTERING`, keeperAddress).Consistency(gocql.One).Scan(&keeperID); err != nil {
-		b.logger.Error(ctx, "Error finding keeper ID for keeper", observability.String("keeper", keeperAddress), observability.Error(err))
-		return err
-	}
-
-	b.logger.Debug(ctx, "Updating chat ID for keeper ID", observability.String("keeper_id", keeperID))
+	b.logger.Debug(ctx, "Updating chat ID for keeper", observability.String("keeper", keeperAddress))
 
 	chatIDStr := strconv.FormatInt(chatID, 10)
 
 	if err := b.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET chat_id = ? 
-		WHERE keeper_id = ?`,
-		chatIDStr, keeperID).Exec(); err != nil {
-		b.logger.Error(ctx, "Error updating chat ID for keeper ID", observability.String("keeper_id", keeperID), observability.Error(err))
+		WHERE keeper_address = ?`,
+		chatIDStr, keeperAddress).Exec(); err != nil {
+		b.logger.Error(ctx, "Error updating chat ID for keeper", observability.String("keeper", keeperAddress), observability.Error(err))
 		return err
 	}
 

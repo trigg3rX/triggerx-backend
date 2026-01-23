@@ -47,7 +47,7 @@ func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
 			PeerID:           keeper.PeerID,
 			IsActive:         false,
 			LastCheckedIn:    keeper.LastCheckedIn,
-			IsImua:           keeper.IsImua,
+			Network:          keeper.Network,
 		}
 		sm.keepers[keeper.KeeperAddress] = state
 	}
@@ -78,7 +78,7 @@ func (sm *StateManager) DumpState(ctx context.Context) error {
 		if state.IsActive {
 			activeCount++
 			// Create a minimal health check-in with just the address
-			health := types.KeeperHealthCheckIn{
+			health := types.KeeperHealthCheckInRequest{
 				KeeperAddress: address,
 			}
 

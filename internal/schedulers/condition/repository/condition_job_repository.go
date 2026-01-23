@@ -2,7 +2,6 @@ package repository
 
 import (
 	"errors"
-	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -11,12 +10,12 @@ import (
 // ConditionJobRepository defines the interface for condition-based job operations
 type ConditionJobRepository interface {
 	GetActiveConditionJobs() ([]ActiveConditionJob, error)
-	UpdateConditionJobStatus(jobID *big.Int, isActive bool) error
+	UpdateConditionJobStatus(jobID string, isActive bool) error
 }
 
 // ActiveConditionJob represents a condition job with minimal fields needed for expiration checking
 type ActiveConditionJob struct {
-	JobID          *big.Int
+	JobID          string
 	ExpirationTime time.Time
 }
 
@@ -37,10 +36,8 @@ func (r *conditionJobRepository) GetActiveConditionJobs() ([]ActiveConditionJob,
 
 	var conditionJobs []ActiveConditionJob
 	var job ActiveConditionJob
-	var jobIDBigInt *big.Int
 
-	for iter.Scan(&jobIDBigInt, &job.ExpirationTime) {
-		job.JobID = jobIDBigInt
+	for iter.Scan(&job.JobID, &job.ExpirationTime) {
 		conditionJobs = append(conditionJobs, job)
 	}
 
@@ -52,7 +49,7 @@ func (r *conditionJobRepository) GetActiveConditionJobs() ([]ActiveConditionJob,
 }
 
 // UpdateConditionJobStatus updates the active status of a condition job
-func (r *conditionJobRepository) UpdateConditionJobStatus(jobID *big.Int, isActive bool) error {
+func (r *conditionJobRepository) UpdateConditionJobStatus(jobID string, isActive bool) error {
 	err := r.db.Session().Query(updateConditionJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update condition job status")

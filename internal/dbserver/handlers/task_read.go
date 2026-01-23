@@ -2,15 +2,14 @@ package handlers
 
 import (
 	"fmt"
-	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {
@@ -61,14 +60,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
-	jobID := new(big.Int)
-	if _, ok := jobID.SetString(jobIDStr, 10); !ok {
-		h.logger.Error(c.Request.Context(), "[GetTasksByJobID] Invalid job_id format")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
-		return
-	}
-
-	tasks, err := h.fetchTasksForJob(jobID)
+	tasks, err := h.fetchTasksForJob(jobIDStr)
 	if err != nil {
 		h.logger.Warn(c.Request.Context(), "[GetTasksByJobID] Failed to retrieve tasks", observability.String("job_id", jobIDStr), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
@@ -132,7 +124,7 @@ func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	_, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
+	jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Warn(c.Request.Context(), "[GetTasksByUserAddress] Failed to retrieve jobs for user", observability.String("user_address", userAddress), observability.Error(err))
@@ -235,12 +227,11 @@ func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 		return
 	}
 
-	jobIDs := make([]*big.Int, 0, len(jobs))
+	jobIDs := make([]string, 0, len(jobs))
 	for _, job := range jobs {
-		if job.JobID == nil {
-			continue
+		if job.JobID != "" {
+			jobIDs = append(jobIDs, job.JobID)
 		}
-		jobIDs = append(jobIDs, job.JobID.ToBigInt())
 	}
 
 	if len(jobIDs) == 0 {
@@ -295,20 +286,19 @@ func getExplorerBaseURL(chainID string) string {
 	}
 }
 
-func (h *Handler) getTasksGroupedByJob(jobIDs []*big.Int) ([]types.TasksByJobGroupResponse, error) {
+func (h *Handler) getTasksGroupedByJob(jobIDs []string) ([]types.TasksByJobGroupResponse, error) {
 	taskGroups := make([]types.TasksByJobGroupResponse, 0, len(jobIDs))
 	seen := make(map[string]struct{})
 
 	for _, jobID := range jobIDs {
-		if jobID == nil {
+		if jobID == "" {
 			continue
 		}
 
-		jobIDStr := jobID.String()
-		if _, exists := seen[jobIDStr]; exists {
+		if _, exists := seen[jobID]; exists {
 			continue
 		}
-		seen[jobIDStr] = struct{}{}
+		seen[jobID] = struct{}{}
 
 		tasks, err := h.fetchTasksForJob(jobID)
 		if err != nil {
@@ -316,7 +306,7 @@ func (h *Handler) getTasksGroupedByJob(jobIDs []*big.Int) ([]types.TasksByJobGro
 		}
 
 		taskGroups = append(taskGroups, types.TasksByJobGroupResponse{
-			JobID: jobIDStr,
+			JobID: jobID,
 			Tasks: tasks,
 		})
 	}
@@ -324,7 +314,7 @@ func (h *Handler) getTasksGroupedByJob(jobIDs []*big.Int) ([]types.TasksByJobGro
 	return taskGroups, nil
 }
 
-func (h *Handler) fetchTasksForJob(jobID *big.Int) ([]types.TasksByJobIDResponse, error) {
+func (h *Handler) fetchTasksForJob(jobID string) ([]types.TasksByJobIDResponse, error) {
 	trackTasksOp := metrics.TrackDBOperation("read", "task_data")
 	tasksData, err := h.taskRepository.GetTasksByJobID(jobID)
 	trackTasksOp(err)
@@ -354,18 +344,23 @@ func (h *Handler) fetchTasksForJob(jobID *big.Int) ([]types.TasksByJobIDResponse
 func convertTasksData(tasksData []types.GetTasksByJobID) []types.TasksByJobIDResponse {
 	tasks := make([]types.TasksByJobIDResponse, len(tasksData))
 	for i, task := range tasksData {
+		// Convert list to single string (take first if exists)
+		performerAddress := ""
+		if len(task.TaskPerformerAddress) > 0 {
+			performerAddress = task.TaskPerformerAddress[0]
+		}
 		tasks[i] = types.TasksByJobIDResponse{
-			TaskID:             task.TaskID,
-			TaskNumber:         task.TaskNumber,
-			TaskOpXCost:        task.TaskOpXCost,
-			ExecutionTimestamp: task.ExecutionTimestamp,
-			ExecutionTxHash:    task.ExecutionTxHash,
-			TaskPerformerID:    task.TaskPerformerID,
-			TaskAttesterIDs:    task.TaskAttesterIDs,
-			IsAccepted:         task.IsAccepted,
-			TaskStatus:         task.TaskStatus,
-			TaskError:          task.TaskError,
-			ConvertedArguments: task.ConvertedArguments,
+			TaskID:                task.TaskID,
+			TaskNumber:            task.TaskNumber,
+			TaskOpXCost:           task.TaskOpXCost,
+			ExecutionTimestamp:    task.ExecutionTimestamp,
+			ExecutionTxHash:       task.ExecutionTxHash,
+			TaskPerformerAddress:  performerAddress,
+			TaskAttesterAddresses: task.TaskAttesterAddress,
+			IsAccepted:            task.IsAccepted,
+			TaskStatus:            task.TaskStatus,
+			TaskError:             task.TaskError,
+			ConvertedArguments:    task.ConvertedArguments,
 		}
 	}
 	return tasks

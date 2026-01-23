@@ -5,7 +5,7 @@ import "time"
 // CustomScriptExecution tracks each execution of a custom script job
 type CustomScriptExecution struct {
 	ExecutionID      string    `json:"execution_id" db:"execution_id"`
-	JobID            *BigInt   `json:"job_id" db:"job_id"`
+	JobID            string    `json:"job_id" db:"job_id"`
 	TaskID           int64     `json:"task_id" db:"task_id"`
 	ScheduledTime    time.Time `json:"scheduled_time" db:"scheduled_time"`
 	ActualTime       time.Time `json:"actual_time" db:"actual_time"`
@@ -45,20 +45,20 @@ type CustomScriptExecution struct {
 
 // ExecutionMetadata contains all API/contract call metadata
 type ExecutionMetadata struct {
-	Timestamp   int64         `json:"timestamp"`
-	Reason      string        `json:"reason"`
-	GasEstimate uint64        `json:"gasEstimate,omitempty"`
-	APICalls    []APICallInfo `json:"apiCalls,omitempty"`
+	Timestamp     int64              `json:"timestamp"`
+	Reason        string             `json:"reason"`
+	GasEstimate   uint64             `json:"gasEstimate,omitempty"`
+	APICalls      []APICallInfo      `json:"apiCalls,omitempty"`
 	ContractCalls []ContractCallInfo `json:"contractCalls,omitempty"`
 }
 
 // APICallInfo records non-deterministic API calls
 type APICallInfo struct {
-	URL          string      `json:"url"`
-	BlockNumber  uint64      `json:"blockNumber,omitempty"` // Block at time of call
-	Response     interface{} `json:"response"`
-	StatusCode   int         `json:"statusCode"`
-	Timestamp    int64       `json:"timestamp"`
+	URL         string      `json:"url"`
+	BlockNumber uint64      `json:"blockNumber,omitempty"` // Block at time of call
+	Response    interface{} `json:"response"`
+	StatusCode  int         `json:"statusCode"`
+	Timestamp   int64       `json:"timestamp"`
 }
 
 // ContractCallInfo records deterministic contract/oracle calls
@@ -72,7 +72,7 @@ type ContractCallInfo struct {
 
 // ScriptStorage stores persistent key-value pairs for scripts
 type ScriptStorage struct {
-	JobID        *BigInt   `json:"job_id" db:"job_id"`
+	JobID        string    `json:"job_id" db:"job_id"`
 	StorageKey   string    `json:"storage_key" db:"storage_key"`
 	StorageValue string    `json:"storage_value" db:"storage_value"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
@@ -89,10 +89,10 @@ type CustomScriptOutput struct {
 
 // CustomScriptOutputMetadata contains execution information
 type CustomScriptOutputMetadata struct {
-	Timestamp     int64             `json:"timestamp"`
-	Reason        string            `json:"reason"`
-	GasEstimate   uint64            `json:"gasEstimate,omitempty"`
-	APICalls      []APICallInfo     `json:"apiCalls,omitempty"`
+	Timestamp     int64              `json:"timestamp"`
+	Reason        string             `json:"reason"`
+	GasEstimate   uint64             `json:"gasEstimate,omitempty"`
+	APICalls      []APICallInfo      `json:"apiCalls,omitempty"`
 	ContractCalls []ContractCallInfo `json:"contractCalls,omitempty"`
 }
 
@@ -112,7 +112,7 @@ type ExecutionProof struct {
 type ScheduleCustomTaskData struct {
 	TaskID           int64     `json:"task_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
-	JobID            *BigInt   `json:"job_id"`
+	JobID            string    `json:"job_id"`
 	CustomScriptUrl  string    `json:"custom_script_url"`
 	ScriptLanguage   string    `json:"script_language"`
 	ScriptHash       string    `json:"script_hash"`
@@ -125,10 +125,10 @@ type ScheduleCustomTaskData struct {
 
 // ExecutionChallenge represents a challenge to an execution
 type ExecutionChallenge struct {
-	ChallengeID      string    `json:"challenge_id" db:"challenge_id"`
-	ExecutionID      string    `json:"execution_id" db:"execution_id"`
-	ChallengerAddress string   `json:"challenger_address" db:"challenger_address"`
-	ChallengeReason  string    `json:"challenge_reason" db:"challenge_reason"`
+	ChallengeID       string `json:"challenge_id" db:"challenge_id"`
+	ExecutionID       string `json:"execution_id" db:"execution_id"`
+	ChallengerAddress string `json:"challenger_address" db:"challenger_address"`
+	ChallengeReason   string `json:"challenge_reason" db:"challenge_reason"`
 
 	// Challenger's claimed output
 	ChallengerOutputHash     string `json:"challenger_output_hash" db:"challenger_output_hash"`
@@ -149,13 +149,13 @@ type ExecutionChallenge struct {
 
 // ValidationRequest is sent to validators for re-execution
 type ValidationRequest struct {
-	ExecutionID     string          `json:"execution_id"`
-	JobID           *BigInt         `json:"job_id"`
-	ScriptHash      string          `json:"script_hash"`
-	ScriptURL       string          `json:"script_url"`
-	InputTimestamp  int64           `json:"input_timestamp"`
-	InputStorage    string          `json:"input_storage"`
-	PerformerOutput PerformerOutput `json:"performer_output"`
+	ExecutionID     string            `json:"execution_id"`
+	JobID           string            `json:"job_id"`
+	ScriptHash      string            `json:"script_hash"`
+	ScriptURL       string            `json:"script_url"`
+	InputTimestamp  int64             `json:"input_timestamp"`
+	InputStorage    string            `json:"input_storage"`
+	PerformerOutput PerformerOutput   `json:"performer_output"`
 	Metadata        ExecutionMetadata `json:"metadata"` // Includes API responses
 }
 

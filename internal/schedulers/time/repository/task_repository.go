@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"math/big"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -17,7 +16,7 @@ type TaskRepository interface {
 	CreateTaskDataInDB(ctx context.Context, task *types.CreateTaskDataRequest) (int64, error)
 
 	// AddTaskIDToJob adds a task ID to the job's task_ids list.
-	AddTaskIDToJob(jobID *big.Int, taskID int64) error
+	AddTaskIDToJob(jobID string, taskID int64) error
 }
 
 type taskRepository struct {
@@ -51,7 +50,7 @@ func (r *taskRepository) CreateTaskDataInDB(ctx context.Context, task *types.Cre
 
 // AddTaskIDToJob adds a task ID to the job's task_ids list.
 // It first retrieves existing task IDs, appends the new one, and updates the job.
-func (r *taskRepository) AddTaskIDToJob(jobID *big.Int, taskID int64) error {
+func (r *taskRepository) AddTaskIDToJob(jobID string, taskID int64) error {
 	var existingTaskIDs []int64
 	err := r.db.Session().Query(getTaskIDsByJobIDQuery, jobID).Scan(&existingTaskIDs)
 	if err != nil {

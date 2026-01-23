@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcclient "github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // GRPCClient handles communication with the Event Monitor Service via gRPC

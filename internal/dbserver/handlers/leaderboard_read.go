@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
@@ -21,11 +21,11 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	switch host {
 	case "app.triggerx.network":
 		trackDBOp = metrics.TrackDBOperation("read", "keeper_leaderboard_app")
-		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboard()
+		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboardByOnImua(false)
 		trackDBOp(err)
 	case "imua.triggerx.network":
 		trackDBOp = metrics.TrackDBOperation("read", "keeper_leaderboard_imua")
-		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboard()
+		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboardByOnImua(true)
 		trackDBOp(err)
 	default:
 		trackDBOp = metrics.TrackDBOperation("read", "keeper_leaderboard_all")

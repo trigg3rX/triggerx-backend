@@ -108,7 +108,38 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 		attribute.String("target.chain_id", task.TargetData[0].TargetChainID),
 		attribute.String("target.contract_address", task.TargetData[0].TargetContractAddress),
 		attribute.String("target.function", task.TargetData[0].TargetFunction),
+		attribute.String("task.network", string(task.Network)),
+		attribute.String("keeper.network", config.GetNetwork()),
 	)
+
+	// Network matching: Check if the task's network matches the keeper's configured network
+	keeperNetwork := config.GetNetwork()
+	if string(task.Network) == "" {
+		span.RecordError(fmt.Errorf("task network is empty"), observability.WithErrorAttributes(
+			attribute.String("error.type", "network_missing"),
+		))
+		span.SetStatus(codes.Error, "task network is required")
+		e.logger.Info(ctx, "Task rejected: network field is required but missing",
+			observability.Int64("task_id", task.TaskID[0]),
+			observability.String("keeper_network", keeperNetwork),
+			observability.String("trace_id", traceID))
+		return false, fmt.Errorf("task network is required but missing (keeper network: %s)", keeperNetwork)
+	}
+	if string(task.Network) != string(keeperNetwork) {
+		// Networks don't match - reject the task
+		span.RecordError(fmt.Errorf("network mismatch: task network %s does not match keeper network %s", string(task.Network), string(keeperNetwork)), observability.WithErrorAttributes(
+			attribute.String("error.type", "network_mismatch"),
+		))
+		span.SetStatus(codes.Error, "network mismatch")
+		e.logger.Info(ctx, "Task rejected due to network mismatch",
+			observability.Int64("task_id", task.TaskID[0]),
+			observability.String("task_network", string(task.Network)),
+			observability.String("keeper_network", string(keeperNetwork)),
+			observability.String("trace_id", traceID))
+		return false, fmt.Errorf("network mismatch: task network %s does not match keeper network %s", string(task.Network), string(keeperNetwork))
+	}
+
+	e.logger.Info(ctx, "[0/7] Network validation passed", observability.Int64("task_id", task.TaskID[0]), observability.String("network", string(task.Network)), observability.String("trace_id", traceID))
 
 	// check if the scheduler signature is valid
 	isManagerSignatureTrue, err := e.validator.ValidateManagerSignature(ctx, task, traceID)
@@ -223,6 +254,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 					TriggerData:      []types.TaskTriggerData{task.TriggerData[idx]},
 					SchedulerID:      task.SchedulerID,
 					ManagerSignature: task.ManagerSignature,
+					Network:          task.Network,
 				},
 				ActionData:         &actionData,
 				ProofData:          &types.ProofData{},
@@ -485,10 +517,19 @@ func (e *TaskExecutor) RebroadcastTask(ctx context.Context, taskID int64) error 
 // reportTaskStatus reports task execution status to taskmonitor (best-effort, doesn't block)
 // This should be called after the aggregator submission attempt (regardless of success or failure)
 func (e *TaskExecutor) reportTaskStatus(ctx context.Context, taskID int64, executionSuccessful, aggregatorSubmitted bool, executionTxHash, proofCID, errorMsg string) {
+	// Preserve span context before goroutine to maintain trace continuity
+	span := trace.SpanFromContext(ctx)
+	spanContext := span.SpanContext()
+
 	// Report status asynchronously to avoid blocking
 	go func() {
 		reportCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+
+		// Re-inject span context to maintain trace continuity across goroutine
+		if spanContext.HasTraceID() {
+			reportCtx = trace.ContextWithSpanContext(reportCtx, spanContext)
+		}
 
 		if err := e.taskMonitorClient.ReportTaskStatus(reportCtx, taskID, executionSuccessful, aggregatorSubmitted, executionTxHash, proofCID, errorMsg); err != nil {
 			e.logger.Debug(ctx, "Failed to report task status to taskmonitor",

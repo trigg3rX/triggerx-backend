@@ -86,14 +86,11 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	}
 
 	taskCount := len(req.SendTaskDataToKeeper.TaskID)
-	isMainnet := req.SendTaskDataToKeeper.TargetData[0].TargetChainID == "42161"
-	isImua := req.SendTaskDataToKeeper.TargetData[0].IsImua
 
 	// Set initial span attributes
 	span.SetAttributes(
 		attribute.Int64("task.id", req.SendTaskDataToKeeper.TaskID[0]),
-		attribute.Bool("task.is_mainnet", isMainnet),
-		attribute.Bool("task.is_imua", isImua),
+		attribute.String("task.network", string(req.SendTaskDataToKeeper.Network)),
 		attribute.Int("task.count", taskCount),
 		attribute.String("scheduler.id", req.SendTaskDataToKeeper.SchedulerID),
 		attribute.String("source", req.Source),
@@ -106,7 +103,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 		observability.String("source", req.Source))
 
 	// Use dynamic performer selection instead of hardcoded selection
-	performer, err := d.healthClient.GetPerformerData(ctx, isImua, isMainnet)
+	performer, err := d.healthClient.GetPerformerData(ctx, req.SendTaskDataToKeeper.Network)
 	if err != nil {
 		span.RecordError(err, observability.WithErrorAttributes(
 			attribute.String("error.type", "performer_selection_failed"),
@@ -163,15 +160,16 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 				TriggerData:      []types.TaskTriggerData{req.SendTaskDataToKeeper.TriggerData[i]},
 				SchedulerID:      req.SendTaskDataToKeeper.SchedulerID,
 				ManagerSignature: req.SendTaskDataToKeeper.ManagerSignature,
+				Network:          req.SendTaskDataToKeeper.Network,
 			}
 
-			taskStreamData := tasks.TaskStreamData{
-				JobID:                individualTaskData.TargetData[0].JobID.ToBigInt(),
+			taskStreamData := types.TaskStreamData{
+				JobID:                individualTaskData.TargetData[0].JobID,
 				TaskDefinitionID:     individualTaskData.TargetData[0].TaskDefinitionID,
 				CreatedAt:            time.Now(),
 				RetryCount:           0,
 				SendTaskDataToKeeper: individualTaskData,
-				IsMainnet:            isMainnet,
+				Network:              individualTaskData.Network,
 			}
 
 			// Add individual task to batch processor
@@ -208,13 +206,13 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 		}
 	} else {
 		// This is a single task request (likely from condition scheduler)
-		taskStreamData := tasks.TaskStreamData{
-			JobID:                req.SendTaskDataToKeeper.TargetData[0].JobID.ToBigInt(),
+		taskStreamData := types.TaskStreamData{
+			JobID:                req.SendTaskDataToKeeper.TargetData[0].JobID,
 			TaskDefinitionID:     req.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
 			CreatedAt:            time.Now(),
 			RetryCount:           0,
 			SendTaskDataToKeeper: req.SendTaskDataToKeeper,
-			IsMainnet:            isMainnet,
+			Network:              req.SendTaskDataToKeeper.Network,
 		}
 
 		// Add task to batch processor for improved performance

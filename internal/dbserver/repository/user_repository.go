@@ -2,30 +2,24 @@ package repository
 
 import (
 	"errors"
-	"math/big"
 	"sort"
 	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type UserRepository interface {
-	CheckUserExists(address string) (int64, error)
-	CreateNewUser(user *types.CreateUserDataRequest) (commonTypes.UserData, error)
-	UpdateUserBalance(user *types.UpdateUserBalanceRequest) error
-	UpdateUserJobIDs(userID int64, jobIDs []*big.Int) error
-	UpdateUserTasksAndPoints(userID int64, tasksCompleted int64, userPoints float64) error
-	GetUserDataByAddress(address string) (int64, commonTypes.UserData, error)
-	GetUserPointsByID(id int64) (float64, error)
-	GetUserPointsByAddress(address string) (float64, error)
-	GetUserJobIDsByAddress(address string) (int64, []*big.Int, error)
+	CreateNewUser(user *types.CreateUserDataRequest) error
+	UpdateUserJobIDs(userAddress string, jobIDs []string) error
+	UpdateUserPoints(userAddress string, userPoints string) error
+	GetUserDataByAddress(address string) (*types.UserDataDTO, error)
+	GetUserPointsByAddress(address string) (string, error)
+	GetUserJobIDsByAddress(address string) ([]string, error)
 	GetUserLeaderboard() ([]types.UserLeaderboardEntry, error)
 	UpdateUserEmail(address string, email string) error
-	GetUserIDByAddress(address string) (int64, error)
 }
 
 type userRepository struct {
@@ -38,55 +32,21 @@ func NewUserRepository(db *database.Connection) UserRepository {
 	}
 }
 
-func (r *userRepository) CheckUserExists(address string) (int64, error) {
-	var userID int64
-	err := r.db.Session().Query(queries.GetUserIDByAddressQuery, address).Scan(&userID)
-	if err == gocql.ErrNotFound {
-		return -1, errors.New("user not found")
-	}
-	if err != nil {
-		return -1, err
-	}
-	return userID, nil
-}
+func (r *userRepository) CreateNewUser(user *types.CreateUserDataRequest) error {
+	now := time.Now()
 
-func (r *userRepository) CreateNewUser(user *types.CreateUserDataRequest) (commonTypes.UserData, error) {
-	var maxUserID int64
-	err := r.db.Session().Query(queries.GetMaxUserIDQuery).Scan(&maxUserID)
-	if err != nil {
-		return commonTypes.UserData{}, err
-	}
-	err = r.db.Session().Query(queries.CreateUserDataQuery, maxUserID+1, user.UserAddress, user.EtherBalance.ToBigInt(), user.TokenBalance.ToBigInt(), user.UserPoints, 0, 0, time.Now()).Exec()
-	if err != nil {
-		return commonTypes.UserData{}, err
-	}
-	return commonTypes.UserData{
-		UserID:       maxUserID + 1,
-		UserAddress:  user.UserAddress,
-		EtherBalance: user.EtherBalance,
-		TokenBalance: user.TokenBalance,
-		UserPoints:   user.UserPoints,
-	}, nil
-}
-
-func (r *userRepository) UpdateUserBalance(user *types.UpdateUserBalanceRequest) error {
-	err := r.db.Session().Query(queries.UpdateUserBalanceQuery, user.EtherBalance.ToBigInt(), user.TokenBalance.ToBigInt(), user.UserID).Exec()
+	err := r.db.Session().Query(queries.CreateUserDataQuery,
+		user.UserAddress, user.EmailID, []string{}, user.UserPoints,
+		0, 0, now, now).Exec()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *userRepository) UpdateUserJobIDs(userID int64, jobIDs []*big.Int) error {
-	err := r.db.Session().Query(queries.UpdateUserJobIDsQuery, jobIDs, len(jobIDs), time.Now(), userID).Exec()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *userRepository) UpdateUserTasksAndPoints(userID int64, tasksCompleted int64, userPoints float64) error {
-	err := r.db.Session().Query(queries.UpdateUserTasksAndPointsQuery, tasksCompleted, userPoints, userID).Exec()
+func (r *userRepository) UpdateUserJobIDs(userAddress string, jobIDs []string) error {
+	err := r.db.Session().Query(queries.UpdateUserJobIDsQuery,
+		jobIDs, len(jobIDs), time.Now(), userAddress).Exec()
 	if err != nil {
 		return err
 	}
@@ -94,82 +54,64 @@ func (r *userRepository) UpdateUserTasksAndPoints(userID int64, tasksCompleted i
 }
 
 func (r *userRepository) UpdateUserEmail(address string, email string) error {
-	var userID int64
-	err := r.db.Session().Query(queries.GetUserIDByAddressQuery, address).Scan(&userID)
-	if err != nil {
-		return err
-	}
-	err = r.db.Session().Query(queries.UpdateUserEmailByIDQuery, email, userID).Exec()
+	err := r.db.Session().Query(queries.UpdateUserEmailByAddressQuery,
+		email, time.Now(), address).Exec()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *userRepository) GetUserDataByAddress(address string) (int64, commonTypes.UserData, error) {
-	var userID int64
-	err := r.db.Session().Query(queries.GetUserIDByAddressQuery, address).Scan(&userID)
-	if err == gocql.ErrNotFound {
-		return -1, commonTypes.UserData{}, gocql.ErrNotFound
-	}
+func (r *userRepository) UpdateUserPoints(userAddress string, userPoints string) error {
+	err := r.db.Session().Query(queries.UpdateUserPointsQuery,
+		userPoints, time.Now(), userAddress).Exec()
 	if err != nil {
-		return -1, commonTypes.UserData{}, err
+		return err
 	}
-	var userData commonTypes.UserData
-	var etherBalance, tokenBalance *big.Int
-	var jobIDs []*big.Int
-	err = r.db.Session().Query(queries.GetUserDataByIDQuery, userID).Scan(
-		&userData.UserID, &userData.UserAddress, &jobIDs, &userData.TotalJobs, &userData.TotalTasks,
-		&etherBalance, &tokenBalance, &userData.UserPoints,
-		&userData.CreatedAt, &userData.LastUpdatedAt)
-	if err != nil {
-		return -1, commonTypes.UserData{}, err
-	}
-	userData.EtherBalance = commonTypes.NewBigInt(etherBalance)
-	userData.TokenBalance = commonTypes.NewBigInt(tokenBalance)
-	// Convert jobIDs from []*big.Int to []*BigInt
-	userData.JobIDs = make([]*commonTypes.BigInt, len(jobIDs))
-	for i, jobID := range jobIDs {
-		userData.JobIDs[i] = commonTypes.NewBigInt(jobID)
-	}
-	return userID, userData, nil
+	return nil
 }
 
-func (r *userRepository) GetUserPointsByID(id int64) (float64, error) {
-	var userPoints float64
-	err := r.db.Session().Query(queries.GetUserPointsByIDQuery, id).Scan(&userPoints)
+func (r *userRepository) GetUserDataByAddress(address string) (*types.UserDataDTO, error) {
+	var entity types.UserDataEntity
+
+	err := r.db.Session().Query(queries.GetUserDataByAddressQuery, address).Scan(
+		&entity.UserAddress, &entity.EmailID, &entity.JobIDs, &entity.UserPoints,
+		&entity.TotalJobs, &entity.TotalTasks, &entity.CreatedAt, &entity.LastUpdatedAt)
+
 	if err == gocql.ErrNotFound {
-		return 0, nil
+		return nil, gocql.ErrNotFound
 	}
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return userPoints, nil
+
+	dto := types.UserDataEntityToDTO(&entity)
+	return dto, nil
 }
 
-func (r *userRepository) GetUserPointsByAddress(address string) (float64, error) {
-	var userPoints float64
+func (r *userRepository) GetUserPointsByAddress(address string) (string, error) {
+	var userPoints string
 	err := r.db.Session().Query(queries.GetUserPointsByAddressQuery, address).Scan(&userPoints)
 	if err == gocql.ErrNotFound {
-		return 0, errors.New("user address not found")
+		return "0", nil
 	}
 	if err != nil {
-		return 0, err
+		return "0", err
 	}
 	return userPoints, nil
 }
 
-func (r *userRepository) GetUserJobIDsByAddress(address string) (int64, []*big.Int, error) {
-	var userID int64
-	var jobIDs []*big.Int
-	err := r.db.Session().Query(queries.GetUserJobIDsByAddressQuery, address).Scan(&userID, &jobIDs)
+func (r *userRepository) GetUserJobIDsByAddress(address string) ([]string, error) {
+	var jobIDs []string
+	err := r.db.Session().Query(queries.GetUserJobIDsByAddressQuery, address).Scan(&jobIDs)
 	if err == gocql.ErrNotFound {
-		return -1, nil, errors.New("user address not found")
+		return nil, errors.New("user address not found")
 	}
 	if err != nil {
-		return -1, nil, err
+		return nil, err
 	}
-	return userID, jobIDs, nil
+
+	return jobIDs, nil
 }
 
 func (r *userRepository) GetUserLeaderboard() ([]types.UserLeaderboardEntry, error) {
@@ -177,14 +119,16 @@ func (r *userRepository) GetUserLeaderboard() ([]types.UserLeaderboardEntry, err
 
 	var leaderboard []types.UserLeaderboardEntry
 	var userEntry types.UserLeaderboardEntry
+	var userPoints string
 
 	for iter.Scan(
-		&userEntry.UserID,
 		&userEntry.UserAddress,
 		&userEntry.TotalJobs,
 		&userEntry.TotalTasks,
-		&userEntry.UserPoints,
+		&userPoints,
 	) {
+		// Convert userPoints from string to float64 for leaderboard
+		userEntry.UserPoints = userPoints
 		leaderboard = append(leaderboard, userEntry)
 	}
 
@@ -192,7 +136,7 @@ func (r *userRepository) GetUserLeaderboard() ([]types.UserLeaderboardEntry, err
 		return nil, err
 	}
 
-	// Sort leaderboard by UserPoints (desc), TotalJobs (desc), TotalTasks (desc), UserID (asc)
+	// Sort leaderboard by UserPoints (desc), TotalJobs (desc), TotalTasks (desc), UserAddress (asc)
 	sort.Slice(leaderboard, func(i, j int) bool {
 		// First compare UserPoints
 		if leaderboard[i].UserPoints != leaderboard[j].UserPoints {
@@ -206,20 +150,8 @@ func (r *userRepository) GetUserLeaderboard() ([]types.UserLeaderboardEntry, err
 		if leaderboard[i].TotalTasks != leaderboard[j].TotalTasks {
 			return leaderboard[i].TotalTasks > leaderboard[j].TotalTasks
 		}
-		// If all else equal, sort by UserID ascending
-		return leaderboard[i].UserID < leaderboard[j].UserID
+		// If all else equal, sort by UserAddress ascending
+		return leaderboard[i].UserAddress < leaderboard[j].UserAddress
 	})
 	return leaderboard, nil
-}
-
-func (r *userRepository) GetUserIDByAddress(address string) (int64, error) {
-	var userID int64
-	err := r.db.Session().Query(queries.GetUserIDByAddressQuery, address).Scan(&userID)
-	if err == gocql.ErrNotFound {
-		return -1, errors.New("user address not found")
-	}
-	if err != nil {
-		return -1, err
-	}
-	return userID, nil
 }

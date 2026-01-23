@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -10,7 +9,7 @@ import (
 // ScriptStorageRepository defines the interface for script storage operations.
 type ScriptStorageRepository interface {
 	// GetStorageByJobID retrieves all storage key-value pairs for a job.
-	GetStorageByJobID(jobID *big.Int) (map[string]string, error)
+	GetStorageByJobID(jobID string) (map[string]string, error)
 }
 
 type scriptStorageRepository struct {
@@ -25,7 +24,7 @@ func NewScriptStorageRepository(db *database.Connection) ScriptStorageRepository
 }
 
 // GetStorageByJobID retrieves all storage key-value pairs for a job.
-func (r *scriptStorageRepository) GetStorageByJobID(jobID *big.Int) (map[string]string, error) {
+func (r *scriptStorageRepository) GetStorageByJobID(jobID string) (map[string]string, error) {
 	iter := r.db.Session().Query(getStorageByJobIDQuery, jobID).Iter()
 
 	storage := make(map[string]string)

@@ -3,8 +3,10 @@ package validation
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
@@ -69,6 +71,18 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, data string, traceID s
 
 		v.logger.Info(ctx, "Continuing trace from IPFS data", observability.String("trace_id", traceID))
 	}
+
+	// Network matching: Check if the task's network matches the keeper's configured network
+	if string(ipfsData.TaskData.Network) != string(config.GetNetwork()) {
+		v.logger.Info(ctx, "Task validation rejected due to network mismatch",
+			observability.Int64("task_id", ipfsData.TaskData.TaskID[0]),
+			observability.String("task_network", string(ipfsData.TaskData.Network)),
+			observability.String("keeper_network", string(config.GetNetwork())),
+			observability.String("trace_id", traceID))
+		return false, fmt.Errorf("network mismatch: task network %s does not match keeper network %s", string(ipfsData.TaskData.Network), string(config.GetNetwork()))
+	}
+
+	v.logger.Info(ctx, "[0/5] Network validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("network", string(ipfsData.TaskData.Network)), observability.String("trace_id", traceID))
 
 	// check if the scheduler signature is valid
 	isManagerSignatureTrue, err := v.ValidateManagerSignature(ctx, ipfsData.TaskData, traceID)

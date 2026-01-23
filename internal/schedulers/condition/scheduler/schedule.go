@@ -3,14 +3,12 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	eventmonitorTypes "github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
@@ -29,7 +27,7 @@ func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *type
 		observability.WithAttributes(
 			attribute.String("scheduler.id", s.schedulerID),
 			attribute.String("scheduler.type", "condition"),
-			attribute.String("job.id", jobData.JobID.String()),
+			attribute.String("job.id", jobData.JobID),
 			attribute.Int("task_definition_id", jobData.TaskDefinitionID),
 			attribute.String("trace.name", traceName),
 		),
@@ -44,12 +42,12 @@ func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *type
 	startTime := time.Now()
 
 	switch jobData.TaskDefinitionID {
-	case 3, 4: // Event-based jobs
+	case types.TaskDefEventBasedStatic, types.TaskDefEventBasedDynamic, types.TaskDefEventBasedAgent: // Event-based jobs (3, 4, 8)
 		if err := s.scheduleEventJob(ctx, jobData, startTime); err != nil {
 			return err
 		}
 
-	case 5, 6: // Condition-based jobs
+	case types.TaskDefConditionBasedStatic, types.TaskDefConditionBasedDynamic, types.TaskDefConditionBasedAgent: // Condition-based jobs (5, 6, 9)
 		if err := s.scheduleConditionJob(ctx, jobData, startTime); err != nil {
 			return err
 		}
@@ -61,10 +59,10 @@ func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *type
 	// Update metrics
 	metrics.TrackJobScheduled()
 	metrics.UpdateActiveWorkers(len(s.conditionWorkers))
-	metrics.TrackWorkerStart(fmt.Sprintf("%d", jobData.JobID))
+	metrics.TrackWorkerStart(jobData.JobID)
 
 	scheduleSpan.AddEvent("schedule.completed", observability.WithEventAttributes(
-		attribute.String("job_id", jobData.JobID.String()),
+		attribute.String("job_id", jobData.JobID),
 	))
 	scheduleSpan.SetAttributes(
 		attribute.Int("active_workers", len(s.conditionWorkers)),
@@ -78,7 +76,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 	// Check if job is already scheduled
 	if _, exists := s.conditionWorkers[jobData.JobID]; exists {
 		metrics.TrackCriticalError("duplicate_job_schedule")
-		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
+		return fmt.Errorf("job %s is already scheduled", jobData.JobID)
 	}
 	// WebSocket jobs: check and schedule
 	if jobData.ConditionWorkerData.ValueSourceType == worker.SourceTypeWebSocket {
@@ -88,11 +86,11 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 			return fmt.Errorf("failed to create websocket worker: %w", err)
 		}
 		s.conditionWorkers[jobData.JobID] = nil // Or: s.websocketWorkers[jobData.JobID] = websocketWorker (if struct field added)
-		s.jobDataStore[jobData.JobID.String()] = jobData
+		s.jobDataStore[jobData.JobID] = jobData
 		go websocketWorker.Start(ctx)
 		duration := time.Since(startTime)
 		s.logger.Debug(ctx, "WebSocket job monitoring started",
-			observability.String("job_id", jobData.JobID.String()),
+			observability.String("job_id", jobData.JobID),
 			observability.String("condition_type", jobData.ConditionWorkerData.ConditionType),
 			observability.String("value_source", jobData.ConditionWorkerData.ValueSourceUrl),
 			observability.Int("active_workers", len(s.conditionWorkers)),
@@ -122,7 +120,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 
 	// Store worker and job data separately for Redis integration
 	s.conditionWorkers[jobData.JobID] = conditionWorker
-	s.jobDataStore[jobData.JobID.String()] = jobData
+	s.jobDataStore[jobData.JobID] = jobData
 
 	// Start worker
 	go conditionWorker.Start(ctx)
@@ -134,7 +132,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 	metrics.TrackConditionBySource(jobData.ConditionWorkerData.ValueSourceType)
 
 	s.logger.Debug(ctx, "Condition job monitoring started",
-		observability.String("job_id", jobData.JobID.String()),
+		observability.String("job_id", jobData.JobID),
 		observability.String("condition_type", jobData.ConditionWorkerData.ConditionType),
 		observability.String("value_source", jobData.ConditionWorkerData.ValueSourceUrl),
 		observability.Float64("upper_limit", jobData.ConditionWorkerData.UpperLimit),
@@ -150,10 +148,10 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 // scheduleEventJob handles event-based job scheduling using Event Monitor Service
 func (s *ConditionBasedScheduler) scheduleEventJob(ctx context.Context, jobData *types.ScheduleConditionJobData, startTime time.Time) error {
 	// Check if job is already scheduled (check jobDataStore instead of eventWorkers)
-	jobIDStr := jobData.JobID.String()
+	jobIDStr := jobData.JobID
 	if _, exists := s.jobDataStore[jobIDStr]; exists {
 		metrics.TrackCriticalError("duplicate_job_schedule")
-		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
+		return fmt.Errorf("job %s is already scheduled", jobData.JobID)
 	}
 
 	// Validate contract address
@@ -163,7 +161,7 @@ func (s *ConditionBasedScheduler) scheduleEventJob(ctx context.Context, jobData 
 	}
 
 	// Register with Event Monitor Service
-	monitoringRequest := &eventmonitorTypes.MonitoringRequest{
+	monitoringRequest := &types.MonitoringRequest{
 		RequestID:    jobIDStr,
 		ChainID:      jobData.EventWorkerData.TriggerChainID,
 		ContractAddr: jobData.EventWorkerData.TriggerContractAddress,
@@ -243,71 +241,68 @@ func (s *ConditionBasedScheduler) createWebSocketWorker(conditionWorkerData *typ
 }
 
 // cleanupJobData removes job data from the scheduler's store when a worker stops
-func (s *ConditionBasedScheduler) cleanupJobData(ctx context.Context, jobID *big.Int) error {
+func (s *ConditionBasedScheduler) cleanupJobData(ctx context.Context, jobID string) error {
 	s.notificationMutex.Lock()
 	defer s.notificationMutex.Unlock()
 
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
-	jobIDStr := jobID.String()
 	// Remove job data from store
-	delete(s.jobDataStore, jobIDStr)
+	delete(s.jobDataStore, jobID)
 	// Clean up last trigger time tracking
-	delete(s.lastTriggerTime, jobIDStr)
+	delete(s.lastTriggerTime, jobID)
 
-	s.logger.Debug(ctx, "Cleaned up job data from store", observability.String("job_id", jobIDStr))
+	s.logger.Debug(ctx, "Cleaned up job data from store", observability.String("job_id", jobID))
 	return nil
 }
 
 // GetJobData retrieves job data by job ID (thread-safe)
-func (s *ConditionBasedScheduler) GetJobData(jobID *big.Int) (*types.ScheduleConditionJobData, error) {
+func (s *ConditionBasedScheduler) GetJobData(jobID string) (*types.ScheduleConditionJobData, error) {
 	s.workersMutex.RLock()
 	defer s.workersMutex.RUnlock()
 
-	jobData, exists := s.jobDataStore[jobID.String()]
+	jobData, exists := s.jobDataStore[jobID]
 	if !exists || jobData == nil {
-		return nil, fmt.Errorf("job data not found for job %d", jobID)
+		return nil, fmt.Errorf("job data not found for job %s", jobID)
 	}
 
 	return jobData, nil
 }
 
 // UnregisterEventJob unregisters an event job from Event Monitor Service
-func (s *ConditionBasedScheduler) UnregisterEventJob(ctx context.Context, jobID *big.Int) error {
+func (s *ConditionBasedScheduler) UnregisterEventJob(ctx context.Context, jobID string) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
-	jobIDStr := jobID.String()
-
 	// Check if job exists in jobDataStore
-	jobData, exists := s.jobDataStore[jobIDStr]
+	jobData, exists := s.jobDataStore[jobID]
 	if !exists || jobData == nil {
-		return fmt.Errorf("job %d is not found", jobID)
+		return fmt.Errorf("job %s is not found", jobID)
 	}
 
-	// Verify this is an event job (task definition ID 3 or 4)
-	if jobData.TaskDefinitionID != 3 && jobData.TaskDefinitionID != 4 {
-		return fmt.Errorf("job %d is not an event job", jobID)
+	// Verify this is an event job (task definition ID 3, 4, or 8)
+	if jobData.TaskDefinitionID != types.TaskDefEventBasedStatic && jobData.TaskDefinitionID != types.TaskDefEventBasedDynamic && jobData.TaskDefinitionID != types.TaskDefEventBasedAgent {
+		return fmt.Errorf("job %s is not an event job", jobID)
 	}
 
 	// Unregister from Event Monitor Service
 	if s.eventMonitorClient != nil {
-		if err := s.eventMonitorClient.Unregister(ctx, jobIDStr); err != nil {
+		if err := s.eventMonitorClient.Unregister(ctx, jobID); err != nil {
 			return fmt.Errorf("failed to unregister from Event Monitor Service: %w", err)
 		}
-		s.logger.Debug(ctx, "Unregistered event job from Event Monitor Service", observability.String("job_id", jobIDStr))
+		s.logger.Debug(ctx, "Unregistered event job from Event Monitor Service", observability.String("job_id", jobID))
 	}
 
 	// Clean up job data
-	delete(s.jobDataStore, jobIDStr)
-	delete(s.lastTriggerTime, jobIDStr)
+	delete(s.jobDataStore, jobID)
+	delete(s.lastTriggerTime, jobID)
 
 	return nil
 }
 
 // UnscheduleJob stops and removes a condition worker
-func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.Int) error {
+func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID string) error {
 	// Create trace with format "condition-{scheduler_id}-{timestamp}"
 	traceName := fmt.Sprintf("condition-%s-%d", s.schedulerID, time.Now().Unix())
 
@@ -317,7 +312,7 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 		observability.WithAttributes(
 			attribute.String("scheduler.id", s.schedulerID),
 			attribute.String("scheduler.type", "condition"),
-			attribute.String("job.id", jobID.String()),
+			attribute.String("job.id", jobID),
 			attribute.String("trace.name", traceName),
 		),
 	)
@@ -331,35 +326,30 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
-	jobIDStr := jobID.String()
-
 	// Get job data to determine job type
-	jobData, exists := s.jobDataStore[jobIDStr]
+	jobData, exists := s.jobDataStore[jobID]
 	if !exists || jobData == nil {
 		metrics.TrackCriticalError("job_not_found")
-		return fmt.Errorf("job %d is not scheduled", jobID)
+		return fmt.Errorf("job %s is not scheduled", jobID)
 	}
-
-	// Get the original JobID pointer from jobDataStore to match the map keys
-	originalJobID := jobData.JobID
 
 	// Determine job type and handle accordingly
 	switch jobData.TaskDefinitionID {
-	case 3, 4:
+	case types.TaskDefEventBasedStatic, types.TaskDefEventBasedDynamic, types.TaskDefEventBasedAgent:
 		// Event-based job: unregister from Event Monitor Service
 		if s.eventMonitorClient != nil {
-			if err := s.eventMonitorClient.Unregister(ctx, jobIDStr); err != nil {
+			if err := s.eventMonitorClient.Unregister(ctx, jobID); err != nil {
 				s.logger.Warn(ctx, "Failed to unregister from Event Monitor Service",
-					observability.String("job_id", jobIDStr),
+					observability.String("job_id", jobID),
 					observability.Error(err))
 				// Continue with cleanup even if unregister fails
 			}
 		}
-		delete(s.jobDataStore, jobIDStr)    // Clean up job data
-		delete(s.lastTriggerTime, jobIDStr) // Clean up last trigger time tracking
-	case 5, 6:
+		delete(s.jobDataStore, jobID)    // Clean up job data
+		delete(s.lastTriggerTime, jobID) // Clean up last trigger time tracking
+	case types.TaskDefConditionBasedStatic, types.TaskDefConditionBasedDynamic, types.TaskDefConditionBasedAgent:
 		// Condition-based job: stop the worker
-		if conditionWorker, exists := s.conditionWorkers[originalJobID]; exists {
+		if conditionWorker, exists := s.conditionWorkers[jobID]; exists {
 			// Handle websocket workers (stored as nil) - they stop via context cancellation
 			// For regular condition workers, call Stop explicitly
 			if conditionWorker != nil {
@@ -369,15 +359,15 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 				// Since websocket workers use context derived from s.ctx, we can't cancel individually
 				// The worker will stop when it checks ctx.Done() in its loop
 				// We rely on the job data cleanup to prevent new triggers
-				s.logger.Debug(ctx, "WebSocket worker will stop via context check", observability.String("job_id", jobIDStr))
+				s.logger.Debug(ctx, "WebSocket worker will stop via context check", observability.String("job_id", jobID))
 			}
-			delete(s.conditionWorkers, originalJobID)
+			delete(s.conditionWorkers, jobID)
 		}
-		delete(s.jobDataStore, jobIDStr)    // Clean up job data
-		delete(s.lastTriggerTime, jobIDStr) // Clean up last trigger time tracking
+		delete(s.jobDataStore, jobID)    // Clean up job data
+		delete(s.lastTriggerTime, jobID) // Clean up last trigger time tracking
 	default:
 		metrics.TrackCriticalError("job_not_found")
-		return fmt.Errorf("job %d has unsupported task definition id: %d", jobID, jobData.TaskDefinitionID)
+		return fmt.Errorf("job %s has unsupported task definition id: %d", jobID, jobData.TaskDefinitionID)
 	}
 
 	// Update active workers count (only condition workers now)
@@ -387,9 +377,9 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 	metrics.TrackJobCompleted("unscheduled")
 
 	unscheduleSpan.AddEvent("unschedule.completed", observability.WithEventAttributes(
-		attribute.String("job_id", jobID.String()),
+		attribute.String("job_id", jobID),
 	))
 
-	s.logger.Info(ctx, "Job unscheduled successfully", observability.String("job_id", jobID.String()))
+	s.logger.Info(ctx, "Job unscheduled successfully", observability.String("job_id", jobID))
 	return nil
 }

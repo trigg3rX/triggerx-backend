@@ -36,7 +36,7 @@ func (w *WebSocketWorker) Start(ctx context.Context) {
 	w.IsActive = true
 	w.Mutex.Unlock()
 
-	w.Logger.Info(ctx, "Starting WebSocket worker", observability.String("url", w.WebSocketConfig.URL), observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+	w.Logger.Info(ctx, "Starting WebSocket worker", observability.String("url", w.WebSocketConfig.URL), observability.String("job_id", w.ConditionWorkerData.JobID))
 	conn, _, err := websocket.DefaultDialer.Dial(w.WebSocketConfig.URL, nil)
 	if err != nil {
 		w.Logger.Error(ctx, "Failed to dial websocket", observability.Error(err), observability.String("url", w.WebSocketConfig.URL))
@@ -51,7 +51,7 @@ func (w *WebSocketWorker) Start(ctx context.Context) {
 	for {
 		select {
 		case <-w.Ctx.Done():
-			w.Logger.Info(ctx, "WebSocket worker context canceled, stopping", observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+			w.Logger.Info(ctx, "WebSocket worker context canceled, stopping", observability.String("job_id", w.ConditionWorkerData.JobID))
 			return
 		default:
 			_, message, err := conn.ReadMessage()
@@ -68,28 +68,28 @@ func (w *WebSocketWorker) Start(ctx context.Context) {
 
 // handleWebSocketMessage processes incoming messages and triggers callback if an event is detected.
 func (w *WebSocketWorker) handleWebSocketMessage(ctx context.Context, message []byte) {
-	w.Logger.Info(ctx, "WebSocket message received", observability.String("message", string(message)), observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+	w.Logger.Info(ctx, "WebSocket message received", observability.String("message", string(message)), observability.String("job_id", w.ConditionWorkerData.JobID))
 
 	// Try numeric condition-style evaluation as in monitor_condition
 	value, extractedErr := w.extractNumericValueFromMessage(message)
 	if extractedErr != nil {
-		w.Logger.Warn(ctx, "Could not extract numeric value from message", observability.Error(extractedErr), observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+		w.Logger.Warn(ctx, "Could not extract numeric value from message", observability.Error(extractedErr), observability.String("job_id", w.ConditionWorkerData.JobID))
 		return
 	}
 
 	satisfied, evalErr := w.evaluateCondition(value)
 	if evalErr != nil {
-		w.Logger.Error(ctx, "Failed to evaluate websocket condition", observability.Error(evalErr), observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+		w.Logger.Error(ctx, "Failed to evaluate websocket condition", observability.Error(evalErr), observability.String("job_id", w.ConditionWorkerData.JobID))
 		return
 	}
 
 	if !satisfied {
-		w.Logger.Debug(ctx, "WebSocket condition not satisfied", observability.String("job_id", w.ConditionWorkerData.JobID.String()), observability.Float64("current_value", value), observability.String("condition_type", w.ConditionWorkerData.ConditionType))
+		w.Logger.Debug(ctx, "WebSocket condition not satisfied", observability.String("job_id", w.ConditionWorkerData.JobID), observability.Float64("current_value", value), observability.String("condition_type", w.ConditionWorkerData.ConditionType))
 		return
 	}
 
 	notification := &TriggerNotification{
-		JobID:        w.ConditionWorkerData.JobID.ToBigInt(),
+		JobID:        w.ConditionWorkerData.JobID,
 		TriggerValue: value,
 		TriggeredAt:  time.Now(),
 	}
@@ -97,14 +97,14 @@ func (w *WebSocketWorker) handleWebSocketMessage(ctx context.Context, message []
 		if err := w.TriggerCallback(ctx, notification); err != nil {
 			w.Logger.Error(ctx, "Failed to notify scheduler from WebSocket", observability.Error(err))
 		} else {
-			w.Logger.Info(ctx, "WebSocket condition satisfied and scheduler notified", observability.String("job_id", w.ConditionWorkerData.JobID.String()), observability.Float64("trigger_value", value))
+			w.Logger.Info(ctx, "WebSocket condition satisfied and scheduler notified", observability.String("job_id", w.ConditionWorkerData.JobID), observability.Float64("trigger_value", value))
 		}
 	} else {
-		w.Logger.Warn(ctx, "No trigger callback for WebSocket worker", observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+		w.Logger.Warn(ctx, "No trigger callback for WebSocket worker", observability.String("job_id", w.ConditionWorkerData.JobID))
 	}
 
 	if !w.ConditionWorkerData.Recurring {
-		w.Logger.Info(ctx, "Non-recurring websocket job triggered, stopping worker", observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+		w.Logger.Info(ctx, "Non-recurring websocket job triggered, stopping worker", observability.String("job_id", w.ConditionWorkerData.JobID))
 		go w.Stop(ctx)
 	}
 }
@@ -117,9 +117,9 @@ func (w *WebSocketWorker) Stop(ctx context.Context) {
 		w.Cancel()
 		w.IsActive = false
 		if w.CleanupCallback != nil {
-			_ = w.CleanupCallback(ctx, w.ConditionWorkerData.JobID.ToBigInt())
+			_ = w.CleanupCallback(ctx, w.ConditionWorkerData.JobID)
 		}
-		w.Logger.Info(ctx, "WebSocket worker stopped", observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+		w.Logger.Info(ctx, "WebSocket worker stopped", observability.String("job_id", w.ConditionWorkerData.JobID))
 	}
 }
 

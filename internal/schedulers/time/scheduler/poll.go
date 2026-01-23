@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -52,37 +51,44 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 		return
 	}
 
-	// Get custom jobs (TaskDefinitionID = 7) if repository is available
-	if s.customJobRepository != nil {
-		customJobs, err := s.customJobRepository.GetCustomJobsDueForExecution(lookAheadTime)
-		if err != nil {
-			s.logger.Warn(ctx, "Error retrieving custom jobs", observability.Error(err))
-			// Don't fail, just log and continue with time jobs only
-		} else {
-			// Convert custom jobs to ScheduleTimeTaskData format
-			for _, customJob := range customJobs {
-				taskData := s.convertCustomJobToScheduleTimeTaskData(ctx, &customJob)
-				tasks = append(tasks, taskData)
+	// Fetch script storage for agent jobs (TDI 7)
+	for i := range tasks {
+		if tasks[i].TaskDefinitionID == types.TaskDefTimeBasedAgent {
+			if s.scriptStorageRepository != nil {
+				storage, err := s.scriptStorageRepository.GetStorageByJobID(tasks[i].TaskTargetData.JobID)
+				if err != nil {
+					s.logger.Warn(ctx, "Failed to get storage for agent job",
+						observability.String("job_id", tasks[i].TaskTargetData.JobID),
+						observability.Error(err))
+					tasks[i].TaskTargetData.ScriptStorage = make(map[string]string) // Continue with empty storage
+				} else {
+					tasks[i].TaskTargetData.ScriptStorage = storage
+				}
+			} else {
+				tasks[i].TaskTargetData.ScriptStorage = make(map[string]string)
 			}
 		}
 	}
 
 	// Filter out expired jobs BEFORE creating task records
 	// This prevents creating tasks for jobs that have already expired
+	// When ExpirationTime is reached, set is_active to false
 	currentTime := time.Now()
 	var validTasks []types.ScheduleTimeTaskData
 	expiredCount := 0
 
 	for _, task := range tasks {
-		if task.ExpirationTime.Before(currentTime) {
-			// Mark job as inactive asynchronously (don't block on this)
-			go func(jobID *big.Int) {
-				if err := s.timeJobRepository.UpdateTimeJobStatus(jobID, false); err != nil {
-					s.logger.Warn(ctx, "Failed to mark expired job as inactive",
-						observability.String("job_id", jobID.String()),
-						observability.Error(err))
-				}
-			}(task.TaskTargetData.JobID.Int)
+		if task.ExpirationTime.Before(currentTime) || task.ExpirationTime.Equal(currentTime) {
+			// Mark job as inactive synchronously when expiration time is reached
+			if err := s.timeJobRepository.UpdateTimeJobStatus(task.TaskTargetData.JobID, false); err != nil {
+				s.logger.Warn(ctx, "Failed to mark expired job as inactive",
+					observability.String("job_id", task.TaskTargetData.JobID),
+					observability.Error(err))
+			} else {
+				s.logger.Info(ctx, "Time job marked as inactive due to expiration",
+					observability.String("job_id", task.TaskTargetData.JobID),
+					observability.Time("expiration_time", task.ExpirationTime))
+			}
 
 			expiredCount++
 			metrics.TrackTaskExpired()
@@ -97,7 +103,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 	// Create task data for each task and add task IDs to jobs
 	for i := range tasks {
 		taskID, err := s.taskRepository.CreateTaskDataInDB(ctx, &types.CreateTaskDataRequest{
-			JobID:            tasks[i].TaskTargetData.JobID.Int,
+			JobID:            tasks[i].TaskTargetData.JobID,
 			TaskDefinitionID: tasks[i].TaskDefinitionID,
 			IsImua:           tasks[i].IsImua,
 		})
@@ -106,7 +112,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 			continue
 		}
 
-		err = s.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID.Int, taskID)
+		err = s.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID, taskID)
 		if err != nil {
 			s.logger.Error(ctx, "Error adding task ID to job", observability.Error(err))
 			continue
@@ -117,6 +123,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 
 	pollSpan.SetAttributes(
 		attribute.Int("poll.tasks_found", len(tasks)),
+		attribute.Int("poll.expired_count", expiredCount),
 	)
 	pollSpan.AddEvent("poll.completed", observability.WithEventAttributes(
 		attribute.Int("task_count", len(tasks)),

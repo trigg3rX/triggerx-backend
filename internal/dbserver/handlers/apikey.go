@@ -8,9 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // MaskApiKey masks the API key except for the first 4 and last 4 characters
@@ -38,13 +37,15 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		req.RateLimit = 60
 	}
 
-	apiKey := commonTypes.ApiKey{
+	apiKey := types.ApiKeyDataEntity{
 		Key:       "TGRX-" + uuid.New().String(),
 		Owner:     req.Owner,
 		IsActive:  true,
 		RateLimit: req.RateLimit,
-		LastUsed:  time.Now().UTC(),
-		CreatedAt: time.Now().UTC(),
+		SuccessCount: 0,
+		FailedCount: 0,
+		LastUsed:     time.Now().UTC(),
+		CreatedAt:    time.Now().UTC(),
 	}
 
 	trackDBOp := metrics.TrackDBOperation("create", "apikey_data")

@@ -2,7 +2,6 @@ package repository
 
 import (
 	"errors"
-	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -11,12 +10,12 @@ import (
 // EventJobRepository defines the interface for event-based job operations
 type EventJobRepository interface {
 	GetActiveEventJobs() ([]ActiveEventJob, error)
-	UpdateEventJobStatus(jobID *big.Int, isActive bool) error
+	UpdateEventJobStatus(jobID string, isActive bool) error
 }
 
 // ActiveEventJob represents an event job with minimal fields needed for expiration checking
 type ActiveEventJob struct {
-	JobID          *big.Int
+	JobID          string
 	ExpirationTime time.Time
 }
 
@@ -37,10 +36,8 @@ func (r *eventJobRepository) GetActiveEventJobs() ([]ActiveEventJob, error) {
 
 	var eventJobs []ActiveEventJob
 	var job ActiveEventJob
-	var jobIDBigInt *big.Int
 
-	for iter.Scan(&jobIDBigInt, &job.ExpirationTime) {
-		job.JobID = jobIDBigInt
+	for iter.Scan(&job.JobID, &job.ExpirationTime) {
 		eventJobs = append(eventJobs, job)
 	}
 
@@ -52,7 +49,7 @@ func (r *eventJobRepository) GetActiveEventJobs() ([]ActiveEventJob, error) {
 }
 
 // UpdateEventJobStatus updates the active status of an event job
-func (r *eventJobRepository) UpdateEventJobStatus(jobID *big.Int, isActive bool) error {
+func (r *eventJobRepository) UpdateEventJobStatus(jobID string, isActive bool) error {
 	err := r.db.Session().Query(updateEventJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update event job status")

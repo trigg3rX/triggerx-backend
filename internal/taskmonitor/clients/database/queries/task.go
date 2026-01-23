@@ -2,31 +2,31 @@ package queries
 
 const (
 	// Getters
-	GetKeeperIDByAddress = `
-        SELECT keeper_id 
+	GetKeeperAddressByConsensusAddress = `
+        SELECT keeper_address 
         FROM triggerx.keeper_data 
-        WHERE keeper_address = ? 
+        WHERE consensus_address = ? 
         ALLOW FILTERING`
 	GetConsensusAddressByKeeperAddress = `
         SELECT consensus_address 
         FROM triggerx.keeper_data 
         WHERE keeper_address = ? 
         ALLOW FILTERING`
-	GetKeeperIDByConsensusAddress = `
-        SELECT keeper_id 
+	GetKeeperAddressByOperatorID = `
+        SELECT keeper_address 
         FROM triggerx.keeper_data 
-        WHERE consensus_address = ? 
+        WHERE operator_id = ? 
         ALLOW FILTERING`
 	GetTaskCostAndJobId = `
         SELECT task_opx_predicted_cost, job_id 
         FROM triggerx.task_data 
         WHERE task_id = ?`
-	GetUserIdByJobId = `
-        SELECT user_id 
+	GetUserAddressByJobId = `
+        SELECT user_address 
         FROM triggerx.job_data 
         WHERE job_id = ?`
 	GetAttesterPointsAndNoOfTasks = `
-        SELECT keeper_id,
+        SELECT keeper_address,
             keeper_points, 
             rewards_booster,
             no_attested_tasks
@@ -38,20 +38,20 @@ const (
             rewards_booster,
             no_executed_tasks
         FROM triggerx.keeper_data 
-        WHERE keeper_id = ?`
+        WHERE keeper_address = ?`
 	GetUserPoints = `
         SELECT user_points, total_tasks 
         FROM triggerx.user_data 
-        WHERE user_id = ?`
+        WHERE user_address = ?`
 	GetJobCostActual = `
         SELECT job_cost_actual 
         FROM triggerx.job_data 
         WHERE job_id = ?`
 	// New getters for notification/email lookup
-	GetUserEmailByUserID = `
+	GetUserEmailByUserAddress = `
         SELECT email_id 
         FROM triggerx.user_data 
-        WHERE user_id = ?`
+        WHERE user_address = ?`
 	GetTaskStatusByID = `
         SELECT task_status
         FROM triggerx.task_data
@@ -64,12 +64,12 @@ const (
             is_accepted = ?, 
             is_successful = true,
             task_status = 'completed',
-            task_submission_tx_hash = ?, 
-            task_performer_id = ?, 
-            task_attester_ids = ?, 
+            submission_tx_hash = ?, 
+            task_performer_address = ?, 
+            task_attester_address = ?, 
             execution_tx_hash = ?,
-            execution_timestamp = ?,
-            task_opx_cost = ?,
+            executed_at = ?,
+            task_opx_actual_cost = ?,
             proof_of_task = ?,
             converted_arguments = ?
         WHERE task_id = ?`
@@ -108,16 +108,16 @@ const (
         UPDATE triggerx.keeper_data 
         SET keeper_points = ?,
             no_attested_tasks = ?
-        WHERE keeper_id = ?`
+        WHERE keeper_address = ?`
 	UpdatePerformerPointsAndNoOfTasks = `
         UPDATE triggerx.keeper_data 
         SET keeper_points = ?,
             no_executed_tasks = ?
-        WHERE keeper_id = ?`
+        WHERE keeper_address = ?`
 	UpdateUserPoints = `
         UPDATE triggerx.user_data 
         SET user_points = ?, total_tasks = ?, last_updated_at = ?
-        WHERE user_id = ?`
+        WHERE user_address = ?`
 	UpdateJobCostActual = `
         UPDATE triggerx.job_data
         SET job_cost_actual = ?

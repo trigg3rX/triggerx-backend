@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+
 	// "fmt"
 	"io"
 	"net/http"
@@ -11,8 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type Validator struct {

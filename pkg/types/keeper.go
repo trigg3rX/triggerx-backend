@@ -1,28 +1,8 @@
 package types
 
 import (
-	"math/big"
 	"time"
 )
-
-// KeeperHealthCheckIn represents the health check-in data from a keeper
-type KeeperHealthCheckIn struct {
-	KeeperAddress    string    `json:"keeper_address" validate:"required,eth_addr"`
-	ConsensusPubKey  string    `json:"consensus_pub_key" validate:"required"`
-	ConsensusAddress string    `json:"consensus_address" validate:"required,eth_addr"`
-	Version          string    `json:"version" validate:"required"`
-	Timestamp        time.Time `json:"timestamp" validate:"required"`
-	Signature        string    `json:"signature" validate:"required"`
-	PeerID           string    `json:"peer_id" validate:"required"`
-	IsImua           bool      `json:"is_imua" validate:"required"`
-	Network          string    `json:"network" validate:"required,oneof=mainnet imua sepolia"`
-}
-
-// KeeperHealthCheckInResponse represents the response from the health check-in endpoint
-type KeeperHealthCheckInResponse struct {
-	Status bool   `json:"status"`
-	Data   string `json:"data"`
-}
 
 // Data from performer's action execution
 type PerformerActionData struct {
@@ -39,7 +19,7 @@ type PerformerActionData struct {
 	BlockWrite    uint64  `json:"block_write"`
 	BandwidthRate float64 `json:"bandwidth_rate"`
 
-	TotalFee           *big.Int      `json:"total_fee"`
+	TotalFee           string        `json:"total_fee"` // Total fee in Wei (as string to handle large values)
 	StaticComplexity   float64       `json:"static_complexity"`
 	DynamicComplexity  float64       `json:"dynamic_complexity"`
 	ComplexityIndex    float64       `json:"complexity_index"`

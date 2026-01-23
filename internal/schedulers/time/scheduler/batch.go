@@ -11,6 +11,25 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// getNetworkFromChainID converts a chain ID to KeeperNetwork
+// Mainnet chains: 1 (Ethereum), 10 (Optimism), 8453 (Base), 42161 (Arbitrum)
+// Testnet chains: 11155111 (Ethereum Sepolia), 11155420 (Optimism Sepolia), 84532 (Base Sepolia), 421614 (Arbitrum Sepolia)
+func getNetworkFromChainID(chainID string) types.KeeperNetwork {
+	switch chainID {
+	// Mainnet chains
+	case "1", "10", "8453", "42161":
+		return types.NetworkMainnet
+	// Testnet chains
+	case "11155111", "11155420", "84532", "421614":
+		return types.NetworkSepolia
+	case "imua":
+		return types.NetworkImua
+	default:
+		// Default to sepolia for unknown chains
+		return types.NetworkSepolia
+	}
+}
+
 // processBatch processes a batch of tasks by submitting them to the task dispatcher.
 // It filters out expired tasks, builds the task data structures, and submits
 // the batch via RPC to the task dispatcher service.
@@ -27,7 +46,7 @@ func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.Sch
 		if task.ExpirationTime.Before(time.Now()) {
 			s.logger.Warn(ctx, "Task has expired (unexpected - should have been filtered earlier), skipping execution",
 				observability.Int64("task_id", task.TaskID),
-				observability.String("job_id", task.TaskTargetData.JobID.String()),
+				observability.String("job_id", task.TaskTargetData.JobID),
 				observability.Time("expiration_time", task.ExpirationTime))
 			metrics.TrackTaskExpired()
 			continue
@@ -73,6 +92,16 @@ func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.Sch
 		return
 	}
 
+	// Determine network from the first task's target chain ID
+	// All tasks in a batch should have the same network
+	var network types.KeeperNetwork
+	if len(targetDataList) > 0 {
+		network = getNetworkFromChainID(targetDataList[0].TargetChainID)
+	} else {
+		// Default to sepolia if no target data
+		network = types.NetworkSepolia
+	}
+
 	// Create the batch task data
 	sendTaskData := types.SendTaskDataToKeeper{
 		TaskID:           validTaskIDs,
@@ -80,6 +109,7 @@ func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.Sch
 		TriggerData:      triggerDataList,
 		SchedulerID:      s.schedulerID,
 		ManagerSignature: "",
+		Network:          network,
 	}
 
 	// Create request for task dispatcher

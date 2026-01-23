@@ -2,11 +2,13 @@ package queries
 
 // Create Queries
 const (
+	GetMaxJobIDQuery = `SELECT MAX(job_id) FROM triggerx.job_data`
+
 	CreateJobDataQuery = `
 			INSERT INTO triggerx.job_data (
-				job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
-				custom, time_frame, recurring, status, job_cost_prediction,
-				created_at, updated_at, timezone, is_imua, created_chain_id, safe_address
+				job_id, job_title, task_definition_id, created_chain_id, user_address, link_job_id, chain_status,
+				safe_address, timezone, is_imua, job_type, time_frame, recurring, status, job_cost_prediction,
+				created_at, updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	// 17 values to be inserted, so 17 ?s
 )
@@ -33,9 +35,9 @@ const (
 // Read Queries
 const (
 	GetJobDataByJobIDQuery = `
-			SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
-				custom, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-				task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id, safe_address
+			SELECT job_id, job_title, task_definition_id, created_chain_id, user_address, link_job_id, chain_status,
+				safe_address, timezone, is_imua, job_type, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
+				task_ids, created_at, updated_at, last_executed_at
 			FROM triggerx.job_data 
 			WHERE job_id = ?`
 
@@ -48,17 +50,17 @@ const (
 			WHERE job_id = ?`
 
 	// New query: get jobs for a user and a specific created_chain_id
-	GetJobsByUserIDAndChainIDQuery = `
-			SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
-				custom, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-				task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id, safe_address
+	GetJobsByUserAddressAndChainIDQuery = `
+			SELECT job_id, job_title, task_definition_id, created_chain_id, user_address, link_job_id, chain_status,
+				safe_address, timezone, is_imua, job_type, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
+				task_ids, created_at, updated_at, last_executed_at
 			FROM triggerx.job_data
-			WHERE user_id = ? AND created_chain_id = ? ALLOW FILTERING`
+			WHERE user_address = ? AND created_chain_id = ? ALLOW FILTERING`
 )
 
 const GetJobsBySafeAddressQuery = `
-	SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
-		custom, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-		task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id, safe_address
+	SELECT job_id, job_title, task_definition_id, created_chain_id, user_address, link_job_id, chain_status,
+		safe_address, timezone, is_imua, job_type, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
+		task_ids, created_at, updated_at, last_executed_at
 	FROM triggerx.job_data
 	WHERE safe_address = ? ALLOW FILTERING`

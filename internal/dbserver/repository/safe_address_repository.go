@@ -6,12 +6,12 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type SafeAddressRepository interface {
 	CreateSafeAddress(userAddress string, safeAddress string, safeName string) error
-	GetSafeAddressesByUser(userAddress string) ([]commonTypes.SafeAddress, error)
+	GetSafeAddressesByUser(userAddress string) ([]types.SafeAddressDataDTO, error)
 	CheckSafeAddressExists(userAddress string, safeAddress string) (bool, error)
 }
 
@@ -34,12 +34,12 @@ func (r *safeAddressRepository) CreateSafeAddress(userAddress string, safeAddres
 	return nil
 }
 
-func (r *safeAddressRepository) GetSafeAddressesByUser(userAddress string) ([]commonTypes.SafeAddress, error) {
+func (r *safeAddressRepository) GetSafeAddressesByUser(userAddress string) ([]types.SafeAddressDataDTO, error) {
 	session := r.db.Session()
 	iter := session.Query(queries.GetSafeAddressesByUserQuery, userAddress).Iter()
 
-	var safeAddresses []commonTypes.SafeAddress
-	var safeAddress commonTypes.SafeAddress
+	var safeAddresses []types.SafeAddressDataDTO
+	var safeAddress types.SafeAddressDataDTO
 	for iter.Scan(&safeAddress.SafeAddress, &safeAddress.SafeName, &safeAddress.CreatedAt) {
 		safeAddresses = append(safeAddresses, safeAddress)
 	}

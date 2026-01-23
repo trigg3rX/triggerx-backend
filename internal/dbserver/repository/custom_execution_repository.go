@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"math/big"
-
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -12,7 +10,7 @@ import (
 type CustomExecutionRepository interface {
 	CreateExecution(exec *types.CustomScriptExecution) error
 	GetExecutionByID(executionID string) (*types.CustomScriptExecution, error)
-	GetExecutionsByJobID(jobID *big.Int) ([]types.CustomScriptExecution, error)
+	GetExecutionsByJobID(jobID string) ([]types.CustomScriptExecution, error)
 	GetExecutionsByTaskID(taskID int64) ([]types.CustomScriptExecution, error)
 	UpdateExecutionTxHash(executionID string, txHash string, status string) error
 	UpdateVerificationStatus(executionID string, status string) error
@@ -33,7 +31,7 @@ func NewCustomExecutionRepository(db *database.Connection) CustomExecutionReposi
 func (r *customExecutionRepository) CreateExecution(exec *types.CustomScriptExecution) error {
 	return r.db.Session().Query(queries.CreateExecutionRecordQuery,
 		exec.ExecutionID,
-		exec.JobID.ToBigInt(),
+		exec.JobID,
 		exec.TaskID,
 		exec.ScheduledTime,
 		exec.ActualTime,
@@ -96,7 +94,7 @@ func (r *customExecutionRepository) GetExecutionByID(executionID string) (*types
 	return &exec, nil
 }
 
-func (r *customExecutionRepository) GetExecutionsByJobID(jobID *big.Int) ([]types.CustomScriptExecution, error) {
+func (r *customExecutionRepository) GetExecutionsByJobID(jobID string) ([]types.CustomScriptExecution, error) {
 	iter := r.db.Session().Query(queries.GetExecutionsByJobIDQuery, jobID).Iter()
 
 	var executions []types.CustomScriptExecution

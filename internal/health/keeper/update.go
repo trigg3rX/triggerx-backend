@@ -20,7 +20,7 @@ var (
 )
 
 // UpdateKeeperHealth updates the health status of a keeper
-func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth types.KeeperHealthCheckIn) error {
+func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth types.KeeperHealthCheckInRequest) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -40,7 +40,6 @@ func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth typ
 	existingState.PeerID = keeperHealth.PeerID
 	existingState.LastCheckedIn = now
 	existingState.IsActive = true
-	existingState.IsImua = keeperHealth.IsImua
 	existingState.Network = keeperHealth.Network
 
 	// Update database
@@ -58,7 +57,7 @@ func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth typ
 	return nil
 }
 
-func (sm *StateManager) updateKeeperStatusInDatabase(ctx context.Context, keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+func (sm *StateManager) updateKeeperStatusInDatabase(ctx context.Context, keeperHealth types.KeeperHealthCheckInRequest, isActive bool) error {
 	// Start a span for the database update operation
 	ctx, span := sm.tracer.Start(ctx, "state_manager.update_keeper_status",
 		observability.WithSpanKind(trace.SpanKindInternal),

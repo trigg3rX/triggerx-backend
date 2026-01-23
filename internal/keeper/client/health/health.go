@@ -132,7 +132,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 	}
 
 	// Prepare health check payload
-	payload := types.KeeperHealthCheckIn{
+	payload := types.KeeperHealthCheckInRequest{
 		KeeperAddress:    c.config.KeeperAddress,
 		ConsensusPubKey:  consensusPubKey,
 		ConsensusAddress: consensusAddress,
@@ -191,7 +191,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 }
 
 // sendHealthCheck sends the health check request to the health service
-func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealthCheckIn) (types.KeeperHealthCheckInResponse, error) {
+func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealthCheckInRequest) (types.KeeperHealthCheckInResponse, error) {
 	// Start a span for the HTTP request
 	var span observability.Span
 	if c.tracer != nil {

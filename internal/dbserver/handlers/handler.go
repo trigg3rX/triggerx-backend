@@ -30,8 +30,7 @@ type Handler struct {
 	timeJobRepository        repository.TimeJobRepository
 	eventJobRepository       repository.EventJobRepository
 	conditionJobRepository   repository.ConditionJobRepository
-	customJobRepository      repository.CustomJobRepository     // TaskDefinitionID = 7
-	scriptStorageRepository  repository.ScriptStorageRepository // Storage for custom jobs
+	scriptStorageRepository  repository.ScriptStorageRepository // Storage for agent jobs
 	taskRepository           repository.TaskRepository
 	userRepository           repository.UserRepository
 	keeperRepository         repository.KeeperRepository
@@ -58,8 +57,7 @@ func NewHandler(db *database.Connection, logger observability.Logger, tracer obs
 		timeJobRepository:        repository.NewTimeJobRepository(db),
 		eventJobRepository:       repository.NewEventJobRepository(db),
 		conditionJobRepository:   repository.NewConditionJobRepository(db),
-		customJobRepository:      repository.NewCustomJobRepository(db),     // Phase 1: Custom jobs
-		scriptStorageRepository:  repository.NewScriptStorageRepository(db), // Phase 1: Storage
+		scriptStorageRepository:  repository.NewScriptStorageRepository(db), // Storage for agent jobs
 		taskRepository:           repository.NewTaskRepository(db),
 		userRepository:           repository.NewUserRepository(db),
 		keeperRepository:         repository.NewKeeperRepository(db),

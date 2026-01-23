@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcclient "github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // NotificationClient is an interface for sending event notifications

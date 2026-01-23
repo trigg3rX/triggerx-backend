@@ -55,7 +55,7 @@ else
 end
 `
 
-func (rl *RateLimiter) ApplyGinRateLimit(c *gin.Context, apiKey *types.ApiKey) error {
+func (rl *RateLimiter) ApplyGinRateLimit(c *gin.Context, apiKey *types.ApiKeyDataDTO) error {
 	key := fmt.Sprintf("rate_limit:%s", apiKey.Key)
 	window := 60 // 1 minute window
 	limit := apiKey.RateLimit
@@ -88,7 +88,7 @@ func (rl *RateLimiter) ApplyGinRateLimit(c *gin.Context, apiKey *types.ApiKey) e
 	return nil
 }
 
-func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*http.Response, error) {
+func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKeyDataDTO) (*http.Response, error) {
 	ctx := r.Context()
 	rateLimitKey := fmt.Sprintf("rate-limit:%s", apiKey.Key)
 	windowSeconds := 60
@@ -146,7 +146,7 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 	return nil, nil
 }
 
-func (rl *RateLimiter) GetRateLimitStatus(ctx context.Context, apiKey *types.ApiKey) (*RateLimitInfo, error) {
+func (rl *RateLimiter) GetRateLimitStatus(ctx context.Context, apiKey *types.ApiKeyDataDTO) (*RateLimitInfo, error) {
 	rateLimitKey := fmt.Sprintf("rate-limit:%s", apiKey.Key)
 	currentTimestamp := time.Now().UTC().Unix()
 
@@ -169,7 +169,7 @@ func (rl *RateLimiter) GetRateLimitStatus(ctx context.Context, apiKey *types.Api
 }
 
 // CheckRateLimitForKey checks rate limit for a given API key without using gin.Context
-func (rl *RateLimiter) CheckRateLimitForKey(apiKey *types.ApiKey) error {
+func (rl *RateLimiter) CheckRateLimitForKey(apiKey *types.ApiKeyDataDTO) error {
 	key := fmt.Sprintf("rate_limit:%s", apiKey.Key)
 	window := 60 // 1 minute window
 	limit := apiKey.RateLimit

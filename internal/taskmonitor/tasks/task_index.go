@@ -10,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 const (
@@ -153,12 +154,12 @@ func (tim *TaskIndexManager) RemoveTaskIndex(ctx context.Context, taskID int64) 
 }
 
 // FindTaskByID efficiently finds a task by its ID using the index (searches dispatched stream by default)
-func (tim *TaskIndexManager) FindTaskByID(ctx context.Context, taskID int64) (*TaskStreamData, string, error) {
-	return tim.FindTaskByIDInStream(ctx, taskID, StreamTaskDispatched)
+func (tim *TaskIndexManager) FindTaskByID(ctx context.Context, taskID int64) (*types.TaskStreamData, string, error) {
+	return tim.FindTaskByIDInStream(ctx, taskID, types.StreamTaskDispatched)
 }
 
 // FindTaskByIDInStream efficiently finds a task by its ID in a specific stream
-func (tim *TaskIndexManager) FindTaskByIDInStream(ctx context.Context, taskID int64, stream string) (*TaskStreamData, string, error) {
+func (tim *TaskIndexManager) FindTaskByIDInStream(ctx context.Context, taskID int64, stream string) (*types.TaskStreamData, string, error) {
 	start := time.Now()
 
 	// First, get the messageID from the index
@@ -201,7 +202,7 @@ func (tim *TaskIndexManager) FindTaskByIDInStream(ctx context.Context, taskID in
 }
 
 // getTaskByMessageID retrieves a specific task by its messageID using XRANGE from a specific stream
-func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID string, stream string) (*TaskStreamData, error) {
+func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID string, stream string) (*types.TaskStreamData, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
 	defer cancel()
@@ -229,7 +230,7 @@ func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID s
 		return nil, fmt.Errorf("message %s missing task data", messageID)
 	}
 
-	var task TaskStreamData
+	var task types.TaskStreamData
 	if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
 		tim.tsm.logger.Error(ctx, "Failed to unmarshal task data",
 			observability.String("message_id", messageID),

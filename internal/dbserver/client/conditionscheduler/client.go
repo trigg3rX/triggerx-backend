@@ -50,15 +50,15 @@ func (c *Client) ScheduleJob(ctx context.Context, jobData *types.ScheduleConditi
 	}
 
 	c.logger.Info(ctx, "Job scheduled successfully via gRPC",
-		observability.String("job_id", jobData.JobID.String()))
+		observability.String("job_id", jobData.JobID))
 
 	return nil
 }
 
 // UnscheduleJob unschedules a job via gRPC
-func (c *Client) UnscheduleJob(ctx context.Context, jobID *types.BigInt) error {
+func (c *Client) UnscheduleJob(ctx context.Context, jobID string) error {
 	req := map[string]interface{}{
-		"job_id": jobID.String(),
+		"job_id": jobID,
 	}
 
 	var response map[string]interface{}
@@ -76,7 +76,7 @@ func (c *Client) UnscheduleJob(ctx context.Context, jobID *types.BigInt) error {
 	}
 
 	c.logger.Info(ctx, "Job unscheduled successfully via gRPC",
-		observability.String("job_id", jobID.String()))
+		observability.String("job_id", jobID))
 
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TaskStreamManager struct {
@@ -53,10 +54,10 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 
 	// Initialize task streams with specific expiration rules
 	streamConfigs := map[string]time.Duration{
-		StreamTaskDispatched: TasksProcessingTTL,
-		StreamTaskCompleted:  TasksCompletedTTL,
-		StreamTaskFailed:     TasksFailedTTL,
-		StreamTaskRetry:      TasksRetryTTL,
+		types.StreamTaskDispatched: types.TasksProcessingTTL,
+		types.StreamTaskCompleted:  types.TasksCompletedTTL,
+		types.StreamTaskFailed:     types.TasksFailedTTL,
+		types.StreamTaskRetry:      types.TasksRetryTTL,
 	}
 
 	for stream, ttl := range streamConfigs {
@@ -72,22 +73,22 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 	}
 
 	// Register consumer groups for task processing
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskDispatched, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task completion
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskCompleted, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskCompleted, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task failure
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskFailed, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskFailed, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task retry
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskRetry, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskRetry, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
@@ -135,7 +136,7 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 	defer cancel()
 
 	streamLengths := make(map[string]int64)
-	streams := []string{StreamTaskDispatched, StreamTaskRetry, StreamTaskCompleted, StreamTaskFailed}
+	streams := []string{types.StreamTaskDispatched, types.StreamTaskRetry, types.StreamTaskCompleted, types.StreamTaskFailed}
 
 	for _, stream := range streams {
 		length, err := tsm.client.XLen(ctx, stream)
@@ -149,19 +150,19 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 
 		// Update stream length metrics
 		switch stream {
-		case StreamTaskDispatched:
+		case types.StreamTaskDispatched:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("dispatched").Set(ctx, float64(length))
 			}
-		case StreamTaskRetry:
+		case types.StreamTaskRetry:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("retry").Set(ctx, float64(length))
 			}
-		case StreamTaskCompleted:
+		case types.StreamTaskCompleted:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("completed").Set(ctx, float64(length))
 			}
-		case StreamTaskFailed:
+		case types.StreamTaskFailed:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("failed").Set(ctx, float64(length))
 			}
@@ -171,12 +172,12 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 	info := map[string]interface{}{
 		"available":            tsm.client != nil,
 		"max_length":           10000, // Default value, can be made configurable
-		"tasks_processing_ttl": TasksProcessingTTL.String(),
-		"tasks_completed_ttl":  TasksCompletedTTL.String(),
-		"tasks_failed_ttl":     TasksFailedTTL.String(),
-		"tasks_retry_ttl":      TasksRetryTTL.String(),
+		"tasks_processing_ttl": types.TasksProcessingTTL.String(),
+		"tasks_completed_ttl":  types.TasksCompletedTTL.String(),
+		"tasks_failed_ttl":     types.TasksFailedTTL.String(),
+		"tasks_retry_ttl":      types.TasksRetryTTL.String(),
 		"stream_lengths":       streamLengths,
-		"max_retries":          MaxRetryAttempts,
+		"max_retries":          types.MaxRetryAttempts,
 		"consumer_groups":      len(tsm.consumerGroups),
 	}
 
@@ -237,7 +238,7 @@ func (tsm *TaskStreamManager) addTaskToTimeoutTracking(ctx context.Context, task
 	start := time.Now()
 
 	// Calculate timeout timestamp (1 hour from now)
-	timeoutTimestamp := float64(time.Now().Add(TasksProcessingTTL).Unix())
+	timeoutTimestamp := float64(time.Now().Add(types.TasksProcessingTTL).Unix())
 	taskIDStr := strconv.FormatInt(taskID, 10)
 
 	// Add to sorted set with timeout timestamp as score
@@ -296,7 +297,7 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 			// Log warnings for high stream length
 			if taskLengths, ok := taskInfo["stream_lengths"].(map[string]int64); ok {
 				for stream, length := range taskLengths {
-					if length > 50 && stream != StreamTaskFailed { // Warn if more than 50 tasks in any stream, ignore the StreamTaskFailed stream
+					if length > 50 && stream != types.StreamTaskFailed { // Warn if more than 50 tasks in any stream, ignore the StreamTaskFailed stream
 						tsm.logger.Warn(ctx, "High task stream length detected",
 							observability.String("stream", stream),
 							observability.Int64("length", length))

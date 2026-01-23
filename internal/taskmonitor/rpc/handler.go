@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // DatabaseClientInterface defines the interface for database operations needed by the handler

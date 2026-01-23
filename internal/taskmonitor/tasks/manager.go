@@ -13,6 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TaskStreamManager struct {
@@ -67,11 +68,11 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 
 	// Initialize task streams with specific expiration rules
 	streamConfigs := map[string]time.Duration{
-		StreamTaskDispatched: TasksProcessingTTL,
-		StreamTaskExecuted:   TasksExecutedTTL,
-		StreamTaskValidated:  TasksValidatedTTL,
-		StreamTaskFailed:     TasksFailedTTL,
-		StreamTaskRetry:      TasksRetryTTL,
+		types.StreamTaskDispatched: types.TasksProcessingTTL,
+		types.StreamTaskExecuted:   types.TasksExecutedTTL,
+		types.StreamTaskValidated:  types.TasksValidatedTTL,
+		types.StreamTaskFailed:     types.TasksFailedTTL,
+		types.StreamTaskRetry:      types.TasksRetryTTL,
 	}
 
 	for stream, ttl := range streamConfigs {
@@ -87,42 +88,42 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 	}
 
 	// Register consumer groups for task processing
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskDispatched, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for executed tasks (pending validation)
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskExecuted, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskExecuted, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group for executed stream: %w", err)
 	}
 
 	// Register consumer groups for validated tasks
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskValidated, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskValidated, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group for validated stream: %w", err)
 	}
 
 	// Register consumer groups for task failure
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskFailed, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskFailed, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task retry
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskRetry, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskRetry, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for timeout checking on executed stream
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskExecuted, "timeout-checker"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskExecuted, "timeout-checker"); err != nil {
 		return fmt.Errorf("failed to register timeout-checker group: %w", err)
 	}
 
 	// Register consumer groups for task finding
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "task-finder"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskDispatched, "task-finder"); err != nil {
 		return fmt.Errorf("failed to register task-finder group: %w", err)
 	}
 
 	// Register consumer groups for task finding in executed stream
-	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskExecuted, "task-finder"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, types.StreamTaskExecuted, "task-finder"); err != nil {
 		return fmt.Errorf("failed to register task-finder group for executed stream: %w", err)
 	}
 
@@ -170,7 +171,7 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 	defer cancel()
 
 	streamLengths := make(map[string]int64)
-	streams := []string{StreamTaskDispatched, StreamTaskExecuted, StreamTaskValidated, StreamTaskRetry, StreamTaskFailed}
+	streams := []string{types.StreamTaskDispatched, types.StreamTaskExecuted, types.StreamTaskValidated, types.StreamTaskRetry, types.StreamTaskFailed}
 
 	for _, stream := range streams {
 		length, err := tsm.redisClient.XLen(ctx, stream)
@@ -184,15 +185,15 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 
 		// Update stream length metrics
 		switch stream {
-		case StreamTaskDispatched:
+		case types.StreamTaskDispatched:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("ready").Set(ctx, float64(length))
 			}
-		case StreamTaskRetry:
+		case types.StreamTaskRetry:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("retry").Set(ctx, float64(length))
 			}
-		case StreamTaskFailed:
+		case types.StreamTaskFailed:
 			if metrics.TaskStreamLengths != nil {
 				metrics.TaskStreamLengths.WithLabelValues("failed").Set(ctx, float64(length))
 			}
@@ -202,12 +203,12 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 	info := map[string]interface{}{
 		"available":            tsm.redisClient != nil,
 		"max_length":           10000, // Default value, can be made configurable
-		"tasks_processing_ttl": TasksProcessingTTL.String(),
-		"tasks_completed_ttl":  TasksCompletedTTL.String(),
-		"tasks_failed_ttl":     TasksFailedTTL.String(),
-		"tasks_retry_ttl":      TasksRetryTTL.String(),
+		"tasks_processing_ttl": types.TasksProcessingTTL.String(),
+		"tasks_completed_ttl":  types.TasksCompletedTTL.String(),
+		"tasks_failed_ttl":     types.TasksFailedTTL.String(),
+		"tasks_retry_ttl":      types.TasksRetryTTL.String(),
 		"stream_lengths":       streamLengths,
-		"max_retries":          MaxRetryAttempts,
+		"max_retries":          types.MaxRetryAttempts,
 		"consumer_groups":      len(tsm.consumerGroups),
 	}
 
@@ -239,7 +240,7 @@ func (tsm *TaskStreamManager) GetPendingEntriesInfo(ctx context.Context) map[str
 	consumerGroups := []string{"task-processors", "timeout-checker", "task-finder"}
 
 	for _, group := range consumerGroups {
-		pending, err := tsm.redisClient.XPending(ctx, StreamTaskDispatched, group)
+		pending, err := tsm.redisClient.XPending(ctx, types.StreamTaskDispatched, group)
 		if err != nil {
 			tsm.logger.Warn(ctx, "Failed to get pending entries info",
 				observability.String("consumer_group", group),
@@ -278,7 +279,7 @@ func (tsm *TaskStreamManager) CleanupPendingEntries(ctx context.Context) error {
 	for _, group := range consumerGroups {
 		// Get pending entries for this group
 		pendingExt, err := tsm.redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
-			Stream: StreamTaskDispatched,
+			Stream: types.StreamTaskDispatched,
 			Group:  group,
 			Start:  "-",
 			End:    "+",
@@ -295,7 +296,7 @@ func (tsm *TaskStreamManager) CleanupPendingEntries(ctx context.Context) error {
 		for _, entry := range pendingExt {
 			// If the entry is older than 1 hour, acknowledge it to prevent PEL growth
 			if entry.Idle > time.Hour {
-				err := tsm.redisClient.XAck(ctx, StreamTaskDispatched, group, entry.ID)
+				err := tsm.redisClient.XAck(ctx, types.StreamTaskDispatched, group, entry.ID)
 				if err != nil {
 					tsm.logger.Error(ctx, "Failed to acknowledge old pending entry",
 						observability.String("consumer_group", group),
@@ -329,7 +330,7 @@ func (tsm *TaskStreamManager) CleanupPendingEntries(ctx context.Context) error {
 }
 
 // FindTaskInDispatched finds a specific task in the dispatched stream
-func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*TaskStreamData, error) {
+func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*types.TaskStreamData, error) {
 	ctx := context.Background()
 	task, _, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
 	if err != nil {
@@ -339,7 +340,7 @@ func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*TaskStreamDat
 }
 
 // FindTaskByIDInStream finds a task by ID in a specific stream
-func (tsm *TaskStreamManager) FindTaskByIDInStream(ctx context.Context, taskID int64, stream string) (*TaskStreamData, string, error) {
+func (tsm *TaskStreamManager) FindTaskByIDInStream(ctx context.Context, taskID int64, stream string) (*types.TaskStreamData, string, error) {
 	return tsm.taskIndex.FindTaskByIDInStream(ctx, taskID, stream)
 }
 
@@ -354,7 +355,7 @@ func (tsm *TaskStreamManager) RemoveExecutedTaskTimeout(ctx context.Context, tas
 }
 
 // AddTaskToStream adds a task to a specific stream
-func (tsm *TaskStreamManager) AddTaskToStream(ctx context.Context, stream string, task *TaskStreamData) error {
+func (tsm *TaskStreamManager) AddTaskToStream(ctx context.Context, stream string, task *types.TaskStreamData) error {
 	return tsm.addTaskToStream(ctx, stream, task)
 }
 
@@ -442,9 +443,9 @@ func (tsm *TaskStreamManager) TrimStreams(ctx context.Context) error {
 
 	// Define streams and their max lengths
 	streamConfigs := map[string]int64{
-		StreamTaskDispatched: 10000, // Keep max 10000 messages in dispatched stream
-		StreamTaskFailed:     5000,  // Keep max 5000 messages in failed stream
-		StreamTaskRetry:      5000,  // Keep max 5000 messages in retry stream
+		types.StreamTaskDispatched: 10000, // Keep max 10000 messages in dispatched stream
+		types.StreamTaskFailed:     5000,  // Keep max 5000 messages in failed stream
+		types.StreamTaskRetry:      5000,  // Keep max 5000 messages in retry stream
 	}
 
 	totalTrimmed := int64(0)

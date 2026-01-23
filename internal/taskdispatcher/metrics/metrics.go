@@ -1,7 +1,11 @@
 package metrics
 
 import (
+	"context"
+	"time"
+
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 var (
@@ -45,6 +49,10 @@ var (
 	redisRetryAttempts        *observability.CounterVec
 	redisConnectionRecoveries *observability.CounterVec
 	redisConnectionHealth     *observability.GaugeVec
+
+	// HTTP Dispatch to Keepers
+	tasksDispatchedToKeeperTotal *observability.CounterVec
+	keeperDispatchDuration       *observability.HistogramVec
 )
 
 // Export variables for use in other packages
@@ -67,6 +75,8 @@ var (
 	TaskReadyToProcessingTotal      = taskReadyToProcessingTotal
 	TaskProcessingToCompletedTotal  = taskProcessingToCompletedTotal
 	TaskLifecycleTransitionDuration = taskLifecycleTransitionDuration
+	TasksDispatchedToKeeperTotal    = tasksDispatchedToKeeperTotal
+	KeeperDispatchDuration          = keeperDispatchDuration
 )
 
 // InitializeMetrics initializes all metrics using the observability metrics instance
@@ -263,6 +273,22 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		observability.WithDescription("Redis connection health status"),
 	)
 
+	// HTTP Dispatch to Keepers
+	tasksDispatchedToKeeperTotal = observability.NewCounterVec(
+		obsMetrics,
+		"triggerx.taskdispatcher.tasks_dispatched_to_keeper_total",
+		[]string{"status", "network"},
+		observability.WithDescription("Total tasks dispatched to keepers via HTTP"),
+	)
+
+	keeperDispatchDuration = observability.NewHistogramVec(
+		obsMetrics,
+		"triggerx.taskdispatcher.keeper_dispatch_duration_seconds",
+		[]string{"status", "network"},
+		observability.WithDescription("HTTP dispatch latency to keepers"),
+		observability.WithUnit("s"),
+	)
+
 	// Update exported variables
 	ServiceStatus = serviceStatus
 	IsRedisUpstashAvailable = isRedisUpstashAvailable
@@ -282,4 +308,21 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 	TaskReadyToProcessingTotal = taskReadyToProcessingTotal
 	TaskProcessingToCompletedTotal = taskProcessingToCompletedTotal
 	TaskLifecycleTransitionDuration = taskLifecycleTransitionDuration
+	TasksDispatchedToKeeperTotal = tasksDispatchedToKeeperTotal
+	KeeperDispatchDuration = keeperDispatchDuration
+}
+
+// TrackKeeperDispatch tracks a task dispatch to keeper
+func TrackKeeperDispatch(ctx context.Context, success bool, network types.KeeperNetwork, duration time.Duration) {
+	status := "success"
+	if !success {
+		status = "error"
+	}
+
+	if TasksDispatchedToKeeperTotal != nil {
+		TasksDispatchedToKeeperTotal.WithLabelValues(status, string(network)).Inc(ctx)
+	}
+	if KeeperDispatchDuration != nil {
+		KeeperDispatchDuration.WithLabelValues(status, string(network)).Record(ctx, duration.Seconds())
+	}
 }

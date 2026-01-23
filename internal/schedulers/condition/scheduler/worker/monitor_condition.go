@@ -62,7 +62,7 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 	metrics.TrackConditionEvaluation(evaluationDuration)
 
 	// Track condition check with success status
-	chainID := fmt.Sprintf("%d", w.ConditionWorkerData.JobID) // Using job_id as chain identifier for consistency
+	chainID := w.ConditionWorkerData.JobID // Using job_id as chain identifier for consistency
 	metrics.TrackConditionCheck(chainID, evaluationDuration, satisfied)
 
 	if satisfied {
@@ -73,7 +73,7 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 		conditionContext["consecutive_checks"] = w.ConditionMet
 
 		w.Logger.Debug(ctx, "Condition satisfied",
-			observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+			observability.String("job_id", w.ConditionWorkerData.JobID),
 			observability.Float64("current_value", currentValue),
 			observability.String("condition_type", w.ConditionWorkerData.ConditionType),
 			observability.Float64("upper_limit", w.ConditionWorkerData.UpperLimit),
@@ -85,7 +85,7 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 		ctx, triggerSpan := w.Tracer.Start(ctx, "task.trigger.condition",
 			observability.WithSpanKind(trace.SpanKindProducer),
 			observability.WithAttributes(
-				attribute.String("job.id", w.ConditionWorkerData.JobID.String()),
+				attribute.String("job.id", w.ConditionWorkerData.JobID),
 				attribute.String("condition.type", w.ConditionWorkerData.ConditionType),
 				attribute.Float64("trigger.value", currentValue),
 				attribute.Float64("condition.upper_limit", w.ConditionWorkerData.UpperLimit),
@@ -101,7 +101,7 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 		// Notify scheduler about the trigger
 		if w.TriggerCallback != nil {
 			notification := &TriggerNotification{
-				JobID:        w.ConditionWorkerData.JobID.ToBigInt(),
+				JobID:        w.ConditionWorkerData.JobID,
 				TriggerValue: currentValue,
 				TriggeredAt:  time.Now(),
 			}
@@ -113,26 +113,26 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 				))
 				triggerSpan.SetStatus(codes.Error, "failed to notify scheduler")
 				w.Logger.Error(ctx, "Failed to notify scheduler about trigger",
-					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+					observability.String("job_id", w.ConditionWorkerData.JobID),
 					observability.Error(err),
 				)
 				metrics.TrackCriticalError("trigger_notification_failed")
 			} else {
 				triggerSpan.AddEvent("notification.sent")
 				w.Logger.Debug(ctx, "Successfully notified scheduler about trigger",
-					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+					observability.String("job_id", w.ConditionWorkerData.JobID),
 					observability.Float64("trigger_value", currentValue),
 				)
 			}
 		} else {
 			w.Logger.Warn(ctx, "No trigger callback configured for worker",
-				observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+				observability.String("job_id", w.ConditionWorkerData.JobID),
 			)
 		}
 
 		// For non-recurring jobs, stop the worker after triggering
 		if !w.ConditionWorkerData.Recurring {
-			w.Logger.Info(ctx, "Non-recurring job triggered, stopping worker", observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+			w.Logger.Info(ctx, "Non-recurring job triggered, stopping worker", observability.String("job_id", w.ConditionWorkerData.JobID))
 			go w.Stop(ctx) // Stop in a goroutine to avoid deadlock
 		}
 
@@ -145,7 +145,7 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 		conditionContext["status"] = "not_satisfied"
 
 		w.Logger.Debug(ctx, "Condition not satisfied",
-			observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+			observability.String("job_id", w.ConditionWorkerData.JobID),
 			observability.Float64("current_value", currentValue),
 			observability.String("condition_type", w.ConditionWorkerData.ConditionType),
 		)

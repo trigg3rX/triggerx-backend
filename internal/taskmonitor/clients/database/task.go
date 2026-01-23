@@ -3,18 +3,17 @@ package database
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // UpdateTaskSubmissionData updates task number, success status and execution details in database
 func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data types.TaskSubmissionData) error {
-	// Get performer ID by consensus address (keeper stores consensus address in PerformerSigningAddress)
+	// Get performer address (PerformerAddress is a string containing consensus_address)
 	if data.PerformerAddress == "" {
 		dm.logger.Error(ctx, "Performer address is empty in task submission data",
 			observability.Int64("task_id", data.TaskID))
@@ -22,18 +21,27 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data typ
 	}
 
 	// PerformerAddress from IPFS contains consensus_address (as stored by keeper)
-	performerId, err := dm.GetKeeperIDByConsensusAddress(ctx, data.PerformerAddress)
+	performerAddress, err := dm.GetKeeperAddressByConsensusAddress(ctx, data.PerformerAddress)
 	if err != nil {
-		dm.logger.Error(ctx, "Failed to get performer ID by consensus address",
+		dm.logger.Error(ctx, "Failed to get performer address by consensus address",
 			observability.String("consensus_address", data.PerformerAddress),
 			observability.Int64("task_id", data.TaskID),
 			observability.Error(err))
 		return fmt.Errorf("keeper not found for consensus address %s: %w", data.PerformerAddress, err)
 	}
-	attesterIds := data.AttesterIds
-	// Ensure attesterIds is not nil (use empty slice instead)
-	if attesterIds == nil {
-		attesterIds = []int64{}
+
+	// Convert attester operator_ids to keeper_addresses
+	attesterAddresses := make([]string, 0, len(data.AttesterIds))
+	for _, operatorID := range data.AttesterIds {
+		attesterAddress, err := dm.GetKeeperAddressByOperatorID(ctx, operatorID)
+		if err != nil {
+			dm.logger.Warn(ctx, "Failed to get keeper address for operator_id, skipping",
+				observability.Int64("operator_id", operatorID),
+				observability.Int64("task_id", data.TaskID),
+				observability.Error(err))
+			continue
+		}
+		attesterAddresses = append(attesterAddresses, attesterAddress)
 	}
 
 	// Convert []interface{} to []string for Cassandra list<text>
@@ -47,11 +55,11 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data typ
 		data.TaskNumber,
 		data.IsAccepted,
 		data.TaskSubmissionTxHash,
-		performerId,
-		attesterIds,
+		[]string{performerAddress}, // task_performer_address is list<text>
+		attesterAddresses,          // task_attester_address is list<text>
 		data.ExecutionTxHash,
 		data.ExecutionTimestamp,
-		data.TaskOpxCost,
+		data.TaskOpxCost, // Already a string (Wei)
 		data.ProofOfTask,
 		convertedArgsStrings,
 		data.TaskID).Exec(); err != nil {
@@ -162,21 +170,21 @@ func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(ctx context.Context, tas
 }
 
 // GetUserEmailByJobID returns the user's email_id for a given job_id
-func (dm *DatabaseClient) GetUserEmailByJobID(ctx context.Context, jobID *big.Int) (string, error) {
-	var userID int64
-	iter := dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
+func (dm *DatabaseClient) GetUserEmailByJobID(ctx context.Context, jobID string) (string, error) {
+	var userAddress string
+	iter := dm.db.NewQuery(queries.GetUserAddressByJobId, jobID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
-	if !iter.Scan(&userID) {
-		return "", fmt.Errorf("user not found for job ID %d", jobID)
+	if !iter.Scan(&userAddress) {
+		return "", fmt.Errorf("user not found for job ID %s", jobID)
 	}
 
 	var email string
-	iter = dm.db.NewQuery(queries.GetUserEmailByUserID, userID).Iter()
+	iter = dm.db.NewQuery(queries.GetUserEmailByUserAddress, userAddress).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
@@ -184,7 +192,7 @@ func (dm *DatabaseClient) GetUserEmailByJobID(ctx context.Context, jobID *big.In
 	}()
 
 	if !iter.Scan(&email) {
-		return "", fmt.Errorf("email not found for user ID %d", userID)
+		return "", fmt.Errorf("email not found for user address %s", userAddress)
 	}
 
 	return email, nil
@@ -192,34 +200,36 @@ func (dm *DatabaseClient) GetUserEmailByJobID(ctx context.Context, jobID *big.In
 
 // GetUserEmailByTaskID returns the user's email_id for a given task_id
 func (dm *DatabaseClient) GetUserEmailByTaskID(ctx context.Context, taskID int64) (string, error) {
-	var predicted float64
-	var jobID *big.Int
+	// Both task_opx_predicted_cost and job_id are stored as text in DB, so scan as strings first
+	var predictedStr string
+	var jobID string
 	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
-	if !iter.Scan(&predicted, &jobID) {
+	if !iter.Scan(&predictedStr, &jobID) {
 		return "", fmt.Errorf("job not found for task ID %d", taskID)
 	}
+
 	return dm.GetUserEmailByJobID(ctx, jobID)
 }
 
 // UpdatePointsInDatabase updates points for all involved parties in a task
 func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data types.TaskSubmissionData) error {
-	var jobID *big.Int
-	var userID int64
+	var jobID string
+	var userAddress string
 	var userTasks int64
-	var taskPredictedOpxCost float64
 
-	var keeperId int64
-	var keeperPoints float64
+	var keeperPointsStr string
 	var rewardsBooster float64
 	var noAttestedTasks int64
 	var noExecutedTasks int64
 
 	// Get task cost and job ID
+	// Both task_opx_predicted_cost and job_id are stored as text in DB, so scan as strings first
+	var taskPredictedOpxCostStr string
 	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, data.TaskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
@@ -227,111 +237,130 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 		}
 	}()
 
-	if !iter.Scan(&taskPredictedOpxCost, &jobID) {
+	if !iter.Scan(&taskPredictedOpxCostStr, &jobID) {
 		dm.logger.Error(ctx, "Failed to get task fee and job ID for task ID", observability.Int64("task_id", data.TaskID))
 		return fmt.Errorf("task not found for task ID %d", data.TaskID)
 	}
 
-	// dm.logger.Debug("Details", observability.Int64("task_id", data.TaskID), observability.Float64("task_predicted_opx_cost", taskPredictedOpxCost), observability.Float64("task_opx_cost", data.TaskOpxCost), observability.Int64("job_id", jobID.Int64()))
-
 	// TODO:
 	// Alert if taskOpxCost is greater than taskPredictedOpxCost by a threshold
+	// Use types.IsGreater(data.TaskOpxCost, taskPredictedOpxCostStr) for comparison
+	_ = taskPredictedOpxCostStr // Keep for future alerting logic
 
 	// Update the Attester Points
-	for _, operator_id := range data.AttesterIds {
+	for _, operatorID := range data.AttesterIds {
+		// Get keeper_address from operator_id
+		keeperAddress, err := dm.GetKeeperAddressByOperatorID(ctx, operatorID)
+		if err != nil {
+			dm.logger.Error(ctx, "Failed to get keeper address for operator_id", observability.Int64("operator_id", operatorID), observability.Error(err))
+			return fmt.Errorf("keeper not found for operator_id %d: %w", operatorID, err)
+		}
+
 		// Use RetryableIter since the query needs parameters
-		iter := dm.db.NewQuery(queries.GetAttesterPointsAndNoOfTasks, operator_id).Iter()
+		iter := dm.db.NewQuery(queries.GetAttesterPointsAndNoOfTasks, operatorID).Iter()
 		defer func() {
 			if cerr := iter.Close(); cerr != nil {
 				dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 			}
 		}()
 
-		if !iter.Scan(&keeperId, &keeperPoints, &rewardsBooster, &noAttestedTasks) {
-			dm.logger.Error(ctx, "Failed to get keeper points for operator_id", observability.Int64("operator_id", operator_id))
-			return fmt.Errorf("keeper not found for operator_id %d", operator_id)
+		var keeperAddressFromQuery string
+		if !iter.Scan(&keeperAddressFromQuery, &keeperPointsStr, &rewardsBooster, &noAttestedTasks) {
+			dm.logger.Error(ctx, "Failed to get keeper points for operator_id", observability.Int64("operator_id", operatorID))
+			return fmt.Errorf("keeper not found for operator_id %d", operatorID)
 		}
-		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
+		// Calculate new keeper points using string-based math
+		// keeperPoints = keeperPoints + (rewardsBooster * TaskOpxCost)
+		rewardedFee := types.MulByFloat(data.TaskOpxCost, rewardsBooster)
+		keeperPointsStr = types.Add(keeperPointsStr, rewardedFee)
 		noAttestedTasks = noAttestedTasks + 1
 
-		// dm.logger.Info("Keeper points", observability.Float64("keeper_points", keeperPoints), observability.Float64("rewards_booster", rewardsBooster), observability.Int64("no_attested_tasks", noAttestedTasks))
-
 		if err := dm.db.NewQuery(queries.UpdateAttesterPointsAndNoOfTasks,
-			keeperPoints, noAttestedTasks, keeperId).Exec(); err != nil {
+			keeperPointsStr, noAttestedTasks, keeperAddress).Exec(); err != nil {
 			dm.logger.Error(ctx, "Failed to update keeper points", observability.Error(err))
 			return err
 		}
 	}
 
 	// Update the Performer Points
-	// PerformerAddress from IPFS contains consensus_address (as stored by keeper)
-	performerId, err := dm.GetKeeperIDByConsensusAddress(ctx, data.PerformerAddress)
+	// PerformerAddress is a string containing consensus_address
+	if data.PerformerAddress == "" {
+		dm.logger.Error(ctx, "Performer address is empty", observability.Int64("task_id", data.TaskID))
+		return fmt.Errorf("performer address is empty for task %d", data.TaskID)
+	}
+	performerAddress, err := dm.GetKeeperAddressByConsensusAddress(ctx, data.PerformerAddress)
 	if err != nil {
-		dm.logger.Error(ctx, "Failed to get performer ID by consensus address", observability.Error(err))
+		dm.logger.Error(ctx, "Failed to get performer address by consensus address", observability.Error(err))
 		return err
 	}
 	// Use RetryableIter since the query needs parameters
-	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerId).Iter()
+	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerAddress).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
-	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
-		dm.logger.Error(ctx, "Failed to get keeper points for performer_id", observability.Int64("performer_id", performerId))
-		return fmt.Errorf("keeper not found for performer_id %d", performerId)
+	if !iter.Scan(&keeperPointsStr, &rewardsBooster, &noExecutedTasks) {
+		dm.logger.Error(ctx, "Failed to get keeper points for performer_address", observability.String("performer_address", performerAddress))
+		return fmt.Errorf("keeper not found for performer_address %s", performerAddress)
 	}
+	// Calculate new keeper points using string-based math
 	if data.IsAccepted {
-		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
+		// keeperPoints = keeperPoints + (rewardsBooster * TaskOpxCost)
+		rewardedFee := types.MulByFloat(data.TaskOpxCost, rewardsBooster)
+		keeperPointsStr = types.Add(keeperPointsStr, rewardedFee)
 	} else {
-		keeperPoints = keeperPoints - float64(rewardsBooster)*data.TaskOpxCost*0.1
+		// keeperPoints = keeperPoints - (rewardsBooster * TaskOpxCost * 0.1)
+		penaltyFee := types.MulByFloat(data.TaskOpxCost, rewardsBooster*0.1)
+		keeperPointsStr = types.Sub(keeperPointsStr, penaltyFee)
 	}
 	noExecutedTasks = noExecutedTasks + 1
 
 	if err := dm.db.NewQuery(queries.UpdatePerformerPointsAndNoOfTasks,
-		keeperPoints, noExecutedTasks, performerId).Exec(); err != nil {
+		keeperPointsStr, noExecutedTasks, performerAddress).Exec(); err != nil {
 		dm.logger.Error(ctx, "Failed to update keeper points", observability.Error(err))
 		return err
 	}
 
 	// Update the User Points
-	iter = dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
+	iter = dm.db.NewQuery(queries.GetUserAddressByJobId, jobID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
-	if !iter.Scan(&userID) {
-		dm.logger.Error(ctx, "Failed to get user ID for job ID", observability.Int64("job_id", jobID.Int64()))
-		return fmt.Errorf("user not found for job ID %d", jobID.Int64())
+	if !iter.Scan(&userAddress) {
+		dm.logger.Error(ctx, "Failed to get user address for job ID", observability.String("job_id", jobID))
+		return fmt.Errorf("user not found for job ID %s", jobID)
 	}
 
-	var userPoints float64
-	iter = dm.db.NewQuery(queries.GetUserPoints, userID).Iter()
+	var userPointsStr string
+	iter = dm.db.NewQuery(queries.GetUserPoints, userAddress).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
-	if !iter.Scan(&userPoints, &userTasks) {
-		dm.logger.Error(ctx, "Failed to get user points for user ID", observability.Int64("user_id", userID))
-		return fmt.Errorf("user not found for user ID %d", userID)
+	if !iter.Scan(&userPointsStr, &userTasks) {
+		dm.logger.Error(ctx, "Failed to get user points for user address", observability.String("user_address", userAddress))
+		return fmt.Errorf("user not found for user address %s", userAddress)
 	}
 
 	userTasks = userTasks + 1
-	userPoints = userPoints + data.TaskOpxCost
+	// Calculate new user points using string-based math
+	userPointsStr = types.Add(userPointsStr, data.TaskOpxCost)
 	lastUpdatedAt := time.Now().UTC()
 
 	if err := dm.db.NewQuery(queries.UpdateUserPoints,
-		userPoints, userTasks, lastUpdatedAt, userID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Failed to update user points for user ID", observability.Int64("user_id", userID), observability.Error(err))
+		userPointsStr, userTasks, lastUpdatedAt, userAddress).Exec(); err != nil {
+		dm.logger.Error(ctx, "Failed to update user points for user address", observability.String("user_address", userAddress), observability.Error(err))
 		return err
 	}
 
-	var jobCostActual float64
+	var jobCostActualStr string
 	iter = dm.db.NewQuery(queries.GetJobCostActual, jobID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
@@ -339,46 +368,38 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 		}
 	}()
 
-	if !iter.Scan(&jobCostActual) {
-		dm.logger.Error(ctx, "Failed to get job cost actual for job ID", observability.Int64("job_id", jobID.Int64()))
-		return fmt.Errorf("job not found for job ID %d", jobID)
+	if !iter.Scan(&jobCostActualStr) {
+		dm.logger.Error(ctx, "Failed to get job cost actual for job ID", observability.String("job_id", jobID))
+		return fmt.Errorf("job not found for job ID %s", jobID)
 	}
 
-	jobCostActual = jobCostActual + data.TaskOpxCost
+	// Calculate new job cost actual using string-based math
+	jobCostActualStr = types.Add(jobCostActualStr, data.TaskOpxCost)
 
-	if err := dm.db.NewQuery(queries.UpdateJobCostActual, jobCostActual, jobID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Failed to update job cost actual for job ID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+	if err := dm.db.NewQuery(queries.UpdateJobCostActual, jobCostActualStr, jobID).Exec(); err != nil {
+		dm.logger.Error(ctx, "Failed to update job cost actual for job ID", observability.String("job_id", jobID), observability.Error(err))
 		return err
 	}
 
-	dm.logger.Info(ctx, "Successfully updated points for user ID", observability.Int64("user_id", userID), observability.Float64("task_opx_cost", data.TaskOpxCost))
+	dm.logger.Info(ctx, "Successfully updated points for user address", observability.String("user_address", userAddress), observability.String("task_opx_cost", data.TaskOpxCost))
 	return nil
 }
 
-// GetKeeperIds gets keeper IDs from keeper addresses
-func (dm *DatabaseClient) GetKeeperIds(ctx context.Context, keeperAddresses []string) ([]int64, error) {
-	var keeperIds []int64
+// GetKeeperAddresses validates that keeper addresses exist (keeper_address is now the primary key)
+func (dm *DatabaseClient) GetKeeperAddresses(ctx context.Context, keeperAddresses []string) ([]string, error) {
+	var validAddresses []string
 	for _, keeperAddress := range keeperAddresses {
-		var keeperID int64
 		keeperAddress = strings.ToLower(keeperAddress)
-
-		// Use RetryableIter since the query needs parameters
-		iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, keeperAddress).Iter()
-		defer func() {
-			if cerr := iter.Close(); cerr != nil {
-				dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
-			}
-		}()
-
-		if iter.Scan(&keeperID) {
-			dm.logger.Info(ctx, "Keeper ID for address", observability.String("keeper_address", keeperAddress), observability.Int64("keeper_id", keeperID))
-			keeperIds = append(keeperIds, keeperID)
-		} else {
-			dm.logger.Error(ctx, "Failed to get keeper ID for address", observability.String("keeper_address", keeperAddress))
-			return nil, fmt.Errorf("keeper not found for address %s", keeperAddress)
+		// Since keeper_address is the primary key, we can directly use it
+		// Just validate that it exists by checking if we can get consensus address
+		_, err := dm.GetConsensusAddressByKeeperAddress(ctx, keeperAddress)
+		if err != nil {
+			dm.logger.Error(ctx, "Failed to validate keeper address", observability.String("keeper_address", keeperAddress), observability.Error(err))
+			return nil, fmt.Errorf("keeper not found for address %s: %w", keeperAddress, err)
 		}
+		validAddresses = append(validAddresses, keeperAddress)
 	}
-	return keeperIds, nil
+	return validAddresses, nil
 }
 
 // GetConsensusAddressByKeeperAddress gets the consensus address for a given keeper address
@@ -401,53 +422,72 @@ func (dm *DatabaseClient) GetConsensusAddressByKeeperAddress(ctx context.Context
 	return consensusAddress, nil
 }
 
-// GetKeeperIDByConsensusAddress gets the keeper ID for a given consensus address
-func (dm *DatabaseClient) GetKeeperIDByConsensusAddress(ctx context.Context, consensusAddress string) (int64, error) {
+// GetKeeperAddressByConsensusAddress gets the keeper address for a given consensus address
+func (dm *DatabaseClient) GetKeeperAddressByConsensusAddress(ctx context.Context, consensusAddress string) (string, error) {
 	consensusAddress = strings.ToLower(consensusAddress)
-	var keeperID int64
+	var keeperAddress string
 
-	iter := dm.db.NewQuery(queries.GetKeeperIDByConsensusAddress, consensusAddress).Iter()
+	iter := dm.db.NewQuery(queries.GetKeeperAddressByConsensusAddress, consensusAddress).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
 			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
-	if !iter.Scan(&keeperID) {
-		dm.logger.Error(ctx, "Failed to get keeper ID for consensus address", observability.String("consensus_address", consensusAddress))
-		return 0, fmt.Errorf("keeper not found for consensus address %s", consensusAddress)
+	if !iter.Scan(&keeperAddress) {
+		dm.logger.Error(ctx, "Failed to get keeper address for consensus address", observability.String("consensus_address", consensusAddress))
+		return "", fmt.Errorf("keeper not found for consensus address %s", consensusAddress)
 	}
 
-	return keeperID, nil
+	return keeperAddress, nil
+}
+
+// GetKeeperAddressByOperatorID gets the keeper address for a given operator ID
+func (dm *DatabaseClient) GetKeeperAddressByOperatorID(ctx context.Context, operatorID int64) (string, error) {
+	var keeperAddress string
+
+	iter := dm.db.NewQuery(queries.GetKeeperAddressByOperatorID, operatorID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
+		}
+	}()
+
+	if !iter.Scan(&keeperAddress) {
+		dm.logger.Error(ctx, "Failed to get keeper address for operator_id", observability.Int64("operator_id", operatorID))
+		return "", fmt.Errorf("keeper not found for operator_id %d", operatorID)
+	}
+
+	return keeperAddress, nil
 }
 
 // UpdateScriptStorage updates script storage for a custom job (TaskDefinitionID = 7)
 // This is called after task execution to persist storage updates from the custom script
-func (dm *DatabaseClient) UpdateScriptStorage(ctx context.Context, jobID *big.Int, storageUpdates map[string]string) error {
+func (dm *DatabaseClient) UpdateScriptStorage(ctx context.Context, jobID string, storageUpdates map[string]string) error {
 	if len(storageUpdates) == 0 {
-		dm.logger.Debug(ctx, "No storage updates for job", observability.String("job_id", jobID.String()))
+		dm.logger.Debug(ctx, "No storage updates for job", observability.String("job_id", jobID))
 		return nil
 	}
 
-	dm.logger.Info(ctx, "Updating storage keys for job", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
+	dm.logger.Info(ctx, "Updating storage keys for job", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID))
 
 	// Upsert each storage key-value pair
 	for key, value := range storageUpdates {
 		if err := dm.db.NewQuery(queries.UpsertScriptStorageQuery,
 			jobID, key, value, time.Now().UTC()).Exec(); err != nil {
-			dm.logger.Error(ctx, "Failed to update storage key for job", observability.String("key", key), observability.String("job_id", jobID.String()), observability.Error(err))
+			dm.logger.Error(ctx, "Failed to update storage key for job", observability.String("key", key), observability.String("job_id", jobID), observability.Error(err))
 			return fmt.Errorf("failed to update storage: %w", err)
 		}
-		dm.logger.Debug(ctx, "Updated storage", observability.String("job_id", jobID.String()), observability.String("key", key))
+		dm.logger.Debug(ctx, "Updated storage", observability.String("job_id", jobID), observability.String("key", key))
 	}
 
-	dm.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
+	dm.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID))
 	return nil
 }
 
 // GetJobIDByTaskID retrieves the job ID for a given task ID
-func (dm *DatabaseClient) GetJobIDByTaskID(ctx context.Context, taskID int64) (*big.Int, error) {
-	var jobID *big.Int
+func (dm *DatabaseClient) GetJobIDByTaskID(ctx context.Context, taskID int64) (string, error) {
+	var jobID string
 	iter := dm.db.NewQuery(queries.GetJobIDByTaskIDQuery, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
@@ -456,7 +496,7 @@ func (dm *DatabaseClient) GetJobIDByTaskID(ctx context.Context, taskID int64) (*
 	}()
 
 	if !iter.Scan(&jobID) {
-		return nil, fmt.Errorf("job not found for task ID %d", taskID)
+		return "", fmt.Errorf("job not found for task ID %d", taskID)
 	}
 
 	return jobID, nil

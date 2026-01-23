@@ -15,10 +15,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
-	pkgTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ContractType represents the type of contract
@@ -117,13 +116,16 @@ func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *Cha
 		)
 		defer span.End()
 
-		taskOpxCostFloat, _ := ipfsData.ActionData.TotalFee.Float64()
-		taskOpxCostFloat = taskOpxCostFloat / 1e18
+		// Use TotalFee directly as string (Wei) - no conversion needed
+		taskOpxCostWei := "0"
+		if ipfsData.ActionData != nil && ipfsData.ActionData.TotalFee != "" {
+			taskOpxCostWei = ipfsData.ActionData.TotalFee
+		}
 
 		taskData.TaskID = ipfsData.ActionData.TaskID
 		taskData.ExecutionTxHash = ipfsData.ActionData.ActionTxHash
 		taskData.ExecutionTimestamp = ipfsData.ActionData.ExecutionTimestamp
-		taskData.TaskOpxCost = taskOpxCostFloat
+		taskData.TaskOpxCost = taskOpxCostWei
 		taskData.ProofOfTask = ipfsData.ProofData.ProofOfTask
 		taskData.ConvertedArguments = ipfsData.ActionData.ConvertedArguments
 
@@ -189,9 +191,9 @@ func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *Cha
 					span.RecordError(err, observability.WithErrorAttributes(
 						attribute.String("error.type", "storage_update_failed"),
 					))
-					h.logger.Error(ctx, "Failed to update script storage for job", observability.String("job_id", jobID.String()), observability.Error(err))
+					h.logger.Error(ctx, "Failed to update script storage for job", observability.String("job_id", jobID), observability.Error(err))
 				} else {
-					h.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID.String()))
+					h.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID))
 				}
 			}
 		}
@@ -289,7 +291,7 @@ func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *Cha
 
 // ProcessConsensusEventFromIPFS processes consensus events with IPFS data directly from eventmonitor
 // This is the new flow where eventmonitor fetches IPFS data and passes it with trace context
-func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, txHash string, isAccepted bool, ipfsData *pkgTypes.IPFSData, ipfsCID string) error {
+func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, txHash string, isAccepted bool, ipfsData *types.IPFSData, ipfsCID string) error {
 	if ipfsData == nil {
 		return fmt.Errorf("ipfs data is nil")
 	}
@@ -311,11 +313,10 @@ func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, tx
 		observability.String("tx_hash", txHash),
 		observability.Bool("is_accepted", isAccepted))
 
-	// Calculate task OpX cost from IPFS data
-	taskOpxCostFloat := float64(0)
-	if ipfsData.ActionData != nil && ipfsData.ActionData.TotalFee != nil {
-		taskOpxCostFloat, _ = ipfsData.ActionData.TotalFee.Float64()
-		taskOpxCostFloat = taskOpxCostFloat / 1e18
+	// Use TotalFee directly as string (Wei) - no conversion needed
+	taskOpxCostWei := "0"
+	if ipfsData.ActionData != nil && ipfsData.ActionData.TotalFee != "" {
+		taskOpxCostWei = ipfsData.ActionData.TotalFee
 	}
 
 	// Build TaskSubmissionData from IPFS data
@@ -324,7 +325,7 @@ func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, tx
 		TaskDefinitionID:     taskDefinitionID,
 		IsAccepted:           isAccepted,
 		TaskSubmissionTxHash: txHash,
-		TaskOpxCost:          taskOpxCostFloat,
+		TaskOpxCost:          taskOpxCostWei,
 	}
 
 	// Populate from ActionData
@@ -411,9 +412,9 @@ func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, tx
 				span.RecordError(err, observability.WithErrorAttributes(
 					attribute.String("error.type", "storage_update_failed"),
 				))
-				h.logger.Error(ctx, "Failed to update script storage for job", observability.String("job_id", jobID.String()), observability.Error(err))
+				h.logger.Error(ctx, "Failed to update script storage for job", observability.String("job_id", jobID), observability.Error(err))
 			} else {
-				h.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID.String()))
+				h.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID))
 			}
 		}
 	}
@@ -466,10 +467,10 @@ func (h *TaskEventHandler) moveTaskToCompleted(ctx context.Context, taskID int64
 	h.logger.Info(ctx, "Moving task to validated stream", observability.Int64("task_id", taskID))
 
 	// Try to find task in executed stream first (most common case after execution)
-	var task *tasks.TaskStreamData
+	var task *types.TaskStreamData
 	var messageID string
 	var err error
-	task, messageID, err = h.taskStreamManager.FindTaskByIDInStream(ctx, taskID, tasks.StreamTaskExecuted)
+	task, messageID, err = h.taskStreamManager.FindTaskByIDInStream(ctx, taskID, types.StreamTaskExecuted)
 	if err != nil {
 		// Fallback to dispatched stream (for tasks that were validated before execution completed)
 		h.logger.Debug(ctx, "Task not found in executed stream, checking dispatched stream",
@@ -489,7 +490,7 @@ func (h *TaskEventHandler) moveTaskToCompleted(ctx context.Context, taskID int64
 	task.ValidatedAt = &now
 
 	// Add to validated stream
-	err = h.taskStreamManager.AddTaskToStream(ctx, tasks.StreamTaskValidated, task)
+	err = h.taskStreamManager.AddTaskToStream(ctx, types.StreamTaskValidated, task)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to add task to validated stream", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
@@ -497,7 +498,7 @@ func (h *TaskEventHandler) moveTaskToCompleted(ctx context.Context, taskID int64
 
 	// Remove from executed stream if it was there (acknowledge)
 	if messageID != "" {
-		if err := h.taskStreamManager.AckTaskProcessed(ctx, tasks.StreamTaskExecuted, "task-processors", messageID); err != nil {
+		if err := h.taskStreamManager.AckTaskProcessed(ctx, types.StreamTaskExecuted, "task-processors", messageID); err != nil {
 			h.logger.Warn(ctx, "Failed to acknowledge task from executed stream",
 				observability.Int64("task_id", taskID),
 				observability.String("message_id", messageID),

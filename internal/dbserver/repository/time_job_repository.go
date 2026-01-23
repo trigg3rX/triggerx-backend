@@ -3,19 +3,17 @@ package repository
 import (
 	"errors"
 	"fmt"
-	"math/big"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TimeJobRepository interface {
-	CreateTimeJob(timeJob *commonTypes.TimeJobData) error
-	GetTimeJobByJobID(jobID *big.Int) (commonTypes.TimeJobData, error)
-	UpdateTimeJobStatus(jobID *big.Int, isActive bool) error
-	UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error
+	CreateTimeJob(timeJob *types.TimeJobDataEntity) error
+	GetTimeJobByJobID(jobID string) (*types.TimeJobDataDTO, error)
+	UpdateTimeJobStatus(jobID string, isActive bool) error
+	UpdateTimeJobInterval(jobID string, timeInterval int64) error
 }
 
 type timeJobRepository struct {
@@ -28,13 +26,15 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 	}
 }
 
-func (r *timeJobRepository) CreateTimeJob(timeJob *commonTypes.TimeJobData) error {
+func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobDataEntity) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID.ToBigInt(), timeJob.TaskDefinitionID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
-		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule,
-		timeJob.Timezone, timeJob.TargetChainID, timeJob.TargetContractAddress, timeJob.TargetFunction,
-		timeJob.ABI, timeJob.ArgType, timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl,
-		timeJob.IsCompleted, timeJob.IsActive, time.Now(), time.Now()).Exec()
+		timeJob.JobID, timeJob.TaskDefinitionID, timeJob.ScheduleType, timeJob.TimeInterval,
+		timeJob.CronExpression, timeJob.SpecificSchedule, timeJob.Timezone, timeJob.NextExecutionTimestamp,
+		timeJob.TargetChainID, timeJob.TargetContractAddress, timeJob.TargetFunction,
+		timeJob.ABI, timeJob.ArgType, timeJob.Arguments, timeJob.DynamicArgumentsScriptURL,
+		timeJob.AgentScriptURL, timeJob.AgentScriptLanguage, timeJob.AgentScriptHash,
+		timeJob.AgentTargetChainID, timeJob.MaxExecutionTime, timeJob.ChallengePeriod,
+		timeJob.IsActive, timeJob.LastExecutedAt, timeJob.ExpirationTime).Exec()
 
 	if err != nil {
 		return err
@@ -43,23 +43,25 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *commonTypes.TimeJobData) erro
 	return nil
 }
 
-func (r *timeJobRepository) GetTimeJobByJobID(jobID *big.Int) (commonTypes.TimeJobData, error) {
-	var timeJob commonTypes.TimeJobData
-	var temp *big.Int
+func (r *timeJobRepository) GetTimeJobByJobID(jobID string) (*types.TimeJobDataDTO, error) {
+	var entity types.TimeJobDataEntity
 	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
-		&temp, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp,
-		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
-		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
-		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
-		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive)
+		&entity.JobID, &entity.TaskDefinitionID, &entity.ScheduleType, &entity.TimeInterval,
+		&entity.CronExpression, &entity.SpecificSchedule, &entity.Timezone, &entity.NextExecutionTimestamp,
+		&entity.TargetChainID, &entity.TargetContractAddress, &entity.TargetFunction,
+		&entity.ABI, &entity.ArgType, &entity.Arguments, &entity.DynamicArgumentsScriptURL,
+		&entity.AgentScriptURL, &entity.AgentScriptLanguage, &entity.AgentScriptHash,
+		&entity.AgentTargetChainID, &entity.MaxExecutionTime, &entity.ChallengePeriod,
+		&entity.IsActive, &entity.LastExecutedAt, &entity.ExpirationTime)
 	if err != nil {
-		return commonTypes.TimeJobData{}, fmt.Errorf("failed to get time job by job ID: %v", err)
+		return nil, fmt.Errorf("failed to get time job by job ID: %v", err)
 	}
-	timeJob.JobID = commonTypes.NewBigInt(jobID)
-	return timeJob, nil
+
+	dto := types.TimeJobDataEntityToDTO(&entity)
+	return dto, nil
 }
 
-func (r *timeJobRepository) UpdateTimeJobStatus(jobID *big.Int, isActive bool) error {
+func (r *timeJobRepository) UpdateTimeJobStatus(jobID string, isActive bool) error {
 	err := r.db.Session().Query(queries.UpdateTimeJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time job status")
@@ -68,7 +70,7 @@ func (r *timeJobRepository) UpdateTimeJobStatus(jobID *big.Int, isActive bool) e
 	return nil
 }
 
-func (r *timeJobRepository) UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error {
+func (r *timeJobRepository) UpdateTimeJobInterval(jobID string, timeInterval int64) error {
 	err := r.db.Session().Query(queries.UpdateTimeJobIntervalQuery, timeInterval, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time_interval in time_job_data")

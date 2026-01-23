@@ -3,7 +3,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -38,10 +37,10 @@ func (w *ConditionWorker) Start(ctx context.Context) {
 	w.IsActive = true
 	w.Mutex.Unlock()
 
-	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
+	metrics.TrackWorkerStart(w.ConditionWorkerData.JobID)
 
 	w.Logger.Info(ctx, "Starting condition worker",
-		observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+		observability.String("job_id", w.ConditionWorkerData.JobID),
 		observability.String("condition_type", w.ConditionWorkerData.ConditionType),
 		observability.String("value_source", w.ConditionWorkerData.ValueSourceUrl),
 		observability.String("selected_key_route", w.ConditionWorkerData.SelectedKeyRoute),
@@ -60,7 +59,7 @@ func (w *ConditionWorker) Start(ctx context.Context) {
 			duration := stopTime.Sub(startTime)
 
 			w.Logger.Info(ctx, "Condition worker stopped",
-				observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+				observability.String("job_id", w.ConditionWorkerData.JobID),
 				observability.Duration("runtime", duration),
 				observability.Float64("last_value", w.LastValue),
 				observability.Int64("condition_met_count", w.ConditionMet),
@@ -70,7 +69,7 @@ func (w *ConditionWorker) Start(ctx context.Context) {
 		case <-ticker.C:
 			if time.Now().After(w.ConditionWorkerData.ExpirationTime) {
 				w.Logger.Info(ctx, "Job has expired, stopping worker",
-					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+					observability.String("job_id", w.ConditionWorkerData.JobID),
 					observability.Time("expiration_time", w.ConditionWorkerData.ExpirationTime),
 				)
 				go w.Stop(ctx)
@@ -79,7 +78,7 @@ func (w *ConditionWorker) Start(ctx context.Context) {
 
 			if err := w.checkCondition(ctx); err != nil {
 				w.Logger.Error(ctx, "Error checking condition",
-					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+					observability.String("job_id", w.ConditionWorkerData.JobID),
 					observability.Error(err))
 				metrics.TrackJobCompleted("failed")
 			}
@@ -96,18 +95,18 @@ func (w *ConditionWorker) Stop(ctx context.Context) {
 		w.Cancel()
 		w.IsActive = false
 
-		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
+		metrics.TrackWorkerStop(w.ConditionWorkerData.JobID)
 
 		if w.CleanupCallback != nil {
-			if err := w.CleanupCallback(ctx, w.ConditionWorkerData.JobID.ToBigInt()); err != nil {
+			if err := w.CleanupCallback(ctx, w.ConditionWorkerData.JobID); err != nil {
 				w.Logger.Error(ctx, "Failed to clean up job data",
-					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+					observability.String("job_id", w.ConditionWorkerData.JobID),
 					observability.Error(err))
 			}
 		}
 
 		w.Logger.Info(ctx, "Condition worker stopped",
-			observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+			observability.String("job_id", w.ConditionWorkerData.JobID))
 	}
 }
 

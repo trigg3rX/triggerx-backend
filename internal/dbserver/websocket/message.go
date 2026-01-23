@@ -75,8 +75,8 @@ type JobTaskSnapshotData struct {
 	TaskOpXCost        float64   `json:"task_opx_cost"`
 	ExecutionTimestamp time.Time `json:"execution_timestamp"`
 	ExecutionTxHash    string    `json:"execution_tx_hash"`
-	TaskPerformerID    int64     `json:"task_performer_id"`
-	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
+	TaskPerformerAddress    []string     `json:"task_performer_address"`
+	TaskAttesterAddress    []string   `json:"task_attester_address"`
 	TaskStatus         string    `json:"task_status"`
 	TaskError          string    `json:"task_error"`
 	IsAccepted         bool      `json:"is_accepted"`

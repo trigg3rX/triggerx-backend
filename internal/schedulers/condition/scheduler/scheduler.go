@@ -25,7 +25,7 @@ type ConditionBasedScheduler struct {
 	cancel               context.CancelFunc
 	logger               observability.Logger
 	tracer               observability.Tracer
-	conditionWorkers     map[*types.BigInt]*worker.ConditionWorker  // jobID -> condition worker
+	conditionWorkers     map[string]*worker.ConditionWorker         // jobID -> condition worker
 	jobDataStore         map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
 	lastTriggerTime      map[string]time.Time                       // jobID -> last trigger timestamp for cooldown
 	workersMutex         sync.RWMutex
@@ -81,7 +81,7 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 		cancel:               cancel,
 		logger:               logger,
 		tracer:               tracer,
-		conditionWorkers:     make(map[*types.BigInt]*worker.ConditionWorker),
+		conditionWorkers:     make(map[string]*worker.ConditionWorker),
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
 		lastTriggerTime:      make(map[string]time.Time),
 		chainClients:         make(map[string]*nodeclient.NodeClient),
@@ -99,8 +99,8 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 	// Start metrics collection
 	scheduler.metrics.Start()
 
-	// Initialize job status checker
-	scheduler.jobStatusChecker = NewJobStatusChecker(eventJobRepo, conditionJobRepo, logger)
+	// Initialize job status checker with scheduler reference for stopping workers/unregistering events
+	scheduler.jobStatusChecker = NewJobStatusChecker(eventJobRepo, conditionJobRepo, scheduler, logger)
 
 	scheduler.logger.Info(ctx, "Condition-based scheduler initialized",
 		observability.Int("max_workers", scheduler.maxWorkers),
@@ -138,11 +138,11 @@ func (s *ConditionBasedScheduler) Stop(ctx context.Context) {
 	s.workersMutex.Lock()
 	for jobID, worker := range s.conditionWorkers {
 		worker.Stop(ctx)
-		s.logger.Info(ctx, "Stopped condition worker", observability.String("job_id", jobID.String()))
+		s.logger.Info(ctx, "Stopped condition worker", observability.String("job_id", jobID))
 	}
 
 	// Unregister all event jobs from Event Monitor Service
-	s.conditionWorkers = make(map[*types.BigInt]*worker.ConditionWorker)
+	s.conditionWorkers = make(map[string]*worker.ConditionWorker)
 	s.jobDataStore = make(map[string]*types.ScheduleConditionJobData)
 	s.workersMutex.Unlock()
 
@@ -205,14 +205,13 @@ func (s *ConditionBasedScheduler) cleanupExpiredEventJobs(ctx context.Context) {
 			// Unregister expired jobs
 			if len(expiredJobData) > 0 {
 				for _, jobData := range expiredJobData {
-					jobIDBigInt := jobData.JobID.ToBigInt()
-					if err := s.UnregisterEventJob(ctx, jobIDBigInt); err != nil {
+					if err := s.UnregisterEventJob(ctx, jobData.JobID); err != nil {
 						s.logger.Warn(ctx, "Failed to unregister expired event job",
-							observability.String("job_id", jobData.JobID.String()),
+							observability.String("job_id", jobData.JobID),
 							observability.Error(err))
 					} else {
 						s.logger.Debug(ctx, "Unregistered expired event job",
-							observability.String("job_id", jobData.JobID.String()))
+							observability.String("job_id", jobData.JobID))
 					}
 				}
 				s.logger.Info(ctx, "Cleaned up expired event jobs",

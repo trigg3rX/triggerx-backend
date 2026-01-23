@@ -37,7 +37,7 @@ func (sm *StateManager) checkInactiveKeepers(ctx context.Context) {
 	sm.mu.Unlock()
 
 	for _, address := range inactiveKeepers {
-		keeperHealth := types.KeeperHealthCheckIn{
+		keeperHealth := types.KeeperHealthCheckInRequest{
 			KeeperAddress: address,
 		}
 

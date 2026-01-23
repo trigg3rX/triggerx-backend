@@ -10,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 const (
@@ -358,11 +359,11 @@ func (em *ExpirationManager) GetExpiredMessages(ctx context.Context, stream stri
 // GetExpiredMessagesForAllStreams retrieves expired entries for all tracked streams
 func (em *ExpirationManager) GetExpiredMessagesForAllStreams(ctx context.Context) (map[string][]string, error) {
 	streams := []string{
-		StreamTaskDispatched,
-		StreamTaskExecuted,
-		StreamTaskValidated,
-		StreamTaskFailed,
-		StreamTaskRetry,
+		types.StreamTaskDispatched,
+		types.StreamTaskExecuted,
+		types.StreamTaskValidated,
+		types.StreamTaskFailed,
+		types.StreamTaskRetry,
 	}
 
 	expiredEntries := make(map[string][]string)

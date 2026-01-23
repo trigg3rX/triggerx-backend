@@ -33,29 +33,15 @@ func NewClient(serviceURL string, logger observability.Logger, tracer observabil
 	}, nil
 }
 
-// GetPerformerRequest represents the request for getting a performer
-type GetPerformerRequest struct {
-	IsImua    bool `json:"is_imua"`
-	IsMainnet bool `json:"is_mainnet"`
-}
-
-// GetPerformerResponse represents the response for getting a performer
-type GetPerformerResponse struct {
-	Performer types.PerformerData `json:"performer"`
-	Success   bool                `json:"success"`
-	Error     string              `json:"error,omitempty"`
-}
-
 // GetPerformerData gets a performer using the dynamic selection system via gRPC
-func (c *Client) GetPerformerData(ctx context.Context, isImua bool, isMainnet bool) (types.PerformerData, error) {
-	c.logger.Debug(ctx, "Getting performer data from health service via gRPC", observability.Bool("is_imua", isImua), observability.Bool("is_mainnet", isMainnet))
+func (c *Client) GetPerformerData(ctx context.Context, network types.KeeperNetwork) (types.PerformerData, error) {
+	c.logger.Debug(ctx, "Getting performer data from health service via gRPC", observability.String("network", string(network)))
 
-	req := GetPerformerRequest{
-		IsImua:    isImua,
-		IsMainnet: isMainnet,
+	req := types.GetPerformerRequest{
+		Network:    network,
 	}
 
-	var response GetPerformerResponse
+	var response types.GetPerformerResponse
 	err := c.client.Call(ctx, "get-performer", req, &response)
 	if err != nil {
 		c.logger.Error(ctx, "Failed to get performer data via gRPC", observability.Error(err))
@@ -70,7 +56,7 @@ func (c *Client) GetPerformerData(ctx context.Context, isImua bool, isMainnet bo
 	c.logger.Info(ctx, "Selected performer from health service via gRPC",
 		observability.Int64("operator_id", response.Performer.OperatorID),
 		observability.String("keeper_address", response.Performer.KeeperAddress),
-		observability.Bool("is_imua", response.Performer.IsImua))
+		observability.String("network", string(response.Performer.Network)))
 
 	return response.Performer, nil
 }

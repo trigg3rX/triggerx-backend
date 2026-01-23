@@ -10,9 +10,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (tsm *TaskStreamManager) GetTaskDataFromStream(ctx context.Context, stream string, taskID int64) (*TaskStreamData, error) {
+func (tsm *TaskStreamManager) GetTaskDataFromStream(ctx context.Context, stream string, taskID int64) (*types.TaskStreamData, error) {
 	taskStreamData, _, err := tsm.ReadTasksFromStream(ctx, stream, "task_stream_manager", "task_stream_manager", 1000)
 	if err != nil {
 		tsm.logger.Error(ctx, "Failed to read task stream data",
@@ -30,7 +31,7 @@ func (tsm *TaskStreamManager) GetTaskDataFromStream(ctx context.Context, stream 
 	return nil, fmt.Errorf("task not found: %d", taskID)
 }
 
-func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, consumerGroup, consumerName string, count int64) ([]TaskStreamData, []string, error) {
+func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, consumerGroup, consumerName string, count int64) ([]types.TaskStreamData, []string, error) {
 	if err := tsm.RegisterConsumerGroup(ctx, stream, consumerGroup); err != nil {
 		return nil, nil, fmt.Errorf("failed to register consumer group: %w", err)
 	}
@@ -58,7 +59,7 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, c
 			// 	"stream", stream,
 			// 	"consumer_group", consumerGroup,
 			// 	"duration", duration)
-			return []TaskStreamData{}, []string{}, nil
+			return []types.TaskStreamData{}, []string{}, nil
 		}
 		tsm.logger.Error(ctx, "Failed to read from stream",
 			observability.String("stream", stream),
@@ -73,13 +74,13 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, c
 	}
 
 	// Pre-allocate slice for better performance
-	var tasks []TaskStreamData
+	var tasks []types.TaskStreamData
 	var messageIDs []string
 	totalMessages := 0
 	for _, stream := range streams {
 		totalMessages += len(stream.Messages)
 	}
-	tasks = make([]TaskStreamData, 0, totalMessages)
+	tasks = make([]types.TaskStreamData, 0, totalMessages)
 
 	for _, stream := range streams {
 		for _, message := range stream.Messages {
@@ -91,7 +92,7 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, c
 				continue
 			}
 
-			var task TaskStreamData
+			var task types.TaskStreamData
 			if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
 				tsm.logger.Error(ctx, "Failed to unmarshal task data",
 					observability.String("stream", stream.Stream),

@@ -85,7 +85,7 @@ func RegisterRoutes(router *gin.Engine, logger observability.Logger) {
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	ctx := c.Request.Context()
-	var keeperHealth types.KeeperHealthCheckIn
+	var keeperHealth types.KeeperHealthCheckInRequest
 	var response types.KeeperHealthCheckInResponse
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
 		h.logger.Error(ctx, "Failed to parse keeper health check-in request",

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -84,7 +83,7 @@ func (h *Handler) handleScheduleJob(ctx context.Context, request interface{}) (i
 	// Schedule the job
 	if err := h.scheduler.ScheduleJob(ctx, &jobData); err != nil {
 		h.logger.Error(ctx, "Failed to schedule job via RPC",
-			observability.String("job_id", jobData.JobID.String()),
+			observability.String("job_id", jobData.JobID),
 			observability.Error(err))
 		return map[string]interface{}{
 			"success": false,
@@ -93,7 +92,7 @@ func (h *Handler) handleScheduleJob(ctx context.Context, request interface{}) (i
 	}
 
 	h.logger.Info(ctx, "Job scheduled successfully via RPC",
-		observability.String("job_id", jobData.JobID.String()))
+		observability.String("job_id", jobData.JobID))
 
 	return map[string]interface{}{
 		"success": true,
@@ -105,7 +104,7 @@ func (h *Handler) handleScheduleJob(ctx context.Context, request interface{}) (i
 // handleUnscheduleJob handles the unschedule-job RPC method
 func (h *Handler) handleUnscheduleJob(ctx context.Context, request interface{}) (interface{}, error) {
 	// Extract job ID from request
-	var jobID *big.Int
+	var jobID string
 
 	// Handle JSON request - extract job_id
 	var requestData map[string]interface{}
@@ -123,24 +122,24 @@ func (h *Handler) handleUnscheduleJob(ctx context.Context, request interface{}) 
 		return nil, fmt.Errorf("job_id is required")
 	}
 
-	// Handle different job_id types
+	// Handle different job_id types - convert to string
 	switch v := jobIDVal.(type) {
 	case string:
-		var ok bool
-		jobID, ok = new(big.Int).SetString(v, 10)
-		if !ok {
-			return nil, fmt.Errorf("invalid job_id format: %s", v)
-		}
+		jobID = v
 	case float64:
-		jobID = big.NewInt(int64(v))
+		jobID = fmt.Sprintf("%.0f", v)
+	case int:
+		jobID = fmt.Sprintf("%d", v)
+	case int64:
+		jobID = fmt.Sprintf("%d", v)
 	default:
-		return nil, fmt.Errorf("invalid job_id type: expected string or number")
+		return nil, fmt.Errorf("invalid job_id type: expected string or number, got %T", v)
 	}
 
 	// Unschedule the job
 	if err := h.scheduler.UnscheduleJob(ctx, jobID); err != nil {
 		h.logger.Error(ctx, "Failed to unschedule job via RPC",
-			observability.String("job_id", jobID.String()),
+			observability.String("job_id", jobID),
 			observability.Error(err))
 		return map[string]interface{}{
 			"success": false,
@@ -149,11 +148,11 @@ func (h *Handler) handleUnscheduleJob(ctx context.Context, request interface{}) 
 	}
 
 	h.logger.Info(ctx, "Job unscheduled successfully via RPC",
-		observability.String("job_id", jobID.String()))
+		observability.String("job_id", jobID))
 
 	return map[string]interface{}{
 		"success": true,
-		"job_id":  jobID.String(),
+		"job_id":  jobID,
 		"message": "Job unscheduled successfully",
 	}, nil
 }
@@ -185,10 +184,8 @@ func (h *Handler) handleEventNotification(ctx context.Context, request interface
 	}
 
 	// Convert EventNotification to TriggerNotification
-	jobID, ok := new(big.Int).SetString(eventNotif.RequestID, 10)
-	if !ok {
-		return nil, fmt.Errorf("invalid request_id format: %s", eventNotif.RequestID)
-	}
+	// RequestID is already a string, use it directly as JobID
+	jobID := eventNotif.RequestID
 
 	triggerNotif := &worker.TriggerNotification{
 		JobID:         jobID,
