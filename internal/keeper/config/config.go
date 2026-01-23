@@ -55,21 +55,24 @@ type Config struct {
 	managerSigningAddress string
 
 	// Backend Service URLs
-	aggregatorRPCUrl  string
-	healthRPCUrl      string
-	taskMonitorRPCUrl string
+	aggregatorRPCUrlMainnet string
+	aggregatorRPCUrlTestnet string
+	healthRPCUrl            string
+	taskMonitorRPCUrl       string
 
-	// AVS Contract Address
-	avsGovernanceAddress     string
-	attestationCenterAddress string
-	taskExecutionAddress     string
+	// AVS Contract Addresses (network-aware)
+	avsGovernanceAddressMainnet     string
+	avsGovernanceAddressTestnet     string
+	attestationCenterAddressMainnet string
+	attestationCenterAddressTestnet string
+	taskExecutionAddressMainnet     string
+	taskExecutionAddressTestnet     string
 
 	// Othentic Bootstrap ID
 	othenticBootstrapID string
 
 	// Observability configuration
 	otelExporterEndpoint   string
-	enablePrometheusExport bool
 
 	// Network configuration
 	network string
@@ -131,18 +134,20 @@ func Init(configPath string) error {
 		keeperP2PPort:        env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
 		keeperMetricsPort:    env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
 		grafanaPort:          env.GetEnvString("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:     env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		aggregatorRPCUrlMainnet: env.GetEnvString("AGGREGATOR_RPC_URL", "https://aggregator.triggerx.network"),
+		aggregatorRPCUrlTestnet: env.GetEnvString("AGGREGATOR_RPC_URL_TESTNET", "https://test-aggregator.triggerx.network"),
 		healthRPCUrl:         env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
 		taskMonitorRPCUrl:    env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
 		tlsProofHost:         "www.google.com",
 		tlsProofPort:         "443",
-		// Test Attestation Center Address for Base Sepolia
-		attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
-		// Base Mainnet Attestation Center Address
-		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
+		// Mainnet contract addresses
+		avsGovernanceAddressMainnet:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x635F64A20c5D738F6Cb2E631DF4F4ED74296B4fd"),
+		attestationCenterAddressMainnet: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
+		// Testnet contract addresses
+		avsGovernanceAddressTestnet:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS_TESTNET", ""),
+		attestationCenterAddressTestnet: env.GetEnvString("ATTESTATION_CENTER_ADDRESS_TESTNET", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
 		othenticBootstrapID:    env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 		otelExporterEndpoint:   env.GetOTELExporterEndpoint(),
-		enablePrometheusExport: env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
 		network:                yamlConfig.Network,
 		api:                    yamlConfig.API,
 		health:                 yamlConfig.Health,
@@ -254,8 +259,18 @@ func GetKeeperRPCPort() string {
 	return cfg.keeperRPCPort
 }
 
+// GetAggregatorRPCUrl returns the aggregator RPC URL based on the configured network
 func GetAggregatorRPCUrl() string {
-	url := cfg.aggregatorRPCUrl
+	var url string
+	switch cfg.network {
+	case "mainnet":
+		url = cfg.aggregatorRPCUrlMainnet
+	case "sepolia", "imua":
+		url = cfg.aggregatorRPCUrlTestnet
+	default:
+		// Fallback to mainnet if network is not recognized
+		url = cfg.aggregatorRPCUrlMainnet
+	}
 	// Auto-prepend http:// if scheme is missing (for backward compatibility)
 	if url != "" && !hasScheme(url) {
 		return "http://" + url
@@ -290,12 +305,52 @@ func GetTaskMonitorRPCUrl() string {
 	return cfg.taskMonitorRPCUrl
 }
 
+// GetAvsGovernanceAddress returns the AVS governance address based on the configured network
 func GetAvsGovernanceAddress() string {
-	return cfg.avsGovernanceAddress
+	switch cfg.network {
+	case "mainnet":
+		return cfg.avsGovernanceAddressMainnet
+	case "sepolia", "imua":
+		return cfg.avsGovernanceAddressTestnet
+	default:
+		return cfg.avsGovernanceAddressMainnet
+	}
 }
 
+// GetAttestationCenterAddress returns the attestation center address based on the configured network
 func GetAttestationCenterAddress() string {
-	return cfg.attestationCenterAddress
+	switch cfg.network {
+	case "mainnet":
+		return cfg.attestationCenterAddressMainnet
+	case "sepolia", "imua":
+		return cfg.attestationCenterAddressTestnet
+	default:
+		return cfg.attestationCenterAddressMainnet
+	}
+}
+
+// GetTaskExecutionAddress returns the task execution address based on the configured network
+func GetTaskExecutionAddress() string {
+	switch cfg.network {
+	case "mainnet":
+		return cfg.taskExecutionAddressMainnet
+	case "sepolia", "imua":
+		return cfg.taskExecutionAddressTestnet
+	default:
+		return cfg.taskExecutionAddressMainnet
+	}
+}
+
+// SetTaskExecutionAddress sets the task execution address for the configured network
+func SetTaskExecutionAddress(addr string) {
+	switch cfg.network {
+	case "mainnet":
+		cfg.taskExecutionAddressMainnet = addr
+	case "sepolia", "imua":
+		cfg.taskExecutionAddressTestnet = addr
+	default:
+		cfg.taskExecutionAddressMainnet = addr
+	}
 }
 
 func GetVersion() string {
@@ -350,14 +405,6 @@ func GetManagerSigningAddress() string {
 	return cfg.managerSigningAddress
 }
 
-func SetTaskExecutionAddress(addr string) {
-	cfg.taskExecutionAddress = addr
-}
-
-func GetTaskExecutionAddress() string {
-	return cfg.taskExecutionAddress
-}
-
 // SetKeeperAddress sets the keeper address in the config (for testing)
 func SetKeeperAddress(addr string) {
 	cfg.keeperAddress = addr
@@ -366,10 +413,6 @@ func SetKeeperAddress(addr string) {
 // Observability configuration getters
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
-}
-
-func GetEnablePrometheusExport() bool {
-	return cfg.enablePrometheusExport
 }
 
 func GetAPIReadTimeout() time.Duration {

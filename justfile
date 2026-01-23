@@ -25,6 +25,10 @@ db-setup:
     sleep 6
     ./scripts/database/setup-db.sh
 
+# Stop ScyllaDB containerA
+db-stop:
+    docker compose -f docker/docker-compose.yaml --profile scylla down
+
 # Open CQL shell
 db-shell:
     docker exec -it triggerx-scylla cqlsh

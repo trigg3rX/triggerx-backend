@@ -12,12 +12,13 @@ DESCRIPTION:
 
 USAGE:
     $0 -n <service> -v <version> [-w <network>]
+    $0 -n keeper -v <version> -w <network>    (network required for keeper)
     $0 -h|--help
 
 OPTIONS:
     -n, --service    Service name to build (required)
     -v, --version    Version tag for the Docker image (required, format: MAJOR.MINOR.PATCH)
-    -w, --network    Network name for keeper service (required for keeper, ignored for other services)
+    -w, --network    Network name (REQUIRED for keeper service, ignored for other services)
                      Valid values: mainnet, imua, sepolia
     -h, --help       Display this help message
 
@@ -169,8 +170,8 @@ update_keeper_network() {
     }
     END {
         if (!network_updated) {
-            # If network field doesn't exist, add it at the beginning after comments
-            print "network: \"" network "\"                  # Network: mainnet, imua, or sepolia"
+            # If network field doesnt exist, add it at the beginning after comments
+            printf "network: \"%s\"                  # Network: mainnet, imua, or sepolia\n", network
         }
     }' "$yaml_file" > "${yaml_file}.tmp" && mv "${yaml_file}.tmp" "$yaml_file"
     
@@ -257,6 +258,16 @@ fi
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Error: Invalid version format. Use MAJOR.MINOR.PATCH (e.g., 0.0.1)" 1>&2
     exit 1
+fi
+
+# Check if network is provided for keeper service (mandatory)
+if [[ "$SERVICE" == "keeper" ]]; then
+    if [ -z "$NETWORK" ]; then
+        echo "Error: Network (-w) is required for keeper service" 1>&2
+        echo "Usage: $0 -n keeper -v <version> -w <network>" 1>&2
+        echo "Valid network values: mainnet, imua, sepolia" 1>&2
+        exit 1
+    fi
 fi
 
 if [[ "$SERVICE" == "all" ]]; then
