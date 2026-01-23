@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
@@ -111,6 +113,13 @@ func (o *Observability) HealthCheck(ctx context.Context) error {
 // Initialize creates and initializes all observability components (logs, traces, metrics)
 // This is the main entry point for setting up observability in your application
 func Initialize(cfg Config) (*Observability, error) {
+	// Set global text map propagator for trace context propagation across services
+	// This MUST be set before creating tracers for proper HTTP/gRPC trace propagation
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{}, // W3C Trace Context format
+		propagation.Baggage{},      // W3C Baggage format
+	))
+
 	// Step 1: Create OTel resource with service metadata
 	res, err := NewResource(cfg)
 	if err != nil {

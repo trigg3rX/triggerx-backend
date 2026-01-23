@@ -18,7 +18,6 @@ import (
 // Client represents a gRPC client
 type Client struct {
 	config   Config
-	logger   observability.Logger
 	tracer   observability.Tracer
 	registry rpcpkg.ServiceRegistry
 	pool     *ConnectionPool
@@ -54,7 +53,6 @@ func NewClient(config Config, logger observability.Logger, tracer observability.
 
 	return &Client{
 		config: config,
-		logger: logger,
 		tracer: tracer,
 		pool:   NewConnectionPool(config.PoolSize, config.PoolTimeout, logger, tracer, config.ServiceName),
 	}
