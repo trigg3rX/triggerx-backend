@@ -79,19 +79,8 @@ func RegisterRoutes(router *gin.Engine, logger observability.Logger) {
 		})
 	})
 
-	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
-	router.GET("/keeper-status", handler.GetKeeperStatus)
 	router.GET("/operators", handler.GetDetailedKeeperStatus)
-	router.GET("/performers", handler.GetActivePerformers)
-}
-
-func (h *Handler) handleRoot(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"service":   "TriggerX Health Service",
-		"status":    "running",
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	})
 }
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
@@ -209,21 +198,6 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (h *Handler) GetKeeperStatus(c *gin.Context) {
-	ctx := c.Request.Context()
-	total, active := h.stateManager.GetKeeperCount(ctx)
-	activeKeepers := h.stateManager.GetAllActiveKeepers(ctx)
-
-	// Update keeper metrics
-	metrics.UpdateKeeperCounts(ctx, total, active)
-
-	c.JSON(http.StatusOK, gin.H{
-		"total_keepers":      total,
-		"active_keepers":     active,
-		"active_keeper_list": activeKeepers,
-	})
-}
-
 func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 	total, active := h.stateManager.GetKeeperCount(ctx)
@@ -254,51 +228,5 @@ func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 		"active_keepers": active,
 		"keepers":        detailedInfo,
 		"timestamp":      time.Now().UTC().Format(time.RFC3339),
-	})
-}
-
-// GetActivePerformers returns active performers for taskmanager service
-func (h *Handler) GetActivePerformers(c *gin.Context) {
-	// detailedKeepers := h.stateManager.GetDetailedKeeperInfo()
-
-	// Filter for active keepers only and convert to performer format
-	// performers := make([]map[string]interface{}, 0)
-	// for _, keeper := range detailedKeepers {
-	// 	if keeper.IsActive {
-	// 		// Parse operator_id from string to int64
-	// 		operatorID, err := strconv.ParseInt(keeper.OperatorID, 10, 64)
-	// 		if err != nil {
-	// 			h.logger.Error("Failed to parse operator_id", "operator_id", keeper.OperatorID, "error", err)
-	// 			continue // Skip this keeper if we can't parse the operator_id
-	// 		}
-
-	// 		performer := map[string]interface{}{
-	// 			"operator_id":    operatorID,
-	// 			"keeper_address": keeper.KeeperAddress,
-	// 			"is_imua":        keeper.IsImua,
-	// 			"last_seen":      keeper.LastCheckedIn,
-	// 		}
-	// 		performers = append(performers, performer)
-	// 	}
-	// }
-
-	// Temporary fix for taskmanager
-	fallbackPerformers := []types.PerformerData{
-		{
-			OperatorID:    4,
-			KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
-			IsImua:        false,
-		},
-		{
-			OperatorID:    1,
-			KeeperAddress: "0xcacce39134e3b9d5d9220d87fc546c6f0fb9cc37",
-			IsImua:        true,
-		},
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"performers": fallbackPerformers,
-		"count":      len(fallbackPerformers),
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 	})
 }
