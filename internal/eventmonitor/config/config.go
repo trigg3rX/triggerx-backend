@@ -40,6 +40,10 @@ type Config struct {
 	pinataHost string
 	pinataJWT  string
 
+	// Upstash Redis URL and Rest Token
+	upstashRedisUrl       string
+	upstashRedisRestToken string
+
 	// YAML-loaded settings
 	polling  PollingConfig
 	webhook  WebhookConfig
@@ -95,6 +99,8 @@ func Init(configPath string) error {
 		alchemyAPIKey:                env.GetEnvString("EVENT_MONITOR_ALCHEMY_API_KEY", ""),
 		pinataHost:                   env.GetEnvString("PINATA_HOST", "https://api.pinata.cloud"),
 		pinataJWT:                    env.GetEnvString("PINATA_JWT", ""),
+		upstashRedisUrl:              env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken:        env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		polling:                      yamlConfig.Polling,
 		webhook:                      yamlConfig.Webhook,
 		metrics:                      yamlConfig.Metrics,
@@ -160,6 +166,10 @@ func GetOTELExporterEndpoint() string {
 
 func GetServiceID() string {
 	return cfg.serviceID
+}
+
+func GetServiceName() string {
+	return "event-monitor"
 }
 
 func GetMetricsUpdateInterval() time.Duration {
@@ -238,4 +248,12 @@ func GetChainRPCUrls() map[string]string {
 		"8453":     fmt.Sprintf("https://base-mainnet.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
 		"42161":    fmt.Sprintf("https://arb-mainnet.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
 	}
+}
+
+func GetUpstashRedisUrl() string {
+	return cfg.upstashRedisUrl
+}
+
+func GetUpstashRedisRestToken() string {
+	return cfg.upstashRedisRestToken
 }

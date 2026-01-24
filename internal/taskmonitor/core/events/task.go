@@ -1,0 +1,565 @@
+package events
+
+import (
+	"context"
+	"encoding/hex"
+	"fmt"
+	"sync"
+	"time"
+
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/core/tasks"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/database/repository"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc/clients/notify"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
+)
+
+// ContractType represents the type of contract
+type ContractType string
+
+const (
+	ContractTypeAttestationCenter ContractType = "attestation_center"
+)
+
+// ContractEventData represents parsed contract event data used downstream
+type ContractEventData struct {
+	EventType    string                 `json:"event_type"`
+	ContractType ContractType           `json:"contract_type"`
+	ParsedData   map[string]interface{} `json:"parsed_data"`
+	RawData      []byte                 `json:"raw_data"`
+	Topics       []string               `json:"topics"`
+	BlockNumber  uint64                 `json:"block_number"`
+	TxHash       string                 `json:"tx_hash"`
+	LogIndex     uint                   `json:"log_index"`
+}
+
+// ChainEvent represents an event from any blockchain
+type ChainEvent struct {
+	ChainID      string       `json:"chain_id"`
+	ChainName    string       `json:"chain_name"`
+	ContractAddr string       `json:"contract_address"`
+	ContractType ContractType `json:"contract_type"`
+	EventName    string       `json:"event_name"`
+	BlockNumber  uint64       `json:"block_number"`
+	TxHash       string       `json:"tx_hash"`
+	LogIndex     uint         `json:"log_index"`
+	Data         interface{}  `json:"data"`
+	RawLog       ethtypes.Log `json:"raw_log"`
+	ProcessedAt  time.Time    `json:"processed_at"`
+}
+
+// TaskEventHandler handles task-related events
+type TaskEventHandler struct {
+	logger            observability.Logger
+	tracer            observability.Tracer
+	taskRepo          repository.TaskRepository
+	ipfsClient        ipfs.IPFSClient
+	taskStreamManager *tasks.TaskStreamManager
+	notifier          notify.Notifier
+	traceRegistry     *sync.Map // taskID -> traceID for correlation between execution and validation
+}
+
+// NewTaskEventHandler creates a new TaskEventHandler instance
+func NewTaskEventHandler(logger observability.Logger, tracer observability.Tracer, taskRepo repository.TaskRepository, ipfsClient ipfs.IPFSClient, taskStreamManager *tasks.TaskStreamManager, notifier notify.Notifier) *TaskEventHandler {
+	return &TaskEventHandler{
+		logger:            logger,
+		tracer:            tracer,
+		taskRepo:          taskRepo,
+		ipfsClient:        ipfsClient,
+		taskStreamManager: taskStreamManager,
+		notifier:          notifier,
+		traceRegistry:     &sync.Map{},
+	}
+}
+
+// ProcessConsensusEvent processes consensus events with already-parsed TaskSubmissionData
+func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *ChainEvent, taskData *types.TaskSubmissionData) {
+	// TaskData is already parsed by EventMonitor, just use it directly
+	switch taskData.TaskDefinitionID {
+	case 10001, 10002:
+		h.logger.Debug(ctx, "Skipping task processing - Task is Internal Task", observability.Int64("task_number", taskData.TaskNumber))
+		return
+	case 1, 2, 3, 4, 5, 6, 7: // Added 7 for custom script jobs
+		dataBytes, err := hex.DecodeString(taskData.Data) // Remove "0x" prefix before decoding
+		if err != nil {
+			h.logger.Error(ctx, "Failed to hex-decode data", observability.Error(err))
+			return
+		}
+		ipfsHash := string(dataBytes)
+		ipfsData, err := h.ipfsClient.Fetch(ctx, ipfsHash)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to fetch IPFS data", observability.Error(err))
+			return
+		}
+
+		// Extract trace context from IPFS data (embedded by performer)
+		var traceID, spanID string
+		if ipfsData.TraceID != "" {
+			traceID = ipfsData.TraceID
+			spanID = ipfsData.SpanID
+		}
+
+		// Continue trace if trace context is available
+		if traceID != "" {
+			ctx = observability.ContinueTrace(ctx, traceID, spanID)
+		}
+
+		// Create span for execution data processing
+		ctx, span := h.tracer.Start(ctx, "task.monitor.execution",
+			observability.WithSpanKind(trace.SpanKindConsumer),
+		)
+		defer span.End()
+
+		// Use TotalFee directly as string (Wei) - no conversion needed
+		taskOpxCostWei := "0"
+		if ipfsData.ActionData != nil && ipfsData.ActionData.TotalFee != "" {
+			taskOpxCostWei = ipfsData.ActionData.TotalFee
+		}
+
+		taskData.TaskID = ipfsData.ActionData.TaskID
+		taskData.ExecutionTxHash = ipfsData.ActionData.ActionTxHash
+		taskData.ExecutionTimestamp = ipfsData.ActionData.ExecutionTimestamp
+		taskData.TaskOpxCost = taskOpxCostWei
+		taskData.ProofOfTask = ipfsData.ProofData.ProofOfTask
+		taskData.ConvertedArguments = ipfsData.ActionData.ConvertedArguments
+
+		// Set span attributes
+		span.SetAttributes(
+			attribute.Int64("task.id", taskData.TaskID),
+			attribute.Int64("task.number", taskData.TaskNumber),
+			attribute.String("task.submission.tx_hash", event.TxHash),
+			attribute.Bool("task.is_accepted", taskData.IsAccepted),
+			attribute.Int("task.definition_id", taskData.TaskDefinitionID),
+			attribute.String("performer.address", taskData.PerformerAddress),
+			attribute.String("ipfs.cid", ipfsHash),
+		)
+
+		// Add event when execution data is processed
+		span.AddEvent("execution.data.processed", observability.WithEventAttributes(
+			attribute.String("execution.tx_hash", taskData.ExecutionTxHash),
+			attribute.String("ipfs.cid", ipfsHash),
+		))
+
+		// First, move the task from dispatched to completed based on onchain result
+		h.logger.Info(ctx, "Task submitted onchain, moving to completed stream",
+			observability.Int64("task_id", taskData.TaskID),
+			observability.Int64("task_number", taskData.TaskNumber),
+			observability.String("tx_hash", event.TxHash),
+			observability.Bool("is_accepted", taskData.IsAccepted))
+
+		// Move task from dispatched to completed stream
+		if err := h.moveTaskToCompleted(ctx, taskData.TaskID); err != nil {
+			span.RecordError(err, observability.WithErrorAttributes(
+				attribute.String("error.type", "stream_move_failed"),
+			))
+			h.logger.Error(ctx, "Failed to move task to completed stream", observability.Error(err))
+		}
+
+		// Update task submission data in database
+		if err := h.taskRepo.UpdateTaskSubmissionData(ctx, *taskData); err != nil {
+			span.RecordError(err, observability.WithErrorAttributes(
+				attribute.String("error.type", "database_update_failed"),
+			))
+			span.SetStatus(codes.Error, "failed to update execution data")
+			h.logger.Error(ctx, "Failed to update task submission data in database", observability.Error(err))
+		} else {
+			span.AddEvent("execution.data.updated", observability.WithEventAttributes(
+				attribute.String("database.table", "tasks"),
+			))
+			// Store trace ID in registry for correlation with validation event (after we have taskID)
+			if traceID != "" && taskData.TaskID > 0 {
+				h.traceRegistry.Store(taskData.TaskID, traceID)
+			}
+		}
+
+		// For custom script jobs (TaskDefinitionID = 7), update storage
+		if taskData.TaskDefinitionID == 7 && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
+			jobID, err := h.taskRepo.GetJobIDByTaskID(ctx, taskData.TaskID)
+			if err != nil {
+				span.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "job_id_lookup_failed"),
+				))
+				h.logger.Error(ctx, "Failed to get job ID for task", observability.Int64("task_id", taskData.TaskID), observability.Error(err))
+			} else {
+				if err := h.taskRepo.UpdateScriptStorage(ctx, jobID, ipfsData.ActionData.StorageUpdates); err != nil {
+					span.RecordError(err, observability.WithErrorAttributes(
+						attribute.String("error.type", "storage_update_failed"),
+					))
+					h.logger.Error(ctx, "Failed to update script storage for job", observability.String("job_id", jobID), observability.Error(err))
+				} else {
+					h.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID))
+				}
+			}
+		}
+
+		// Update keeper points in database
+		if err := h.taskRepo.UpdateKeeperPointsInDatabase(ctx, *taskData); err != nil {
+			span.RecordError(err, observability.WithErrorAttributes(
+				attribute.String("error.type", "keeper_points_update_failed"),
+			))
+			h.logger.Error(ctx, "Failed to update keeper points in database", observability.Error(err))
+			// Don't return, continue processing
+		}
+
+		// Process validation data if attester IDs are present (validation complete)
+		if len(taskData.AttesterIds) > 0 {
+			// Retrieve trace ID from registry for correlation
+			var validationTraceID string
+			if traceID != "" {
+				validationTraceID = traceID
+			} else if taskData.TaskID > 0 {
+				if storedTraceID, exists := h.traceRegistry.Load(taskData.TaskID); exists {
+					if traceIDStr, ok := storedTraceID.(string); ok && traceIDStr != "" {
+						validationTraceID = traceIDStr
+					}
+				}
+			}
+
+			// Continue trace for validation if we have trace ID
+			validationCtx := ctx
+			if validationTraceID != "" {
+				validationCtx = observability.ContinueTrace(ctx, validationTraceID, "")
+			}
+
+			// Create span for validation data processing
+			validationCtx, validationSpan := h.tracer.Start(validationCtx, "task.monitor.validation",
+				observability.WithSpanKind(trace.SpanKindConsumer),
+				observability.WithAttributes(
+					attribute.Int64("task.id", taskData.TaskID),
+					attribute.String("validation.tx_hash", event.TxHash),
+					attribute.Int("validation.attester_count", len(taskData.AttesterIds)),
+					attribute.String("validation.timestamp", time.Now().Format(time.RFC3339)),
+				),
+			)
+			defer validationSpan.End()
+
+			validationSpan.AddEvent("validation.data.received", observability.WithEventAttributes(
+				attribute.String("validation.tx_hash", event.TxHash),
+				attribute.Int("attester_count", len(taskData.AttesterIds)),
+			))
+
+			// Note: UpdateTaskValidationData doesn't exist in the database client
+			// Validation data is already included in TaskSubmissionData and updated via UpdateTaskSubmissionData
+			// If a separate validation update method exists, it should be called here
+			// For now, we'll just mark validation as complete in the span
+			validationSpan.AddEvent("validation.data.updated", observability.WithEventAttributes(
+				attribute.String("database.table", "tasks"),
+				attribute.Bool("validation.complete", true),
+			))
+
+			h.logger.Info(validationCtx, "Validation data processed",
+				observability.Int64("task_id", taskData.TaskID),
+				observability.Int("attester_count", len(taskData.AttesterIds)),
+				observability.String("validation_tx_hash", event.TxHash))
+		}
+
+		// Notify user about task completion/rejection
+		if h.notifier != nil {
+			// Fetch user email by task id -> job id mapping
+			email, err := h.taskRepo.GetUserEmailByTaskID(ctx, taskData.TaskID)
+			if err != nil {
+				h.logger.Warn(ctx, "Could not fetch user email for task", observability.Int64("task_id", taskData.TaskID), observability.Error(err))
+			} else if email != "" {
+				payload := notify.TaskStatusPayload{
+					TaskID:          taskData.TaskID,
+					JobID:           0,
+					Status:          "completed",
+					IsAccepted:      taskData.IsAccepted,
+					SubmissionTx:    taskData.TaskSubmissionTxHash,
+					ExecutionTxHash: taskData.ExecutionTxHash,
+					ProofOfTask:     taskData.ProofOfTask,
+					OccurredAt:      time.Now(),
+				}
+				if !taskData.IsAccepted {
+					payload.Status = "failed"
+				}
+				if err := h.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
+					h.logger.Warn(ctx, "Failed to notify user", observability.String("email", email), observability.Int64("task_id", taskData.TaskID), observability.Error(err))
+				}
+			}
+		}
+	default:
+		return
+	}
+}
+
+// ProcessConsensusEventFromIPFS processes consensus events with IPFS data directly from eventmonitor
+// This is the new flow where eventmonitor fetches IPFS data and passes it with trace context
+func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, txHash string, isAccepted bool, ipfsData *types.IPFSData, ipfsCID string) error {
+	if ipfsData == nil {
+		return fmt.Errorf("ipfs data is nil")
+	}
+
+	// Get task ID from ActionData (single task ID per execution)
+	taskID := int64(0)
+	if ipfsData.ActionData != nil {
+		taskID = ipfsData.ActionData.TaskID
+	}
+
+	// Get task definition ID from PerformerData in TaskData
+	taskDefinitionID := 0
+	if ipfsData.TaskData != nil && len(ipfsData.TaskData.TargetData) > 0 {
+		taskDefinitionID = ipfsData.TaskData.TargetData[0].TaskDefinitionID
+	}
+
+	h.logger.Info(ctx, "Processing consensus event from IPFS data",
+		observability.Int64("task_id", taskID),
+		observability.String("tx_hash", txHash),
+		observability.Bool("is_accepted", isAccepted))
+
+	// Use TotalFee directly as string (Wei) - no conversion needed
+	taskOpxCostWei := "0"
+	if ipfsData.ActionData != nil && ipfsData.ActionData.TotalFee != "" {
+		taskOpxCostWei = ipfsData.ActionData.TotalFee
+	}
+
+	// Build TaskSubmissionData from IPFS data
+	taskData := &types.TaskSubmissionData{
+		TaskID:               taskID,
+		TaskDefinitionID:     taskDefinitionID,
+		IsAccepted:           isAccepted,
+		TaskSubmissionTxHash: txHash,
+		TaskOpxCost:          taskOpxCostWei,
+	}
+
+	// Populate from ActionData
+	if ipfsData.ActionData != nil {
+		taskData.ExecutionTxHash = ipfsData.ActionData.ActionTxHash
+		taskData.ExecutionTimestamp = ipfsData.ActionData.ExecutionTimestamp
+		taskData.ConvertedArguments = ipfsData.ActionData.ConvertedArguments
+	}
+
+	// Populate from ProofData
+	if ipfsData.ProofData != nil {
+		taskData.ProofOfTask = ipfsData.ProofData.ProofOfTask
+	}
+
+	// Populate from PerformerSignature
+	if ipfsData.PerformerSignature != nil {
+		taskData.PerformerAddress = ipfsData.PerformerSignature.PerformerSigningAddress
+	}
+
+	// Create span for task processing
+	ctx, span := h.tracer.Start(ctx, "task.monitor.process",
+		observability.WithSpanKind(trace.SpanKindInternal),
+		observability.WithAttributes(
+			attribute.Int64("task.id", taskID),
+			attribute.String("task.submission.tx_hash", txHash),
+			attribute.Bool("task.is_accepted", isAccepted),
+		),
+	)
+	defer span.End()
+
+	span.AddEvent("ipfs.data.received", observability.WithEventAttributes(
+		attribute.String("tx.hash", txHash),
+	))
+
+	// Move task from dispatched to completed stream
+	streamHandled := true
+	if err := h.moveTaskToCompleted(ctx, taskID); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "stream_move_failed"),
+		))
+		h.logger.Error(ctx, "Failed to move task to validated stream", observability.Error(err))
+		streamHandled = false
+		// Stream move failure is critical - task should be in validated stream
+		// But continue to attempt DB update anyway
+	}
+
+	// Update task submission data in database
+	if err := h.taskRepo.UpdateTaskSubmissionData(ctx, *taskData); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "database_update_failed"),
+		))
+		h.logger.Error(ctx, "Failed to update task submission data in database", observability.Error(err))
+		// Don't return error - task is already validated in stream
+		// DB update can be retried later if needed, but task should not be rebroadcasted
+	} else {
+		span.SetStatus(codes.Ok, "task validated and database updated")
+
+		// Schedule IPFS file deletion after 6 hours delay
+		// This happens after data is downloaded, DB is updated, and stream is handled
+		// Only schedule deletion if both stream handling and DB update succeeded
+		if streamHandled && ipfsCID != "" {
+			h.scheduleIPFSDeletion(ctx, ipfsCID, taskID)
+		} else if !streamHandled {
+			h.logger.Warn(ctx, "Skipping IPFS deletion scheduling - stream handling failed",
+				observability.String("ipfs_cid", ipfsCID),
+				observability.Int64("task_id", taskID))
+		}
+	}
+
+	span.AddEvent("task.data.updated", observability.WithEventAttributes(
+		attribute.String("database.table", "tasks"),
+	))
+
+	// For custom script jobs (TaskDefinitionID = 7), update storage
+	if taskData.TaskDefinitionID == 7 && ipfsData.ActionData != nil && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
+		jobID, err := h.taskRepo.GetJobIDByTaskID(ctx, taskID)
+		if err != nil {
+			span.RecordError(err, observability.WithErrorAttributes(
+				attribute.String("error.type", "job_id_lookup_failed"),
+			))
+			h.logger.Error(ctx, "Failed to get job ID for task", observability.Int64("task_id", taskID), observability.Error(err))
+		} else {
+			if err := h.taskRepo.UpdateScriptStorage(ctx, jobID, ipfsData.ActionData.StorageUpdates); err != nil {
+				span.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "storage_update_failed"),
+				))
+				h.logger.Error(ctx, "Failed to update script storage for job", observability.String("job_id", jobID), observability.Error(err))
+			} else {
+				h.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID))
+			}
+		}
+	}
+
+	// Update keeper points in database
+	if err := h.taskRepo.UpdateKeeperPointsInDatabase(ctx, *taskData); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "keeper_points_update_failed"),
+		))
+		h.logger.Error(ctx, "Failed to update keeper points in database", observability.Error(err))
+		// Don't return, continue processing
+	}
+
+	// Notify user about task completion/rejection
+	if h.notifier != nil {
+		email, err := h.taskRepo.GetUserEmailByTaskID(ctx, taskID)
+		if err != nil {
+			h.logger.Warn(ctx, "Could not fetch user email for task", observability.Int64("task_id", taskID), observability.Error(err))
+		} else if email != "" {
+			payload := notify.TaskStatusPayload{
+				TaskID:          taskID,
+				JobID:           0,
+				Status:          "completed",
+				IsAccepted:      isAccepted,
+				SubmissionTx:    txHash,
+				ExecutionTxHash: taskData.ExecutionTxHash,
+				ProofOfTask:     taskData.ProofOfTask,
+				OccurredAt:      time.Now(),
+			}
+			if !isAccepted {
+				payload.Status = "failed"
+			}
+			if err := h.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
+				h.logger.Warn(ctx, "Failed to notify user", observability.String("email", email), observability.Int64("task_id", taskID), observability.Error(err))
+			}
+		}
+	}
+
+	span.SetStatus(codes.Ok, "consensus event processed")
+	h.logger.Info(ctx, "Consensus event processed successfully",
+		observability.Int64("task_id", taskID),
+		observability.String("tx_hash", txHash),
+		observability.Bool("is_accepted", isAccepted))
+
+	return nil
+}
+
+// moveTaskToCompleted moves a task from executed (or dispatched) to validated stream
+func (h *TaskEventHandler) moveTaskToCompleted(ctx context.Context, taskID int64) error {
+	h.logger.Info(ctx, "Moving task to validated stream", observability.Int64("task_id", taskID))
+
+	// Try to find task in executed stream first (most common case after execution)
+	var task *types.TaskStreamData
+	var messageID string
+	var err error
+	task, messageID, err = h.taskStreamManager.FindTaskByIDInStream(ctx, taskID, types.StreamTaskExecuted)
+	if err != nil {
+		// Fallback to dispatched stream (for tasks that were validated before execution completed)
+		h.logger.Debug(ctx, "Task not found in executed stream, checking dispatched stream",
+			observability.Int64("task_id", taskID))
+		task, err = h.taskStreamManager.FindTaskInDispatched(taskID)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to find task in executed or dispatched stream",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+			return err
+		}
+		messageID = "" // No messageID for dispatched stream lookup
+	}
+
+	// Mark task as validated
+	now := time.Now()
+	task.ValidatedAt = &now
+
+	// Add to validated stream
+	err = h.taskStreamManager.AddTaskToStream(ctx, types.StreamTaskValidated, task)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to add task to validated stream", observability.Int64("task_id", taskID), observability.Error(err))
+		return err
+	}
+
+	// Remove from executed stream if it was there (acknowledge)
+	if messageID != "" {
+		if err := h.taskStreamManager.AckTaskProcessed(ctx, types.StreamTaskExecuted, "task-processors", messageID); err != nil {
+			h.logger.Warn(ctx, "Failed to acknowledge task from executed stream",
+				observability.Int64("task_id", taskID),
+				observability.String("message_id", messageID),
+				observability.Error(err))
+		}
+		// Always remove from task index and timeout tracking, even if ack failed
+		// The task is already validated, so it should not be in timeout tracking
+		if err := h.taskStreamManager.RemoveTaskIndex(ctx, taskID); err != nil {
+			h.logger.Warn(ctx, "Failed to remove task from index after validation",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+		}
+		// CRITICAL: Always remove from timeout tracking - task is validated, don't rebroadcast
+		if err := h.taskStreamManager.RemoveExecutedTaskTimeout(ctx, taskID); err != nil {
+			h.logger.Warn(ctx, "Failed to remove task from timeout tracking after validation",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+		}
+	} else {
+		// Task was in dispatched stream (no timeout tracking), but still clean up index if present
+		if err := h.taskStreamManager.RemoveTaskIndex(ctx, taskID); err != nil {
+			h.logger.Debug(ctx, "Task index not found (expected for dispatched stream tasks)",
+				observability.Int64("task_id", taskID))
+		}
+	}
+
+	h.logger.Info(ctx, "Task moved to validated stream successfully", observability.Int64("task_id", taskID))
+
+	return nil
+}
+
+// scheduleIPFSDeletion schedules IPFS file deletion after a 6-hour delay
+// This is called after data is downloaded, DB is updated, and stream is handled
+func (h *TaskEventHandler) scheduleIPFSDeletion(ctx context.Context, ipfsCID string, taskID int64) {
+	const deletionDelay = 6 * time.Hour
+
+	// Start a goroutine to handle delayed deletion
+	go func() {
+		// Create a new context for the deletion operation
+		// We use a background context since the original context might be cancelled
+		deleteCtx := context.Background()
+
+		// Wait for the delay
+		select {
+		case <-time.After(deletionDelay):
+			// Attempt to delete the IPFS file
+			if err := h.ipfsClient.Delete(deleteCtx, ipfsCID); err != nil {
+				h.logger.Error(deleteCtx, "Failed to delete IPFS file",
+					observability.String("ipfs_cid", ipfsCID),
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
+			} else {
+				h.logger.Info(deleteCtx, "Successfully deleted IPFS file",
+					observability.String("ipfs_cid", ipfsCID),
+					observability.Int64("task_id", taskID))
+			}
+		case <-ctx.Done():
+			// Original context cancelled, abort deletion
+			h.logger.Debug(deleteCtx, "IPFS deletion cancelled due to context cancellation",
+				observability.String("ipfs_cid", ipfsCID),
+				observability.Int64("task_id", taskID))
+		}
+	}()
+}

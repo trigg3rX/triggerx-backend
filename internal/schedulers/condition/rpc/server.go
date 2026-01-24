@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/core/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
 	rpctracing "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
@@ -18,8 +18,13 @@ type Server struct {
 	logger observability.Logger
 }
 
+// Dependencies contains dependencies for the RPC server
+type Dependencies struct {
+	Scheduler *scheduler.ConditionBasedScheduler
+}
+
 // NewServer creates a new RPC server for condition scheduler
-func NewServer(logger observability.Logger, tracer observability.Tracer, sched *scheduler.ConditionBasedScheduler) (*Server, error) {
+func NewServer(logger observability.Logger, tracer observability.Tracer, deps *Dependencies) (*Server, error) {
 	// Parse port from string to int
 	port, err := strconv.Atoi(config.GetGRPCPort())
 	if err != nil {
@@ -28,25 +33,20 @@ func NewServer(logger observability.Logger, tracer observability.Tracer, sched *
 
 	// Create RPC server config
 	serverConfig := rpcserver.Config{
-		Name:        "condition-scheduler",
-		Version:     config.GetVersion(),
-		Address:     "0.0.0.0",
-		Port:        port,
-		Timeout:     30,
-		MaxRequests: 1000,
-		Metadata: map[string]string{
-			"service": "condition-scheduler",
-		},
+		Name:    config.GetServiceName(),
+		Version: config.GetVersion(),
+		Address: "0.0.0.0",
+		Port:    port,
 	}
 
 	// Create RPC server
 	rpcSrv := rpcserver.NewServer(serverConfig, logger)
 
 	// Add trace interceptor
-	rpcSrv.AddInterceptor(rpctracing.TraceInterceptor(tracer, "condition-scheduler"))
+	rpcSrv.AddInterceptor(rpctracing.TraceInterceptor(tracer, config.GetServiceName()))
 
 	// Create and register handler
-	handler := NewHandler(logger, tracer, sched)
+	handler := NewHandler(logger, tracer, deps.Scheduler)
 	rpcSrv.RegisterHandler("condition-scheduler", handler)
 
 	return &Server{

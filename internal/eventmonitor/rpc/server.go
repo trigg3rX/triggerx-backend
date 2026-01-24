@@ -6,8 +6,8 @@ import (
 	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/registry"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/core/registry"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/core/service"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
@@ -20,8 +20,14 @@ type Server struct {
 	logger observability.Logger
 }
 
+// Dependencies contains dependencies for the RPC server
+type Dependencies struct {
+	RegistryManager *registry.RegistryManager
+	Service         *service.Service
+}
+
 // NewServer creates a new RPC server for event monitor
-func NewServer(logger observability.Logger, tracer observability.Tracer, registryManager *registry.RegistryManager, svc *service.Service) (*Server, error) {
+func NewServer(logger observability.Logger, tracer observability.Tracer, deps *Dependencies) (*Server, error) {
 	// Parse port from string to int
 	port, err := strconv.Atoi(config.GetGRPCPort())
 	if err != nil {
@@ -30,25 +36,20 @@ func NewServer(logger observability.Logger, tracer observability.Tracer, registr
 
 	// Create RPC server config
 	serverConfig := rpcserver.Config{
-		Name:        "event-monitor",
-		Version:     config.GetVersion(),
-		Address:     "0.0.0.0",
-		Port:        port,
-		Timeout:     30,
-		MaxRequests: 1000,
-		Metadata: map[string]string{
-			"service": "event-monitor",
-		},
+		Name:    config.GetServiceName(),
+		Version: config.GetVersion(),
+		Address: "0.0.0.0",
+		Port:    port,
 	}
 
 	// Create RPC server
 	rpcSrv := rpcserver.NewServer(serverConfig, logger)
 
 	// Add trace interceptor
-	rpcSrv.AddInterceptor(rpctracing.TraceInterceptor(tracer, "event-monitor"))
+	rpcSrv.AddInterceptor(rpctracing.TraceInterceptor(tracer, config.GetServiceName()))
 
 	// Create and register handler
-	handler := NewHandler(logger, tracer, registryManager, svc)
+	handler := NewHandler(logger, tracer, deps.RegistryManager, deps.Service)
 	rpcSrv.RegisterHandler("event-monitor", handler)
 
 	return &Server{

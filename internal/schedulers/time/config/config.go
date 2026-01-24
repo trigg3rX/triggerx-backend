@@ -29,11 +29,15 @@ type Config struct {
 	// Task Dispatcher RPC URL
 	taskDispatcherRPCUrl string
 
-	// YAML-loaded settings	
-	polling PollingConfig
-	metrics              yaml.MetricsConfig
-	shutdown             yaml.ShutdownConfig
-	version              yaml.VersionConfig
+	// Upstash Redis URL and Rest Token
+	upstashRedisUrl       string
+	upstashRedisRestToken string
+
+	// YAML-loaded settings
+	polling  PollingConfig
+	metrics  yaml.MetricsConfig
+	shutdown yaml.ShutdownConfig
+	version  yaml.VersionConfig
 }
 
 type PollingConfig struct {
@@ -66,17 +70,19 @@ func Init(configPath string) error {
 	}
 
 	cfg = &Config{
-		devMode:              env.GetEnvBool("DEV_MODE", false),
-		httpPort:             env.GetEnvString("TIME_SCHEDULER_HTTP_PORT", "9005"),
-		grpcPort:             env.GetEnvString("TIME_SCHEDULER_GRPC_PORT", "9015"),
-		dbConnection:         env.GetDatabaseConfig(),
-		otelExporterEndpoint: env.GetOTELExporterEndpoint(),
-		taskDispatcherRPCUrl: env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
-		serviceID:            env.GetEnvString("TIME_SCHEDULER_SERVICE_ID", "1"),
-		polling:              yamlConfig.Polling,
-		metrics:              yamlConfig.Metrics,
-		shutdown:             yamlConfig.Shutdown,
-		version:              yamlConfig.Version,
+		devMode:               env.GetEnvBool("DEV_MODE", false),
+		httpPort:              env.GetEnvString("TIME_SCHEDULER_HTTP_PORT", "9005"),
+		grpcPort:              env.GetEnvString("TIME_SCHEDULER_GRPC_PORT", "9015"),
+		dbConnection:          env.GetDatabaseConfig(),
+		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
+		taskDispatcherRPCUrl:  env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
+		serviceID:             env.GetEnvString("TIME_SCHEDULER_SERVICE_ID", "1"),
+		upstashRedisUrl:       env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken: env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		polling:               yamlConfig.Polling,
+		metrics:               yamlConfig.Metrics,
+		shutdown:              yamlConfig.Shutdown,
+		version:               yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -204,4 +210,12 @@ func GetMetricsUpdateInterval() time.Duration {
 
 func GetShutdownTimeout() time.Duration {
 	return cfg.shutdown.Timeout.ToDuration()
+}
+
+func GetUpstashRedisUrl() string {
+	return cfg.upstashRedisUrl
+}
+
+func GetUpstashRedisRestToken() string {
+	return cfg.upstashRedisRestToken
 }

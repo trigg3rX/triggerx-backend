@@ -46,11 +46,11 @@ type Config struct {
 	upstashToken string
 
 	// YAML-loaded settings
-	redis    RedisConfig
+	redis              RedisConfig
 	databaseOperations yaml.DatabaseOperationsConfig
-	metrics              yaml.MetricsConfig
-	shutdown             yaml.ShutdownConfig
-	version              yaml.VersionConfig
+	metrics            yaml.MetricsConfig
+	shutdown           yaml.ShutdownConfig
+	version            yaml.VersionConfig
 }
 
 type RedisConfig struct {
@@ -68,11 +68,11 @@ type RedisConfig struct {
 }
 
 type YAMLConfig struct {
-	Redis    RedisConfig    `yaml:"redis"`
+	Redis              RedisConfig                   `yaml:"redis"`
 	DatabaseOperations yaml.DatabaseOperationsConfig `yaml:"database"`
-	Metrics  yaml.MetricsConfig  `yaml:"metrics"`
-	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
-	Version  yaml.VersionConfig  `yaml:"version"`
+	Metrics            yaml.MetricsConfig            `yaml:"metrics"`
+	Shutdown           yaml.ShutdownConfig           `yaml:"shutdown"`
+	Version            yaml.VersionConfig            `yaml:"version"`
 }
 
 var cfg Config
@@ -90,26 +90,26 @@ func Init(configPath string) error {
 	}
 
 	cfg = Config{
-		devMode:               env.GetEnvBool("DEV_MODE", false),
-		httpPort:              env.GetEnvString("TASK_DISPATCHER_HTTP_PORT", "9007"),
-		grpcPort:              env.GetEnvString("TASK_DISPATCHER_GRPC_PORT", "9017"),
-		dbConnection:          env.GetDatabaseConfig(),
-		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
-		serviceID:             env.GetEnvString("TASK_DISPATCHER_SERVICE_ID", "1"),
-		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "localhost:9014"),
-		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "localhost:9001"),
-		testAggregatorRPCUrl:  env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "localhost:9001"),
-		performerAPIUrl:       env.GetEnvString("PERFORMER_API_URL", "localhost:9021"),
-		testPerformerAPIUrl:   env.GetEnvString("TEST_PERFORMER_API_URL", "localhost:9021"),
-		signingKey:            env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
-		signingAddress:        env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
-		upstashURL:            env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashToken:          env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		redis:                 yamlConfig.Redis,
-		databaseOperations:    yamlConfig.DatabaseOperations,
-		metrics:               yamlConfig.Metrics,
-		shutdown:              yamlConfig.Shutdown,
-		version:               yamlConfig.Version,
+		devMode:              env.GetEnvBool("DEV_MODE", false),
+		httpPort:             env.GetEnvString("TASK_DISPATCHER_HTTP_PORT", "9007"),
+		grpcPort:             env.GetEnvString("TASK_DISPATCHER_GRPC_PORT", "9017"),
+		dbConnection:         env.GetDatabaseConfig(),
+		otelExporterEndpoint: env.GetOTELExporterEndpoint(),
+		serviceID:            env.GetEnvString("TASK_DISPATCHER_SERVICE_ID", "1"),
+		healthRPCUrl:         env.GetEnvString("HEALTH_RPC_URL", "localhost:9014"),
+		aggregatorRPCUrl:     env.GetEnvString("AGGREGATOR_RPC_URL", "localhost:9001"),
+		testAggregatorRPCUrl: env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "localhost:9001"),
+		performerAPIUrl:      env.GetEnvString("PERFORMER_API_URL", "localhost:9021"),
+		testPerformerAPIUrl:  env.GetEnvString("TEST_PERFORMER_API_URL", "localhost:9021"),
+		signingKey:           env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
+		signingAddress:       env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
+		upstashURL:           env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		redis:                yamlConfig.Redis,
+		databaseOperations:   yamlConfig.DatabaseOperations,
+		metrics:              yamlConfig.Metrics,
+		shutdown:             yamlConfig.Shutdown,
+		version:              yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -226,45 +226,20 @@ func GetServiceID() string {
 	return cfg.serviceID
 }
 
+func GetServiceName() string {
+	return "task-dispatcher"
+}
+
 func GetHealthRPCUrl() string {
 	return cfg.healthRPCUrl
 }
 
 func GetAggregatorRPCUrl() string {
-	url := cfg.aggregatorRPCUrl
-	// Auto-prepend http:// if scheme is missing (for backward compatibility)
-	if url != "" && !hasScheme(url) {
-		return "http://" + url
-	}
-	return url
+	return cfg.aggregatorRPCUrl
 }
 
 func GetTestAggregatorRPCUrl() string {
-	url := cfg.testAggregatorRPCUrl
-	// Auto-prepend http:// if scheme is missing (for backward compatibility)
-	if url != "" && !hasScheme(url) {
-		return "http://" + url
-	}
-	return url
-}
-
-// hasScheme checks if a URL string has a scheme (http://, https://, etc.)
-func hasScheme(url string) bool {
-	for i := 0; i < len(url); i++ {
-		if url[i] == ':' {
-			// Check if it's followed by // (scheme separator)
-			if i+2 < len(url) && url[i+1] == '/' && url[i+2] == '/' {
-				return true
-			}
-			// If we hit a colon before //, it's likely a port, not a scheme
-			return false
-		}
-		if url[i] == '/' {
-			// If we hit / before :, no scheme
-			return false
-		}
-	}
-	return false
+	return cfg.testAggregatorRPCUrl
 }
 
 func GetPerformerAPIUrl() string {
@@ -350,8 +325,6 @@ func GetDatabaseConnectWait() time.Duration {
 func GetDatabaseRetries() int {
 	return cfg.databaseOperations.Retries
 }
-
-
 
 func GetShutdownTimeout() time.Duration {
 	return cfg.shutdown.Timeout.ToDuration()

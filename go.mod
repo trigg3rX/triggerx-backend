@@ -29,7 +29,7 @@ require (
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/stretchr/testify v1.11.1
-	github.com/trigg3rX/triggerx-contracts/bindings v0.0.0-20260108190332-2561725160b1
+	github.com/trigg3rX/triggerx-contracts/bindings v0.0.0-20260124112416-79b0daa773d6
 	go.opentelemetry.io/otel v1.39.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.15.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.39.0

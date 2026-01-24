@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/core/scheduler"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/core/scheduler/worker"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"

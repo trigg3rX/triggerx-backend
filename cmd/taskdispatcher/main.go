@@ -6,25 +6,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
-	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/api"
-	dbClient "github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/database"
-	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/health"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/core/dispatcher"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/database"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/database/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/rpc"
-	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/rpc/clients/health"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
-	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
-	rpctracing "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
 )
 
 func main() {
@@ -62,143 +56,103 @@ func main() {
 	ctx := context.Background()
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
-	logger.Info(ctx, "[1/7] Dependency: Observability Module Initialised")
+	logger.Info(ctx, "[1/12] Dependency: Observability Module Initialised")
 
-	// Create Redis client and verify connection
-	redisConfig := config.GetRedisClientConfig()
-	redisClient, err := redis.NewRedisClient(ctx, logger, redisConfig)
+	// Create Redis client using the local wrapper
+	redisClient, err := redis.NewClient(ctx, logger)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create Redis client", observability.Error(err))
 	}
-	if err := redisClient.Ping(ctx); err != nil {
-		logger.Fatal(ctx, "Redis is not reachable", observability.Error(err))
-	}
-	logger.Info(ctx, "[2/7] Dependency: Redis Client Initialised")
+	logger.Info(ctx, "[2/12] Dependency: Redis Client Initialised")
 
 	// Set up monitoring hooks for metrics integration
 	monitoringHooks := metrics.CreateRedisMonitoringHooks()
 	redisClient.SetMonitoringHooks(monitoringHooks)
 
-	aggCfg := aggregator.AggregatorClientConfig{
+	// Create aggregator clients using local wrappers
+	aggClient, err := aggregator.NewAggregatorClient(logger, aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
 		SenderPrivateKey: config.GetTaskDispatcherSigningKey(),
 		SenderAddress:    config.GetTaskDispatcherSigningAddress(),
-	}
-	aggClient, err := aggregator.NewAggregatorClient(logger, aggCfg)
+	})
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create aggregator client", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/7] Dependency: Aggregator Client Initialised")
+	logger.Info(ctx, "[3/12] Dependency: Aggregator Client Initialised")
 
-	testAggCfg := aggregator.AggregatorClientConfig{
+	testAggClient, err := aggregator.NewAggregatorClient(logger, aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetTestAggregatorRPCUrl(),
 		SenderPrivateKey: config.GetTaskDispatcherSigningKey(),
 		SenderAddress:    config.GetTaskDispatcherSigningAddress(),
-	}
-	testAggClient, err := aggregator.NewAggregatorClient(logger, testAggCfg)
+	})
 	if err != nil {
-		logger.Fatal(ctx, "Failed to create aggregator client", observability.Error(err))
+		logger.Fatal(ctx, "Failed to create test aggregator client", observability.Error(err))
 	}
-	logger.Info(ctx, "[4/7] Dependency: Test Aggregator Client Initialised")
+	logger.Info(ctx, "[4/12] Dependency: Test Aggregator Client Initialised")
 
+	// Initialize database connection
+	dbConn, err := database.NewConnection(logger)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to initialize database connection", observability.Error(err))
+	}
+	defer dbConn.Close()
+	logger.Info(ctx, "[5/12] Dependency: Database Connection Initialised")
+
+	// Initialize task repository
+	taskRepo := repository.NewTaskRepository(dbConn, logger)
+	logger.Info(ctx, "[6/12] Dependency: Task Repository Initialised")
+
+	// Create health client for performer selection
 	healthClient, err := health.NewClient(config.GetHealthRPCUrl(), logger, tracer)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create health client", observability.Error(err))
 	}
-	logger.Info(ctx, "[5/7] Dependency: Health Client Initialised")
+	logger.Info(ctx, "[7/12] Dependency: Health Client Initialised")
 
-	dbConfig := &database.Config{
-		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
-		Keyspace:    "triggerx",
-		Consistency: gocql.Quorum,
-		Timeout:     config.GetDatabaseTimeout(),
-		Retries:     config.GetDatabaseRetries(),
-		ConnectWait: config.GetDatabaseConnectWait(),
-		RetryConfig: retry.DefaultRetryConfig(),
-	}
-
-	// Configure authentication if provided
-	if config.GetDatabaseUsername() != "" && config.GetDatabasePassword() != "" {
-		dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
-	}
-
-	// Configure SSL/TLS if enabled
-	if config.GetDatabaseSSLEnabled() {
-		dbConfig.WithSSLCertificates(
-			config.GetDatabaseSSLCertPath(),
-			config.GetDatabaseSSLKeyPath(),
-			config.GetDatabaseSSLCAPath(),
-			config.GetDatabaseSSLInsecureSkipVerify(),
-		)
-	}
-
-	conn, err := database.NewConnection(dbConfig, logger)
-	if err != nil || conn == nil {
-		logger.Fatal(ctx, "Failed to initialize main database connection", observability.Error(err))
-	}
-	defer conn.Close()
-	logger.Info(ctx, "[5/7] Dependency: Database Connection Initialised")
-
-	// Initialize database client
-	databaseClient := dbClient.NewDatabaseClient(logger, conn)
-	if err != nil {
-		logger.Fatal(ctx, "Failed to create database client", observability.Error(err))
-	}
-	logger.Info(ctx, "[5/7] Dependency: Database Client Initialised")
+	// Create performer fetcher
+	performerFetcher := dispatcher.NewPerformerFetcher(healthClient, logger)
+	logger.Info(ctx, "[8/12] Dependency: Performer Fetcher Initialised")
 
 	// Initialize task stream manager for orchestration
-	taskStreamMgr, err := tasks.NewTaskStreamManager(ctx, redisClient, databaseClient, aggClient, testAggClient, logger)
+	taskStreamMgr, err := dispatcher.NewTaskStreamManager(ctx, redisClient, taskRepo, aggClient, testAggClient, logger)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskStreamManager", observability.Error(err))
 	}
-	logger.Info(ctx, "[6/7] Dependency: Task Stream Manager Initialised")
+	logger.Info(ctx, "[9/12] Dependency: Task Stream Manager Initialised")
 
 	// TaskDispatcher is the main orchestrator. It needs all the other components.
-	dispatcher, err := taskdispatcher.NewTaskDispatcher(
+	taskDispatcher, err := dispatcher.NewTaskDispatcher(
 		logger,
 		tracer,
 		taskStreamMgr,
-		healthClient,
+		performerFetcher,
 		config.GetTaskDispatcherSigningKey(),
 		config.GetTaskDispatcherSigningAddress(),
 	)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskDispatcher", observability.Error(err))
 	}
-	logger.Info(ctx, "[7/7] Dependency: Task Dispatcher Initialised")
+	logger.Info(ctx, "[10/12] Dependency: Task Dispatcher Initialised")
 
 	// Setup API server with only /status endpoint
 	apiSrv := api.NewServer(config.GetHTTPPort())
-	logger.Info(ctx, "[8/8] Dependency: API Server Initialised")
+	logger.Info(ctx, "[11/12] Dependency: API Server Initialised")
+
+	// Initialize gRPC server
+	rpcDeps := &rpc.Dependencies{
+		Dispatcher: taskDispatcher,
+	}
+	rpcSrv, err := rpc.NewServer(logger, tracer, rpcDeps)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to create gRPC server", observability.Error(err))
+	}
+	logger.Info(ctx, "[12/12] Dependency: gRPC Server Initialised")
 
 	// Initialize metrics collector
 	collector := metrics.NewCollector(obsMetrics, logger)
 	collector.Start()
 	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
 
-	// 5. Initialize the delivery mechanism (RPC Server) using the generic approach
-	port, err := strconv.Atoi(config.GetGRPCPort())
-	if err != nil {
-		logger.Fatal(ctx, "Failed to convert port to int", observability.Error(err))
-	}
-	serverConfig := rpcserver.Config{
-		Name:    "task-dispatcher",
-		Version: config.GetVersion(),
-		Address: "0.0.0.0",
-		Port:    port,
-	}
-	srv := rpcserver.NewServer(serverConfig, logger)
-	srv.AddInterceptor(rpcserver.LoggingInterceptor(logger))
-
-	// Add trace interceptor for automatic trace context extraction
-	tracingInterceptor := rpctracing.TraceInterceptor(tracer, "task-dispatcher")
-	srv.AddInterceptor(tracingInterceptor)
-
-	// Create and register the generic RPC handler
-	handler := rpc.NewTaskDispatcherHandler(logger, dispatcher)
-	srv.RegisterHandler("task-dispatcher", handler)
-
-	// 6. Start everything
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -211,12 +165,13 @@ func main() {
 	}()
 	logger.Info(ctx, "[2/3] Process: API Server Started", observability.String("port", config.GetHTTPPort()))
 
+	// Start gRPC server
 	go func() {
-		if err := srv.Start(ctx); err != nil {
-			logger.Fatal(ctx, "Failed to start RPC server", observability.Error(err))
+		if err := rpcSrv.Start(ctx); err != nil {
+			logger.Error(ctx, "gRPC server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: RPC Server Started", observability.String("port", config.GetGRPCPort()))
+	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("port", config.GetGRPCPort()))
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
@@ -227,11 +182,11 @@ func main() {
 	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, apiSrv, srv, dispatcher, logger, obs)
+	performGracefulShutdown(ctx, apiSrv, rpcSrv, taskDispatcher, logger, obs)
 }
 
 // performGracefulShutdown handles graceful shutdown of the service
-func performGracefulShutdown(ctx context.Context, apiSrv *api.Server, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger observability.Logger, obs *observability.Observability) {
+func performGracefulShutdown(ctx context.Context, apiSrv *api.Server, rpcSrv *rpc.Server, taskDispatcher *dispatcher.TaskDispatcher, logger observability.Logger, obs *observability.Observability) {
 	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, config.GetShutdownTimeout())
 	defer cancel()
@@ -242,19 +197,22 @@ func performGracefulShutdown(ctx context.Context, apiSrv *api.Server, server *rp
 		defer close(done)
 
 		// Close the Dispatcher
-		if err := dispatcher.Close(shutdownCtx); err != nil {
+		if err := taskDispatcher.Close(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Failed to close dispatcher", observability.Error(err))
 		}
+		logger.Info(ctx, "[1/4] Shutdown: Task Dispatcher Closed")
+
+		// Shutdown gRPC server
+		if err := rpcSrv.Stop(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "gRPC server shutdown error", observability.Error(err))
+		}
+		logger.Info(ctx, "[2/4] Shutdown: gRPC Server Stopped")
 
 		// Shutdown API server gracefully
 		if err := apiSrv.Stop(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "API server forced to shutdown", observability.Error(err))
+			logger.Error(shutdownCtx, "API server shutdown error", observability.Error(err))
 		}
-
-		// Shutdown server gracefully
-		if err := server.Stop(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "RPC server forced to shutdown", observability.Error(err))
-		}
+		logger.Info(ctx, "[3/4] Shutdown: API Server Stopped")
 
 		logger.Info(ctx, "Graceful shutdown completed successfully")
 
@@ -262,6 +220,7 @@ func performGracefulShutdown(ctx context.Context, apiSrv *api.Server, server *rp
 		if err := obs.Shutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Error shutting down observability", observability.Error(err))
 		}
+		logger.Info(ctx, "[4/4] Shutdown: Observability Shutdown Complete")
 	}()
 
 	// Wait for shutdown to complete or timeout

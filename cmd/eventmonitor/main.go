@@ -9,9 +9,9 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/api"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/core/service"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/rpc"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
@@ -52,34 +52,39 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger.Info(ctx, "[1/3] Dependency: Observability Module Initialised")
+	logger.Info(ctx, "[1/4] Dependency: Observability Module Initialised")
 
 	// Initialize service
 	svc, err := service.NewService(ctx, logger, tracer)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize service", observability.Error(err))
 	}
-	logger.Info(ctx, "[2/3] Dependency: Service Initialised")
+	logger.Info(ctx, "[2/4] Dependency: Service Initialised")
 
 	// Setup API server
 	apiSrv := api.NewServer(config.GetHTTPPort())
-	logger.Info(ctx, "[3/3] Dependency: API Server Initialised")
+	logger.Info(ctx, "[3/4] Dependency: API Server Initialised")
 
 	// Setup gRPC server
-	rpcSrv, err := rpc.NewServer(logger, tracer, svc.GetRegistryManager(), svc)
+	rpcDeps := &rpc.Dependencies{
+		RegistryManager: svc.GetRegistryManager(),
+		Service:         svc,
+	}
+	rpcSrv, err := rpc.NewServer(logger, tracer, rpcDeps)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create gRPC server", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/3] Dependency: gRPC Server Initialised")
+	logger.Info(ctx, "[4/4] Dependency: gRPC Server Initialised")
 
+	// Start metrics collector
 	metrics.StartMetricsCollection()
-	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
+	logger.Info(ctx, "[1/4] Process: Metrics Collector Started")
 
 	// Start service
 	if err := svc.Start(); err != nil {
 		logger.Fatal(ctx, "Failed to start service", observability.Error(err))
 	}
-	logger.Info(ctx, "[2/3] Process: Service Started")
+	logger.Info(ctx, "[2/4] Process: Service Started")
 
 	// Start API server
 	go func() {
@@ -87,7 +92,7 @@ func main() {
 			logger.Error(ctx, "API server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: API Server Started", observability.String("port", config.GetHTTPPort()))
+	logger.Info(ctx, "[3/4] Process: API Server Started", observability.String("port", config.GetHTTPPort()))
 
 	// Start gRPC server
 	go func() {
@@ -95,7 +100,7 @@ func main() {
 			logger.Error(ctx, "gRPC server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("address", rpcSrv.GetServiceInfo().Address), observability.String("port", config.GetGRPCPort()))
+	logger.Info(ctx, "[4/4] Process: gRPC Server Started", observability.String("port", config.GetGRPCPort()))
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)

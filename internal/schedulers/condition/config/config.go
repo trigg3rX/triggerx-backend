@@ -31,12 +31,16 @@ type Config struct {
 	taskDispatcherRPCUrl string
 	eventMonitorRPCUrl   string
 
+	// Upstash Redis URL and Rest Token
+	upstashRedisUrl       string
+	upstashRedisRestToken string
+
 	// YAML-loaded settings
-	workers WorkersConfig
+	workers            WorkersConfig
 	databaseOperations yaml.DatabaseOperationsConfig
-	metrics              yaml.MetricsConfig
-	shutdown             yaml.ShutdownConfig
-	version              yaml.VersionConfig
+	metrics            yaml.MetricsConfig
+	shutdown           yaml.ShutdownConfig
+	version            yaml.VersionConfig
 }
 
 type WorkersConfig struct {
@@ -44,11 +48,11 @@ type WorkersConfig struct {
 }
 
 type YAMLConfig struct {
-	Workers  WorkersConfig  `yaml:"workers"`
+	Workers            WorkersConfig                 `yaml:"workers"`
 	DatabaseOperations yaml.DatabaseOperationsConfig `yaml:"database_operations"`
-	Metrics  yaml.MetricsConfig `yaml:"metrics"`
-	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
-	Version  yaml.VersionConfig  `yaml:"version"`
+	Metrics            yaml.MetricsConfig            `yaml:"metrics"`
+	Shutdown           yaml.ShutdownConfig           `yaml:"shutdown"`
+	Version            yaml.VersionConfig            `yaml:"version"`
 }
 
 var cfg *Config
@@ -66,19 +70,21 @@ func Init(configPath string) error {
 	}
 
 	cfg = &Config{
-		devMode:                   env.GetEnvBool("DEV_MODE", false),
-		httpPort:                  env.GetEnvString("CONDITION_SCHEDULER_HTTP_PORT", "9006"),
-		grpcPort:                  env.GetEnvString("CONDITION_SCHEDULER_GRPC_PORT", "9016"),
-		dbConnection:              env.GetDatabaseConfig(),
-		otelExporterEndpoint:      env.GetOTELExporterEndpoint(),
-		taskDispatcherRPCUrl:      env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
-		eventMonitorRPCUrl:        env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9018"),
-		serviceID:                 env.GetEnvString("CONDITION_SCHEDULER_SERVICE_ID", "1"),
-		workers:                   yamlConfig.Workers,
-		databaseOperations:        yamlConfig.DatabaseOperations,
-		metrics:                   yamlConfig.Metrics,
-		shutdown:                  yamlConfig.Shutdown,
-		version:                   yamlConfig.Version,
+		devMode:               env.GetEnvBool("DEV_MODE", false),
+		httpPort:              env.GetEnvString("CONDITION_SCHEDULER_HTTP_PORT", "9006"),
+		grpcPort:              env.GetEnvString("CONDITION_SCHEDULER_GRPC_PORT", "9016"),
+		dbConnection:          env.GetDatabaseConfig(),
+		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
+		taskDispatcherRPCUrl:  env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
+		eventMonitorRPCUrl:    env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9018"),
+		serviceID:             env.GetEnvString("CONDITION_SCHEDULER_SERVICE_ID", "1"),
+		upstashRedisUrl:       env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken: env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		workers:               yamlConfig.Workers,
+		databaseOperations:    yamlConfig.DatabaseOperations,
+		metrics:               yamlConfig.Metrics,
+		shutdown:              yamlConfig.Shutdown,
+		version:               yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -194,6 +200,10 @@ func GetServiceID() string {
 	return cfg.serviceID
 }
 
+func GetServiceName() string {
+	return "condition-scheduler"
+}
+
 func GetSchedulerID() string {
 	return cfg.serviceID
 }
@@ -204,4 +214,12 @@ func GetMaxWorkers() int {
 
 func GetShutdownTimeout() time.Duration {
 	return cfg.shutdown.Timeout.ToDuration()
+}
+
+func GetUpstashRedisUrl() string {
+	return cfg.upstashRedisUrl
+}
+
+func GetUpstashRedisRestToken() string {
+	return cfg.upstashRedisRestToken
 }

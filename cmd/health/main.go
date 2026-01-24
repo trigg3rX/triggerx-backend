@@ -3,23 +3,21 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/gocql/gocql"
-
-	"github.com/trigg3rX/triggerx-backend/internal/health"
-	"github.com/trigg3rX/triggerx-backend/internal/health/client"
+	"github.com/trigg3rX/triggerx-backend/internal/health/api"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
-	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/core/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/core/telegram"
+	"github.com/trigg3rX/triggerx-backend/internal/health/database"
+	"github.com/trigg3rX/triggerx-backend/internal/health/database/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/health/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/health/rpc"
-	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
@@ -58,58 +56,42 @@ func main() {
 	// Use observability logger for initial startup log
 	ctx := context.Background()
 	logger.Info(ctx, "Starting health service...")
-	logger.Info(ctx, "[1/6] Dependency: Observability Module Initialised")
+	logger.Info(ctx, "[1/9] Dependency: Observability Module Initialised")
 
 	// Initialize server components
 	var wg sync.WaitGroup
 	serverErrors := make(chan error, 3)
 
 	// Initialize database connection
-	dbConfig := &database.Config{
-		Hosts:        []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
-		Keyspace:     "triggerx",
-		Consistency:  gocql.Quorum,
-		Timeout:      config.GetDatabaseTimeout(),
-		Retries:      config.GetDatabaseRetries(),
-		ConnectWait:  config.GetDatabaseConnectWait(),
-		ProtoVersion: 4,
-	}
-
-	// Configure authentication if provided
-	if config.GetDatabaseUsername() != "" && config.GetDatabasePassword() != "" {
-		dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
-	}
-
-	// Configure SSL/TLS if enabled
-	if config.GetDatabaseSSLEnabled() {
-		dbConfig.WithSSLCertificates(
-			config.GetDatabaseSSLCertPath(),
-			config.GetDatabaseSSLKeyPath(),
-			config.GetDatabaseSSLCAPath(),
-			config.GetDatabaseSSLInsecureSkipVerify(),
-		)
-	}
-
-	dbConn, err := database.NewConnection(dbConfig, logger)
+	dbConn, err := database.NewConnection(logger)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize database connection", observability.Error(err))
 	}
-	logger.Info(ctx, "[2/6] Dependency: Database Connection Initialised")
+	defer dbConn.Close()
+	logger.Info(ctx, "[2/9] Dependency: Database Connection Initialised")
 
 	// Initialize Telegram bot
 	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, dbConn)
 	if err != nil {
 		logger.Warn(ctx, "Failed to initialize Telegram bot", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/6] Dependency: Telegram Bot Initialised")
+	logger.Info(ctx, "[3/9] Dependency: Telegram Bot Initialised")
 
-	// Initialize database manager
-	client.InitDatabaseManager(ctx, logger, obsTracer, dbConn, telegramBot)
-	logger.Info(ctx, "[4/6] Dependency: Database Manager Initialised")
+	// Initialize keeper repository
+	keeperRepo := repository.NewKeeperRepository(dbConn, logger, obsTracer, telegramBot)
+	logger.Info(ctx, "[4/9] Dependency: Keeper Repository Initialised")
+
+	// Initialize Redis client
+	redisClient, err := redis.NewClient(logger)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to initialize Redis client", observability.Error(err))
+	}
+	defer redisClient.Close()
+	logger.Info(ctx, "[5/9] Dependency: Redis Client Initialised")
 
 	// Initialize state manager
-	stateManager := keeper.InitializeStateManager(ctx, logger, obsTracer)
-	logger.Info(ctx, "[5/6] Dependency: Keeper State Manager Initialised")
+	stateManager := keeper.InitializeStateManager(ctx, logger, obsTracer, keeperRepo)
+	logger.Info(ctx, "[6/9] Dependency: Keeper State Manager Initialised")
 
 	// Load verified keepers from database
 	if err := stateManager.LoadVerifiedKeepers(ctx); err != nil {
@@ -117,16 +99,34 @@ func main() {
 		// Continue anyway, as we can still operate with an empty state
 	}
 
-	// Setup HTTP server with tracing
-	httpSrv := setupHTTPServer(logger, obsTracer)
-	logger.Info(ctx, "[6/7] Dependency: HTTP API Server Initialised")
+	// Initialize performer selector
+	performerSelector := keeper.NewPerformerSelector(stateManager, redisClient, logger)
+	logger.Info(ctx, "[7/9] Dependency: Performer Selector Initialised")
+
+	// Initialize API server
+	apiCfg := api.Config{
+		Port:           config.GetHTTPPort(),
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	apiDeps := &api.Dependencies{
+		Logger:       logger,
+		Tracer:       obsTracer,
+		Metrics:      obsMetrics,
+		StateManager: stateManager,
+	}
+
+	apiSrv := api.NewServer(apiCfg, apiDeps)
+	logger.Info(ctx, "[8/9] Dependency: HTTP API Server Initialised")
 
 	// Setup gRPC server
-	rpcSrv, err := rpc.NewServer(logger, obsTracer, stateManager)
+	rpcSrv, err := rpc.NewServer(logger, obsTracer, stateManager, performerSelector)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create gRPC server", observability.Error(err))
 	}
-	logger.Info(ctx, "[7/7] Dependency: gRPC Server Initialised")
+	logger.Info(ctx, "[9/9] Dependency: gRPC Server Initialised")
 
 	// Initialize metrics using observability metrics
 	metrics.InitializeMetrics(obsMetrics)
@@ -136,7 +136,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := apiSrv.Start(); err != nil {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
@@ -165,31 +165,12 @@ func main() {
 		)
 	}
 
-	performGracefulShutdown(ctx, httpSrv, rpcSrv, &wg, obs, logger, stateManager)
-}
-
-func setupHTTPServer(logger observability.Logger, tracer observability.Tracer) *http.Server {
-	gin.SetMode(gin.ReleaseMode)
-
-	router := gin.New()
-	router.Use(gin.Recovery())
-
-	// Add tracing middleware before logging middleware to ensure trace context is available
-	router.Use(health.TraceMiddleware(tracer))
-	router.Use(health.LoggerMiddleware(logger))
-
-	// Register routes
-	health.RegisterRoutes(router, logger)
-
-	return &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%s", config.GetHTTPPort()),
-		Handler: router,
-	}
+	performGracefulShutdown(ctx, apiSrv, rpcSrv, &wg, obs, logger, stateManager)
 }
 
 func performGracefulShutdown(
 	ctx context.Context,
-	httpSrv *http.Server,
+	apiSrv *api.Server,
 	rpcSrv *rpc.Server,
 	wg *sync.WaitGroup,
 	obs *observability.Observability,
@@ -211,6 +192,7 @@ func performGracefulShutdown(
 				logger.Error(shutdownCtx, "Failed to dump keeper state", observability.Error(err))
 			}
 		}
+		logger.Info(ctx, "[1/4] Shutdown: Keeper State Dumped")
 
 		// Shutdown gRPC server
 		if rpcSrv != nil {
@@ -218,16 +200,15 @@ func performGracefulShutdown(
 				logger.Error(shutdownCtx, "gRPC server shutdown error", observability.Error(err))
 			}
 		}
+		logger.Info(ctx, "[2/4] Shutdown: gRPC Server Stopped")
 
 		// Shutdown HTTP server
-		if httpSrv != nil {
-			if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		if apiSrv != nil {
+			if err := apiSrv.Stop(shutdownCtx); err != nil {
 				logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
-				if err := httpSrv.Close(); err != nil {
-					logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
-				}
 			}
 		}
+		logger.Info(ctx, "[3/4] Shutdown: HTTP Server Stopped")
 
 		// Wait for all goroutines to finish
 		wg.Wait()
@@ -238,6 +219,7 @@ func performGracefulShutdown(
 		if err := obs.Shutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Observability shutdown error", observability.Error(err))
 		}
+		logger.Info(ctx, "[4/4] Shutdown: Observability Shutdown Complete")
 	}()
 
 	// Wait for shutdown to complete or timeout

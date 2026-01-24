@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
-	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/core/keeper"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
@@ -20,7 +20,7 @@ type Server struct {
 }
 
 // NewServer creates a new RPC server for health service
-func NewServer(logger observability.Logger, tracer observability.Tracer, stateManager *keeper.StateManager) (*Server, error) {
+func NewServer(logger observability.Logger, tracer observability.Tracer, stateManager *keeper.StateManager, performerSelector *keeper.PerformerSelector) (*Server, error) {
 	// Parse port from string to int
 	port, err := strconv.Atoi(config.GetGRPCPort())
 	if err != nil {
@@ -47,7 +47,7 @@ func NewServer(logger observability.Logger, tracer observability.Tracer, stateMa
 	rpcSrv.AddInterceptor(rpctracing.TraceInterceptor(tracer, "health"))
 
 	// Create and register handler
-	handler := NewHandler(logger, tracer, stateManager)
+	handler := NewHandler(logger, tracer, stateManager, performerSelector)
 	rpcSrv.RegisterHandler("health", handler)
 
 	return &Server{

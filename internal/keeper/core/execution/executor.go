@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	noncemanager "github.com/trigg3rX/triggerx-backend/internal/keeper/core/nonce_manager"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
@@ -39,7 +40,7 @@ type TaskExecutor struct {
 	taskMonitorClient TaskMonitorClientInterface
 	logger            observability.Logger
 	tracer            observability.Tracer
-	nonceManagers     map[string]*NonceManager // Chain ID -> NonceManager
+	nonceManagers     map[string]*noncemanager.NonceManager // Chain ID -> NonceManager
 	nonceMutex        sync.RWMutex
 	// Broadcast data storage for rebroadcast capability
 	broadcastData      map[int64]*types.BroadcastDataForValidators // Task ID -> BroadcastData
@@ -62,7 +63,7 @@ func NewTaskExecutor(
 		taskMonitorClient: taskMonitorClient,
 		logger:            logger,
 		tracer:            tracer,
-		nonceManagers:     make(map[string]*NonceManager),
+		nonceManagers:     make(map[string]*noncemanager.NonceManager),
 		broadcastData:     make(map[int64]*types.BroadcastDataForValidators),
 	}
 }
@@ -424,7 +425,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 }
 
 // getNonceManager returns or creates a nonce manager for the given chain
-func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
+func (e *TaskExecutor) getNonceManager(chainID string) (*noncemanager.NonceManager, error) {
 	e.nonceMutex.RLock()
 	if nm, exists := e.nonceManagers[chainID]; exists {
 		e.nonceMutex.RUnlock()
@@ -447,7 +448,7 @@ func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
 		return nil, fmt.Errorf("failed to create client for chain %s: %w", chainID, err)
 	}
 
-	nm := NewNonceManager(client, e.logger)
+	nm := noncemanager.NewNonceManager(client, e.logger)
 	if err := nm.Initialize(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to initialize nonce manager for chain %s: %w", chainID, err)
 	}

@@ -20,6 +20,10 @@ type Config struct {
 	// Database Connection Configuration (from env)
 	dbConnection env.DatabaseConfig
 
+	// Redis Configuration (from env)
+	upstashRedisUrl       string
+	upstashRedisRestToken string
+
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
@@ -116,6 +120,8 @@ func Init(configPath string) error {
 		httpPort:                 env.GetEnvString("HEALTH_HTTP_PORT", "9004"),
 		grpcPort:                 env.GetEnvString("HEALTH_GRPC_PORT", "9014"),
 		dbConnection:             env.GetDatabaseConfig(),
+		upstashRedisUrl:          env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken:    env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		otelExporterEndpoint:     env.GetOTELExporterEndpoint(),
 		serviceID:                env.GetEnvString("HEALTH_SERVICE_ID", "1"),
 		botToken:                 env.GetEnvString("BOT_TOKEN", ""),
@@ -156,6 +162,12 @@ func validateConfig() error {
 	}
 	if !env.IsValidPort(cfg.dbConnection.HostPort) {
 		return fmt.Errorf("invalid database host port: %s", cfg.dbConnection.HostPort)
+	}
+	if env.IsEmpty(cfg.upstashRedisUrl) {
+		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
+	}
+	if env.IsEmpty(cfg.upstashRedisRestToken) {
+		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
 	}
 	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
 		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
@@ -383,4 +395,13 @@ func IsKeeperVersionInList(version string, versionList []string) bool {
 		}
 	}
 	return false
+}
+
+// Redis configuration getters
+func GetUpstashRedisUrl() string {
+	return cfg.upstashRedisUrl
+}
+
+func GetUpstashRedisRestToken() string {
+	return cfg.upstashRedisRestToken
 }

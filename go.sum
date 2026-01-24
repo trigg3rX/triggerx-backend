@@ -333,8 +333,8 @@ github.com/tklauser/go-sysconf v0.3.12 h1:0QaGUFOdQaIVdPgfITYzaTegZvdCjmYO52cSFA
 github.com/tklauser/go-sysconf v0.3.12/go.mod h1:Ho14jnntGE1fpdOqQEEaiKRpvIavV0hSfmBq8nJbHYI=
 github.com/tklauser/numcpus v0.6.1 h1:ng9scYS7az0Bk4OZLvrNXNSAO2Pxr1XXRAPyjhIx+Fk=
 github.com/tklauser/numcpus v0.6.1/go.mod h1:1XfjsgE2zo8GVw7POkMbHENHzVg3GzmoZ9fESEdAacY=
-github.com/trigg3rX/triggerx-contracts/bindings v0.0.0-20260108190332-2561725160b1 h1:xiZSTekH0zs9J407/r/jwl/U+paMGpTs0eZRE5lycro=
-github.com/trigg3rX/triggerx-contracts/bindings v0.0.0-20260108190332-2561725160b1/go.mod h1:Wz4hzJnVdDE+0aULwa5Vz+5gNrRzX6Yoj5xxPvLUglo=
+github.com/trigg3rX/triggerx-contracts/bindings v0.0.0-20260124112416-79b0daa773d6 h1:E0oK9+1TjDERDnS8svBg0nHAbGF8Mz3fBquVyFs0qz0=
+github.com/trigg3rX/triggerx-contracts/bindings v0.0.0-20260124112416-79b0daa773d6/go.mod h1:Wz4hzJnVdDE+0aULwa5Vz+5gNrRzX6Yoj5xxPvLUglo=
 github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS4MhqMhdFk5YI=
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/ugorji/go/codec v1.3.0 h1:Qd2W2sQawAfG8XSvzwhBeoGq71zXOC/Q1E9y/wUcsUA=

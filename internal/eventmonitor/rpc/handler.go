@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/registry"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/core/registry"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/core/service"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"

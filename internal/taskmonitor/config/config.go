@@ -197,6 +197,10 @@ func GetServiceID() string {
 	return cfg.serviceID
 }
 
+func GetServiceName() string {
+	return "task-monitor"
+}
+
 func GetDatabaseHostAddress() string {
 	return cfg.dbConnection.HostAddress
 }
