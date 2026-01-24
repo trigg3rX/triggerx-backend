@@ -32,7 +32,7 @@ type ExecutionFeeConfig struct {
 	// Off-chain fee rates in USD
 	StaticOffChainFeeUSD   float64 `yaml:"static_offchain_fee_usd"`    // Fee for static tasks (IDs 1,3,5) - default 0.006 USD
 	DynamicOffChainFeeUSD  float64 `yaml:"dynamic_offchain_fee_usd"`   // Fee for dynamic tasks (IDs 2,4,6) - default 0.007 USD
-	CustomScriptFeeUSD     float64 `yaml:"custom_script_fee_usd"`      // Fee for custom script tasks (ID 7) - default 0.01 USD
+	AgentScriptFeeUSD      float64 `yaml:"agent_script_fee_usd"`       // Fee for agent script tasks (IDs 7,8,9) - default 0.01 USD
 
 	// Ethereum to USD conversion rate (should be updated periodically)
 	// EthToUSDRate float64 `yaml:"eth_to_usd_rate"` // Current ETH/USD rate

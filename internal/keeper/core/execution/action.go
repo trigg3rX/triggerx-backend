@@ -22,7 +22,8 @@ import (
 )
 
 func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, client *ethclient.Client) (types.PerformerActionData, bool, error) {
-	if targetData.TaskDefinitionID != 7 && targetData.TargetContractAddress == "" {
+	// Agent jobs (TDI 7, 8, 9) don't need pre-defined target contract
+	if !isAgentJob(targetData.TaskDefinitionID) && targetData.TargetContractAddress == "" {
 		e.logger.Error(ctx, "Execution contract address not configured")
 		return types.PerformerActionData{}, false, fmt.Errorf("execution contract address not configured")
 	}
@@ -49,10 +50,10 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 	var convertedArgs []interface{}
 	var err error
 
-	// Skip ABI parsing for custom scripts (TaskDefinitionID 7)
+	// Skip ABI parsing for agent jobs (TDI 7, 8, 9) - they build their own calldata
 	var contractABI *abi.ABI
 	var method *abi.Method
-	if targetData.TaskDefinitionID != 7 {
+	if !isAgentJob(targetData.TaskDefinitionID) {
 		contractABI, method, err = e.getContractMethodAndABI(ctx, targetData.TargetFunction, targetData)
 		if err != nil {
 			return types.PerformerActionData{}, false, fmt.Errorf("failed to get contract method and ABI: %v", err)
@@ -61,23 +62,23 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 
 	var argData []interface{}
 	var result *dockertypes.ExecutionResult
-	var customScriptOutput *types.CustomScriptOutput
+	var customScriptOutput *types.AgentScriptOutput
 	var storageUpdates map[string]string
 
 	switch targetData.TaskDefinitionID {
-	case 7:
-		// Custom script execution (TaskDefinitionID = 7)
-		// ExecuteCustomScript runs the script and calculates fees via Docker executor (pipeline.go)
-		scriptOutput, updates, dockerResult, err := e.ExecuteCustomScript(context.Background(), targetData, triggerData)
+	case 7, 8, 9:
+		// Agent script execution (TDI 7=time, 8=event, 9=condition)
+		// ExecuteAgentScript runs the script and calculates fees via Docker executor (pipeline.go)
+		scriptOutput, updates, dockerResult, err := e.ExecuteAgentScript(context.Background(), targetData, triggerData)
 		if err != nil {
-			return types.PerformerActionData{}, false, fmt.Errorf("custom script execution failed: %v", err)
+			return types.PerformerActionData{}, false, fmt.Errorf("agent script execution failed: %v", err)
 		}
 		customScriptOutput = scriptOutput
 		storageUpdates = updates
 
 		// If script says don't execute, return early
 		if !customScriptOutput.ShouldExecute {
-			e.logger.Debug(ctx, "[CustomScript] Script returned shouldExecute=false, skipping execution")
+			e.logger.Debug(ctx, "[AgentScript] Script returned shouldExecute=false, skipping execution")
 			return types.PerformerActionData{
 				TaskID:         targetData.TaskID,
 				Status:         true,
@@ -90,14 +91,14 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		// Calldata is already built by the script
 		callData = ethcommon.FromHex(customScriptOutput.Calldata)
 
-		e.logger.Debug(ctx, "[CustomScript] Script returned", observability.String("target", customScriptOutput.TargetContract), observability.String("calldata", customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)]))
+		e.logger.Debug(ctx, "[AgentScript] Script returned", observability.String("target", customScriptOutput.TargetContract), observability.String("calldata", customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)]))
 
 		// Use the fee calculated by Docker executor (pipeline.go calculateFees)
 		// This reuses the same logic and avoids duplication
 		result = dockerResult
-		e.logger.Debug(ctx, "[CustomScript] Using fee from Docker execution", observability.String("total_cost", result.Stats.TotalCost.String()), observability.String("current_cost", result.Stats.CurrentTotalCost.String()))
+		e.logger.Debug(ctx, "[AgentScript] Using fee from Docker execution", observability.String("total_cost", result.Stats.TotalCost.String()), observability.String("current_cost", result.Stats.CurrentTotalCost.String()))
 
-		// Skip normal argument processing for custom scripts
+		// Skip normal argument processing for agent scripts
 		goto skipArgumentProcessing
 
 	case 1, 2, 3, 4, 5, 6:
@@ -241,7 +242,7 @@ skipArgumentProcessing:
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
 		ConvertedArguments: convertedArgs,
-		StorageUpdates:     storageUpdates, // Include storage updates for custom scripts
+		StorageUpdates:     storageUpdates, // Include storage updates for agent scripts
 	}
 	if metrics.TransactionsSentTotal != nil {
 		metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc(ctx)

@@ -18,18 +18,18 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// ExecuteCustomScript handles agent script execution (TaskDefinitionID = 7, 8, 9)
+// ExecuteAgentScript handles agent script execution (TaskDefinitionID = 7, 8, 9)
 // Returns: script output, storage updates, execution result (with fees), error
 //
 // Phase 1: Scripts execute without environment variable injection
 // - Scripts can OUTPUT storage via stderr: STORAGE_SET:key=value
 // - Scripts cannot READ previous storage (Phase 2 feature)
 // - Execution metadata (job_id, task_id, timestamp) passed via script context
-func (e *TaskExecutor) ExecuteCustomScript(
+func (e *TaskExecutor) ExecuteAgentScript(
 	ctx context.Context,
 	targetData *types.TaskTargetData,
 	triggerData *types.TaskTriggerData,
-) (*types.CustomScriptOutput, map[string]string, *dockertypes.ExecutionResult, error) {
+) (*types.AgentScriptOutput, map[string]string, *dockertypes.ExecutionResult, error) {
 	// Execute script in Docker (Phase 1: no env var injection)
 	// For agent jobs (TDI 7, 8, 9), use agent fields
 	scriptURL := targetData.AgentScriptURL
@@ -38,7 +38,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		scriptLanguage = string(dockertypes.LanguageTS) // Default
 	}
 
-	// e.logger.Debug(ctx, "[CustomScript] Executing script", observability.String("script_language", scriptLanguage), observability.String("script_url", scriptURL))
+	// e.logger.Debug(ctx, "[AgentScript] Executing script", observability.String("script_language", scriptLanguage), observability.String("script_url", scriptURL))
 
 	// Use standard Execute method (env var injection deferred to Phase 2)
 	metadata := map[string]string{
@@ -97,7 +97,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	}
 	jsonStr = jsonStr[:jsonEnd]
 
-	var scriptOutput types.CustomScriptOutput
+	var scriptOutput types.AgentScriptOutput
 	err = json.Unmarshal([]byte(jsonStr), &scriptOutput)
 	if err != nil {
 		// Log the actual output for debugging (first 500 chars)
@@ -112,11 +112,11 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	}
 
 	// Validate output
-	if err := validateCustomScriptOutput(&scriptOutput); err != nil {
+	if err := validateAgentScriptOutput(&scriptOutput); err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid script output: %w", err)
 	}
 
-	e.logger.Debug(ctx, "[CustomScript] Script output", observability.Bool("should_execute", scriptOutput.ShouldExecute), observability.String("target_contract", scriptOutput.TargetContract))
+	e.logger.Debug(ctx, "[AgentScript] Script output", observability.Bool("should_execute", scriptOutput.ShouldExecute), observability.String("target_contract", scriptOutput.TargetContract))
 
 	// Extract storage updates from JSON output
 	storageUpdates := scriptOutput.StorageUpdates
@@ -124,21 +124,21 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		storageUpdates = make(map[string]string)
 	}
 	// if len(storageUpdates) > 0 {
-	// e.logger.Debug(ctx, "[CustomScript] Found storage updates", observability.Int("storage_updates", len(storageUpdates)))
+	// e.logger.Debug(ctx, "[AgentScript] Found storage updates", observability.Int("storage_updates", len(storageUpdates)))
 	// }
 
 	// Log the calculated fees from Docker execution
 	// if result.Stats.CurrentTotalCost != nil {
-	// 	e.logger.Debug(ctx, "[CustomScript] Fee from Docker execution", observability.String("fee", result.Stats.CurrentTotalCost.String()))
+	// 	e.logger.Debug(ctx, "[AgentScript] Fee from Docker execution", observability.String("fee", result.Stats.CurrentTotalCost.String()))
 	// }
 
 	return &scriptOutput, storageUpdates, result, nil
 }
 
-// prepareCustomScriptEnv prepares environment variables for script execution
+// prepareAgentScriptEnv prepares environment variables for script execution
 // Phase 2: Environment variable injection for storage and context
 // Currently unused in Phase 1
-/* func prepareCustomScriptEnv(
+/* func prepareAgentScriptEnv(
 	targetData *types.TaskTargetData,
 	triggerData *types.TaskTriggerData,
 ) map[string]string {
@@ -160,8 +160,8 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	return env
 } */
 
-// validateCustomScriptOutput validates the script output format
-func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
+// validateAgentScriptOutput validates the script output format
+func validateAgentScriptOutput(output *types.AgentScriptOutput) error {
 	if output.ShouldExecute {
 		if output.TargetContract == "" {
 			return fmt.Errorf("targetContract required when shouldExecute=true")
@@ -186,7 +186,7 @@ func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
 // func parseStorageUpdates(stderr string) map[string]string {
 // 	updates := make(map[string]string)
 // 	lines := strings.Split(stderr, "\n")
-
+//
 // 	for _, line := range lines {
 // 		line = strings.TrimSpace(line)
 // 		if strings.HasPrefix(line, "STORAGE_SET:") {
@@ -201,7 +201,7 @@ func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
 // 			}
 // 		}
 // 	}
-
+//
 // 	return updates
 // }
 
@@ -215,7 +215,7 @@ func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
 // 	executionID string,
 // 	jobID *types.BigInt,
 // 	storage map[string]string,
-// 	output *types.CustomScriptOutput,
+// 	output *types.AgentScriptOutput,
 // 	timestamp time.Time,
 // 	performerAddress string,
 // ) *types.ExecutionProof {
@@ -226,7 +226,7 @@ func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
 // 		hashStorage(storage),
 // 	)
 // 	inputHash := crypto.Keccak256Hash([]byte(inputData)).Hex()
-
+//
 // 	// Calculate output hash
 // 	outputData := fmt.Sprintf("%t:%s:%s",
 // 		output.ShouldExecute,
@@ -234,10 +234,10 @@ func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
 // 		output.Calldata,
 // 	)
 // 	outputHash := crypto.Keccak256Hash([]byte(outputData)).Hex()
-
+//
 // 	// Sign the proof
 // 	signature := signProof(inputHash, outputHash)
-
+//
 // 	return &types.ExecutionProof{
 // 		ExecutionID:      executionID,
 // 		JobID:            jobID.String(),
@@ -255,13 +255,13 @@ func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
 // 	if len(storage) == 0 {
 // 		return "0x0"
 // 	}
-
+//
 // 	// Create deterministic hash
 // 	data := ""
 // 	for k, v := range storage {
 // 		data += fmt.Sprintf("%s=%s;", k, v)
 // 	}
-
+//
 // 	hash := sha256.Sum256([]byte(data))
 // 	return "0x" + hex.EncodeToString(hash[:])
 // }

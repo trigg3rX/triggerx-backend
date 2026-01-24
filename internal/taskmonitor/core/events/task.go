@@ -85,7 +85,7 @@ func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *Cha
 	case 10001, 10002:
 		h.logger.Debug(ctx, "Skipping task processing - Task is Internal Task", observability.Int64("task_number", taskData.TaskNumber))
 		return
-	case 1, 2, 3, 4, 5, 6, 7: // Added 7 for custom script jobs
+	case 1, 2, 3, 4, 5, 6, 7, 8, 9: // Support all task types including agent jobs (7, 8, 9)
 		dataBytes, err := hex.DecodeString(taskData.Data) // Remove "0x" prefix before decoding
 		if err != nil {
 			h.logger.Error(ctx, "Failed to hex-decode data", observability.Error(err))
@@ -178,8 +178,9 @@ func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *Cha
 			}
 		}
 
-		// For custom script jobs (TaskDefinitionID = 7), update storage
-		if taskData.TaskDefinitionID == 7 && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
+		// For agent script jobs (TaskDefinitionID = 7, 8, 9), update storage
+		if (taskData.TaskDefinitionID == 7 || taskData.TaskDefinitionID == 8 || taskData.TaskDefinitionID == 9) && 
+			ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
 			jobID, err := h.taskRepo.GetJobIDByTaskID(ctx, taskData.TaskID)
 			if err != nil {
 				span.RecordError(err, observability.WithErrorAttributes(
@@ -399,8 +400,8 @@ func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, tx
 		attribute.String("database.table", "tasks"),
 	))
 
-	// For custom script jobs (TaskDefinitionID = 7), update storage
-	if taskData.TaskDefinitionID == 7 && ipfsData.ActionData != nil && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
+	// For agent script jobs (TaskDefinitionID = 7, 8, 9), update storage
+	if (taskData.TaskDefinitionID == 7 || taskData.TaskDefinitionID == 8 || taskData.TaskDefinitionID == 9) && ipfsData.ActionData != nil && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
 		jobID, err := h.taskRepo.GetJobIDByTaskID(ctx, taskID)
 		if err != nil {
 			span.RecordError(err, observability.WithErrorAttributes(

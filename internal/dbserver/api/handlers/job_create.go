@@ -175,15 +175,15 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			UpdatedAt:         time.Now(),
 		}
 
-		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6,7 & DynamicArgumentsScriptUrl or AgentScriptURL)
+		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6) and agent jobs (TaskDefinitionID==7,8,9)
 		ipfsUrl := ""
-		if tempJobs[i].TaskDefinitionID == 7 {
+		if tempJobs[i].TaskDefinitionID == 7 || tempJobs[i].TaskDefinitionID == 8 || tempJobs[i].TaskDefinitionID == 9 {
 			ipfsUrl = tempJobs[i].AgentScriptURL
 		} else {
 			ipfsUrl = tempJobs[i].DynamicArgumentsScriptUrl
 		}
 
-		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 7) && ipfsUrl != "" {
+		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 7 || tempJobs[i].TaskDefinitionID == 8 || tempJobs[i].TaskDefinitionID == 9) && ipfsUrl != "" {
 			resp, err := h.httpClient.Get(ctx, ipfsUrl)
 			if err != nil {
 				h.logger.Error(c.Request.Context(), "[CreateJobData] Failed to download file", observability.Error(err))
@@ -406,6 +406,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			scheduleConditionJobData.JobID = jobID
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
+			scheduleConditionJobData.IsImua = tempJobs[i].IsImua
 			scheduleConditionJobData.TaskTargetData = types.TaskTargetData{
 				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
@@ -416,6 +417,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				ArgType:                   tempJobs[i].ArgType,
 				Arguments:                 tempJobs[i].Arguments,
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
+				// Agent job fields (TDI 8)
+				AgentScriptURL:      tempJobs[i].AgentScriptURL,
+				AgentScriptLanguage: tempJobs[i].AgentScriptLanguage,
+				AgentScriptHash:     "",
+				AgentTargetChainID:  tempJobs[i].AgentTargetChainID,
+				MaxExecutionTime:    tempJobs[i].MaxExecutionTime,
+				ChallengePeriod:     tempJobs[i].ChallengePeriod,
 			}
 			scheduleConditionJobData.EventWorkerData = types.EventWorkerData{
 				JobID:                  jobID,
@@ -481,6 +489,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			scheduleConditionJobData.JobID = jobID
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
+			scheduleConditionJobData.IsImua = tempJobs[i].IsImua
 			scheduleConditionJobData.TaskTargetData = types.TaskTargetData{
 				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
@@ -491,6 +500,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				ArgType:                   tempJobs[i].ArgType,
 				Arguments:                 tempJobs[i].Arguments,
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
+				// Agent job fields (TDI 9)
+				AgentScriptURL:      tempJobs[i].AgentScriptURL,
+				AgentScriptLanguage: tempJobs[i].AgentScriptLanguage,
+				AgentScriptHash:     "",
+				AgentTargetChainID:  tempJobs[i].AgentTargetChainID,
+				MaxExecutionTime:    tempJobs[i].MaxExecutionTime,
+				ChallengePeriod:     tempJobs[i].ChallengePeriod,
 			}
 			scheduleConditionJobData.ConditionWorkerData = types.ConditionWorkerData{
 				JobID:            jobID,
@@ -510,7 +526,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			return
 		}
 
-		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 {
+		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 8 || tempJobs[i].TaskDefinitionID == 9 {
 			success, err := h.notifyConditionScheduler(jobCtx, jobID, scheduleConditionJobData)
 			if !success {
 				h.logger.Error(jobCtx, "[CreateJobData] Error notifying condition scheduler for jobID", observability.String("job_id", jobID), observability.Error(err))

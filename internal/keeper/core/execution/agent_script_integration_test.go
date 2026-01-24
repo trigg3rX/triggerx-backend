@@ -16,7 +16,7 @@ package execution
 // 	gomock "go.uber.org/mock/gomock"
 // )
 
-// func TestTaskExecutor_ExecuteCustomScript_SingleExecution(t *testing.T) {
+// func TestTaskExecutor_ExecuteAgentScript_SingleExecution(t *testing.T) {
 // 	ctrl := gomock.NewController(t)
 // 	defer ctrl.Finish()
 
@@ -57,7 +57,7 @@ package execution
 // 			Output:  outputJSON,
 // 		}, nil)
 
-// 	result, storage, err := executor.ExecuteCustomScript(ctx, targetData, triggerData)
+// 	result, storage, err := executor.ExecuteAgentScript(ctx, targetData, triggerData)
 // 	require.NoError(t, err)
 // 	require.NotNil(t, result)
 
@@ -68,7 +68,7 @@ package execution
 // 	assert.Equal(t, "1", storage["executionCount"])
 // }
 
-// func TestTaskExecutor_ExecuteCustomScript_PropagatesDockerErrors(t *testing.T) {
+// func TestTaskExecutor_ExecuteAgentScript_PropagatesDockerErrors(t *testing.T) {
 // 	ctrl := gomock.NewController(t)
 // 	defer ctrl.Finish()
 
@@ -88,14 +88,14 @@ package execution
 // 		Execute(gomock.Any(), gomock.Any(), gomock.Any(), 1, "", gomock.Any()).
 // 		Return(nil, errors.New("docker unavailable"))
 
-// 	_, _, err := executor.ExecuteCustomScript(context.Background(), targetData, &types.TaskTriggerData{})
+// 	_, _, err := executor.ExecuteAgentScript(context.Background(), targetData, &types.TaskTriggerData{})
 // 	require.Error(t, err)
 // 	assert.Contains(t, err.Error(), "docker execution failed")
 // }
 
-// // TestCustomScriptExecution_TaskDefinitionID7_Integration tests the complete flow
+// // TestAgentScriptExecution_TaskDefinitionID7_Integration tests the complete flow
 // // from receiving a TaskDefinitionID 7 task to preparing the contract call
-// func TestCustomScriptExecution_TaskDefinitionID7_Integration(t *testing.T) {
+// func TestAgentScriptExecution_TaskDefinitionID7_Integration(t *testing.T) {
 // 	// Skip if in short mode or CI (requires Docker and IPFS access)
 // 	if testing.Short() {
 // 		t.Skip("Skipping integration test in short mode")
@@ -259,7 +259,7 @@ package execution
 // 		t.Log("   - Status")
 // 		t.Log("   - StorageUpdates (for database)")
 // 		t.Log("   - ExecutionTimestamp")
-// 		t.Log("   - ConvertedArguments (empty for custom scripts)")
+// 		t.Log("   - ConvertedArguments (empty for agent scripts)")
 // 		t.Log("")
 
 // 		t.Log("9. TaskMonitor Processing:")
@@ -271,8 +271,8 @@ package execution
 // 	})
 // }
 
-// // TestCustomScriptCalldata_Format tests that calldata from script is correctly formatted
-// func TestCustomScriptCalldata_Format(t *testing.T) {
+// // TestAgentScriptCalldata_Format tests that calldata from script is correctly formatted
+// func TestAgentScriptCalldata_Format(t *testing.T) {
 // 	// Expected calldata structure from the script
 // 	// Function: transfer(address recipient, uint256 amount)
 // 	// Selector: 0xa9059cbb (first 4 bytes)
@@ -402,8 +402,8 @@ package execution
 // 	})
 // }
 
-// // TestCustomScriptExecution_ErrorCases tests error handling
-// func TestCustomScriptExecution_ErrorCases(t *testing.T) {
+// // TestAgentScriptExecution_ErrorCases tests error handling
+// func TestAgentScriptExecution_ErrorCases(t *testing.T) {
 // 	t.Run("Invalid IPFS URL", func(t *testing.T) {
 // 		invalidURL := "https://invalid-ipfs-url"
 // 		t.Logf("Invalid URL: %s", invalidURL)
@@ -446,7 +446,7 @@ package execution
 // // TestEndToEndFlow documents the complete execution flow
 // func TestEndToEndFlow_Documentation(t *testing.T) {
 // 	t.Log("╔════════════════════════════════════════════════════════════════════╗")
-// 	t.Log("║  TaskDefinitionID 7: Custom Script Execution - Complete Flow      ║")
+// 	t.Log("║  TaskDefinitionID 7: Agent Script Execution - Complete Flow      ║")
 // 	t.Log("╚════════════════════════════════════════════════════════════════════╝")
 // 	t.Log("")
 
@@ -463,7 +463,7 @@ package execution
 // 	t.Log("     time_interval: 60")
 // 	t.Log("   }")
 // 	t.Log("   ↓")
-// 	t.Log("   Stored in custom_jobs table")
+// 	t.Log("   Stored in agent_jobs table")
 // 	t.Log("")
 
 // 	t.Log("┌─────────────────────────────────────────────────────────────────┐")
@@ -471,7 +471,7 @@ package execution
 // 	t.Log("└─────────────────────────────────────────────────────────────────┘")
 // 	t.Log("   GetTimeBasedTasks() called every N seconds")
 // 	t.Log("   ↓")
-// 	t.Log("   Query: SELECT * FROM custom_jobs")
+// 	t.Log("   Query: SELECT * FROM agent_jobs")
 // 	t.Log("          WHERE is_active = true")
 // 	t.Log("          AND next_execution_time <= NOW()")
 // 	t.Log("   ↓")
@@ -496,7 +496,7 @@ package execution
 // 	t.Log("   ↓")
 // 	t.Log("   Create RPC client for chain: '421614'")
 // 	t.Log("   ↓")
-// 	t.Log("   ExecuteCustomScript():")
+// 	t.Log("   ExecuteAgentScript():")
 // 	t.Log("     1. Download script from IPFS")
 // 	t.Log("     2. Execute in Docker: dockerExecutor.Execute()")
 // 	t.Log("        - Language: typescript")
@@ -610,7 +610,7 @@ package execution
 // 	t.Log("┌─────────────────────────────────────────────────────────────────┐")
 // 	t.Log("│ 8. NEXT EXECUTION (Scheduler)                                  │")
 // 	t.Log("└─────────────────────────────────────────────────────────────────┘")
-// 	t.Log("   Update custom_jobs:")
+// 	t.Log("   Update agent_jobs:")
 // 	t.Log("     next_execution_time = NOW() + time_interval")
 // 	t.Log("     last_executed_at = NOW()")
 // 	t.Log("   ↓")

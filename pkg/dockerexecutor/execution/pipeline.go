@@ -523,10 +523,10 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 		// Dynamic tasks
 		offChainFeeUSD = feesConfig.DynamicOffChainFeeUSD
 		ep.logger.Debug(ctx, "Using dynamic off-chain fee", observability.Float64("offChainFeeUSD", offChainFeeUSD))
-	case 7:
-		// Custom script - uses dynamic off-chain fee (same as 2, 4, 6)
-		offChainFeeUSD = feesConfig.DynamicOffChainFeeUSD
-		ep.logger.Debug(ctx, "Using dynamic off-chain fee for custom script", observability.Float64("offChainFeeUSD", offChainFeeUSD))
+	case 7, 8, 9:
+		// Agent script jobs (time, event, condition)
+		offChainFeeUSD = feesConfig.AgentScriptFeeUSD
+		ep.logger.Debug(ctx, "Using agent script off-chain fee", observability.Float64("offChainFeeUSD", offChainFeeUSD), observability.Int("taskDefinitionID", taskDefinitionID))
 	default:
 		// Fallback to old calculation for unknown task types
 		ep.logger.Warn(ctx, "Unknown task_definition_id, using legacy fee calculation", observability.Int("taskDefinitionID", taskDefinitionID))
@@ -589,9 +589,9 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 		offChainFeeWei, _ = fallbackFeeFloat.Int(nil)
 	}
 
-	// For task definition ID 7 (custom script), calculate on-chain fees using fixed 1M gas
+	// For agent jobs (TDI 7, 8, 9), calculate on-chain fees using fixed 1M gas
 	// During actual execution (in keeper), real gas estimation with actual calldata is used
-	if taskDefinitionID == 7 {
+	if taskDefinitionID == 7 || taskDefinitionID == 8 || taskDefinitionID == 9 {
 		var onChainFeeWei = big.NewInt(0)
 		var currentOnChainFeeWei = big.NewInt(0)
 		var aggregatorOnChainFeeWei = big.NewInt(0)
@@ -700,7 +700,7 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 		totalFeeWei.Mul(totalFeeWei, big.NewInt(120))
 		totalFeeWei.Div(totalFeeWei, big.NewInt(100))
 
-		ep.logger.Debug(ctx, "Fee calculation for custom script (ID 7)", observability.Float64("offChainFeeUSD", offChainFeeUSD), observability.String("offChainFeeWei", offChainFeeWei.String()), observability.String("onChainFeeWei", onChainFeeWei.String()), observability.String("aggregatorOnChainFeeWei", aggregatorOnChainFeeWei.String()), observability.String("totalFeeWei", totalFeeWei.String()), observability.String("currentTotalFeeWei", currentTotalFeeWei.String()))
+		ep.logger.Debug(ctx, "Fee calculation for agent script job", observability.Int("taskDefinitionID", taskDefinitionID), observability.Float64("offChainFeeUSD", offChainFeeUSD), observability.String("offChainFeeWei", offChainFeeWei.String()), observability.String("onChainFeeWei", onChainFeeWei.String()), observability.String("aggregatorOnChainFeeWei", aggregatorOnChainFeeWei.String()), observability.String("totalFeeWei", totalFeeWei.String()), observability.String("currentTotalFeeWei", currentTotalFeeWei.String()))
 
 		return totalFeeWei, currentTotalFeeWei
 	}

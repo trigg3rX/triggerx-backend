@@ -537,7 +537,7 @@ func (ge *GasEstimator) CalculateGasCostInWei(gasLimit uint64, gasPrice *big.Int
 }
 
 // EstimateGasWithCalldata estimates gas for a transaction with pre-built calldata
-// This is used for custom scripts (TaskDefinitionID 7) where the script returns targetContract and calldata
+// This is used for agent jobs (TaskDefinitionID 7, 8, 9) where the script returns targetContract and calldata
 func (ge *GasEstimator) EstimateGasWithCalldata(
 	ctx context.Context,
 	chainID string,

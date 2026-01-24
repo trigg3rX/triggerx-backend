@@ -25,23 +25,21 @@ const (
 
 func (e *TaskValidator) ValidateTrigger(ctx context.Context, triggerData *types.TaskTriggerData, traceID string) (bool, error) {
 	switch triggerData.TaskDefinitionID {
-	case 1, 2:
+	case 1, 2, 7:
+		// Time-based jobs (static, dynamic, and agent)
 		isValid, err := e.IsValidTimeBasedTrigger(triggerData)
 		if !isValid {
 			return isValid, err
 		}
-	case 3, 4:
+	case 3, 4, 8:
+		// Event-based jobs (static, dynamic, and agent)
 		isValid, err := e.IsValidEventBasedTrigger(ctx, triggerData)
 		if !isValid {
 			return isValid, err
 		}
-	case 5, 6:
+	case 5, 6, 9:
+		// Condition-based jobs (static, dynamic, and agent)
 		isValid, err := e.IsValidConditionBasedTrigger(triggerData)
-		if !isValid {
-			return isValid, err
-		}
-	case 7:
-		isValid, err := e.IsValidTimeBasedTrigger(triggerData)
 		if !isValid {
 			return isValid, err
 		}

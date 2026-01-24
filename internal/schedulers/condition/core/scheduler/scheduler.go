@@ -182,8 +182,8 @@ func (s *ConditionBasedScheduler) cleanupExpiredEventJobs(ctx context.Context) {
 			// Find expired event jobs from jobDataStore (event jobs are stored there, not in conditionWorkers)
 			s.workersMutex.RLock()
 			for _, jobData := range s.jobDataStore {
-				// Only process event jobs (task definition ID 3 or 4)
-				if (jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4) &&
+				// Only process event jobs (task definition ID 3, 4, or 8)
+				if (jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4 || jobData.TaskDefinitionID == 8) &&
 					!jobData.EventWorkerData.ExpirationTime.IsZero() &&
 					jobData.EventWorkerData.ExpirationTime.Before(now) {
 					expiredJobData = append(expiredJobData, jobData)

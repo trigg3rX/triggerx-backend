@@ -2,8 +2,8 @@ package types
 
 import "time"
 
-// CustomScriptExecution tracks each execution of a custom script job
-type CustomScriptExecution struct {
+// AgentScriptExecution tracks each execution of an agent script job
+type AgentScriptExecution struct {
 	ExecutionID      string    `json:"execution_id" db:"execution_id"`
 	JobID            string    `json:"job_id" db:"job_id"`
 	TaskID           int64     `json:"task_id" db:"task_id"`
@@ -78,17 +78,17 @@ type ScriptStorage struct {
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// CustomScriptOutput is the expected output format from user scripts
-type CustomScriptOutput struct {
-	ShouldExecute  bool                       `json:"shouldExecute"`
-	TargetContract string                     `json:"targetContract,omitempty"`
-	Calldata       string                     `json:"calldata,omitempty"`
-	Metadata       CustomScriptOutputMetadata `json:"metadata"`
-	StorageUpdates map[string]string          `json:"storageUpdates,omitempty"` // Phase 1: Storage updates from script
+// AgentScriptOutput is the expected output format from user scripts
+type AgentScriptOutput struct {
+	ShouldExecute  bool                      `json:"shouldExecute"`
+	TargetContract string                    `json:"targetContract,omitempty"`
+	Calldata       string                    `json:"calldata,omitempty"`
+	Metadata       AgentScriptOutputMetadata `json:"metadata"`
+	StorageUpdates map[string]string         `json:"storageUpdates,omitempty"` // Phase 1: Storage updates from script
 }
 
-// CustomScriptOutputMetadata contains execution information
-type CustomScriptOutputMetadata struct {
+// AgentScriptOutputMetadata contains execution information
+type AgentScriptOutputMetadata struct {
 	Timestamp     int64              `json:"timestamp"`
 	Reason        string             `json:"reason"`
 	GasEstimate   uint64             `json:"gasEstimate,omitempty"`
@@ -108,12 +108,12 @@ type ExecutionProof struct {
 	PerformerAddress string `json:"performer_address"`
 }
 
-// ScheduleCustomTaskData is passed from scheduler to task dispatcher
-type ScheduleCustomTaskData struct {
+// ScheduleAgentTaskData is passed from scheduler to task dispatcher
+type ScheduleAgentTaskData struct {
 	TaskID           int64     `json:"task_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	JobID            string    `json:"job_id"`
-	CustomScriptUrl  string    `json:"custom_script_url"`
+	AgentScriptUrl   string    `json:"agent_script_url"`
 	ScriptLanguage   string    `json:"script_language"`
 	ScriptHash       string    `json:"script_hash"`
 	ScheduledTime    time.Time `json:"scheduled_time"`
