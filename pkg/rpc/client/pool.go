@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -56,16 +57,13 @@ func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*gr
 	select {
 	case conn := <-p.connections:
 		p.mu.Unlock()
-		// Test connection health (outside lock to avoid deadlock)
-		if p.isConnectionHealthy(conn) {
-			return conn, nil
+		// Wait for connection to be ready if needed (outside lock to avoid deadlock)
+		readyConn, err := p.waitForConnectionReady(ctx, conn, address)
+		if err != nil {
+			// Connection failed, recursively try again
+			return p.GetConnection(ctx, address)
 		}
-		// Connection is unhealthy, close it and create new one
-		if err := conn.Close(); err != nil {
-			p.logger.Error(ctx, "Failed to close unhealthy connection", observability.Error(err))
-		}
-		// Recursively try again (will create new connection if pool not full)
-		return p.GetConnection(ctx, address)
+		return readyConn, nil
 	default:
 		// No connection available, create new one if under limit
 		poolSize := len(p.connections)
@@ -83,16 +81,13 @@ func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*gr
 
 	select {
 	case conn := <-p.connections:
-		// Verify connection is healthy before returning
-		if p.isConnectionHealthy(conn) {
-			return conn, nil
+		// Wait for connection to be ready if needed
+		readyConn, err := p.waitForConnectionReady(ctx, conn, address)
+		if err != nil {
+			// Connection failed, recursively try again
+			return p.GetConnection(ctx, address)
 		}
-		// Connection is unhealthy, close it and try again
-		if err := conn.Close(); err != nil {
-			p.logger.Error(ctx, "Failed to close unhealthy connection", observability.Error(err))
-		}
-		// Recursively try again
-		return p.GetConnection(ctx, address)
+		return readyConn, nil
 	case <-poolCtx.Done():
 		if poolCtx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("timeout waiting for connection from pool (timeout: %v)", p.timeout)
@@ -121,6 +116,17 @@ func (p *ConnectionPool) ReturnConnection(ctx context.Context, conn *grpc.Client
 		return
 	}
 
+	// Check connection health before returning to pool
+	// If connection is not healthy, close it instead of returning to pool
+	if !p.isConnectionHealthy(conn) {
+		p.logger.Warn(ctx, "Connection is unhealthy, closing instead of returning to pool",
+			observability.String("state", conn.GetState().String()))
+		if err := conn.Close(); err != nil {
+			p.logger.Error(ctx, "Failed to close unhealthy connection", observability.Error(err))
+		}
+		return
+	}
+
 	// Return connection to pool
 	select {
 	case p.connections <- conn:
@@ -134,6 +140,8 @@ func (p *ConnectionPool) ReturnConnection(ctx context.Context, conn *grpc.Client
 }
 
 // createConnection creates a new gRPC connection
+// Note: grpc.NewClient creates a lazy connection that doesn't connect until first use
+// We return it immediately and let gRPC handle connection asynchronously
 func (p *ConnectionPool) createConnection(ctx context.Context, address string) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -155,11 +163,68 @@ func (p *ConnectionPool) createConnection(ctx context.Context, address string) (
 	return conn, nil
 }
 
+// waitForConnectionReady waits for a connection to become READY
+// Returns the connection if ready, or error if it fails or times out
+func (p *ConnectionPool) waitForConnectionReady(ctx context.Context, conn *grpc.ClientConn, address string) (*grpc.ClientConn, error) {
+	state := conn.GetState()
+	
+	// If already READY, return immediately
+	if state == connectivity.Ready {
+		return conn, nil
+	}
+	
+	// If in SHUTDOWN or TRANSIENT_FAILURE, close and return error
+	if state == connectivity.Shutdown || state == connectivity.TransientFailure {
+		if err := conn.Close(); err != nil {
+			p.logger.Error(ctx, "Failed to close failed connection", observability.Error(err))
+		}
+		return nil, fmt.Errorf("connection is in failed state: %v", state)
+	}
+	
+	// For IDLE or CONNECTING, wait for it to become READY
+	// Use a reasonable timeout (5 seconds) for connection establishment
+	connectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	
+	// Wait for state change to READY
+	for {
+		currentState := conn.GetState()
+		if currentState == connectivity.Ready {
+			return conn, nil
+		}
+		
+		// If connection failed, close it and return error
+		if currentState == connectivity.Shutdown || currentState == connectivity.TransientFailure {
+			if err := conn.Close(); err != nil {
+				p.logger.Error(ctx, "Failed to close failed connection", observability.Error(err))
+			}
+			return nil, fmt.Errorf("connection failed to establish: state=%v", currentState)
+		}
+		
+		// Wait for state change
+		if !conn.WaitForStateChange(connectCtx, currentState) {
+			// Context expired - connection might still be connecting
+			// Close it and let the caller create a new one
+			if err := conn.Close(); err != nil {
+				p.logger.Error(ctx, "Failed to close connection", observability.Error(err))
+			}
+			return nil, fmt.Errorf("timeout waiting for connection to be ready: %w", connectCtx.Err())
+		}
+	}
+}
+
 // isConnectionHealthy checks if a connection is healthy
 func (p *ConnectionPool) isConnectionHealthy(conn *grpc.ClientConn) bool {
-	// Simple health check - check connection state
 	state := conn.GetState()
-	return state.String() == "READY"
+	
+	// Only READY state is considered healthy
+	// Other states indicate the connection is not usable:
+	// - IDLE: initial state, not connected
+	// - CONNECTING: attempting to connect
+	// - READY: connected and ready for RPCs
+	// - TRANSIENT_FAILURE: connection lost, will attempt to reconnect
+	// - SHUTDOWN: connection is closed
+	return state == connectivity.Ready
 }
 
 // Close closes the connection pool

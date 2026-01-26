@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -103,8 +106,9 @@ func (c *Client) Call(ctx context.Context, method string, request interface{}, r
 
 		// Make gRPC call
 		callErr := c.makeGRPCCall(ctx, conn, method, request, response)
-		// Return connection to pool (mark failed if callErr != nil)
-		c.pool.ReturnConnection(ctx, conn, callErr != nil)
+		// Return connection to pool (mark failed if it's a connection error)
+		isConnectionError := isConnectionFailure(callErr)
+		c.pool.ReturnConnection(ctx, conn, isConnectionError)
 
 		return callErr
 	}, retryCfg)
@@ -219,4 +223,55 @@ func (c *Client) GetMethods(ctx context.Context) ([]rpcpkg.RPCMethod, error) {
 		return nil, err
 	}
 	return methods, nil
+}
+
+// isConnectionFailure determines if an error indicates a connection failure
+// that requires closing the connection
+func isConnectionFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check if it's a gRPC status error
+	if st, ok := status.FromError(err); ok {
+		code := st.Code()
+		// These codes typically indicate connection issues:
+		// - Unavailable: service is unavailable (connection lost)
+		// - DeadlineExceeded: timeout (could indicate connection issues)
+		// - Unimplemented: method not found (not a connection issue, but we'll close it to be safe)
+		if code == codes.Unavailable || code == codes.DeadlineExceeded {
+			return true
+		}
+		// Internal errors with connection-related messages
+		if code == codes.Internal {
+			errMsg := strings.ToLower(err.Error())
+			if strings.Contains(errMsg, "connection") ||
+				strings.Contains(errMsg, "transport") ||
+				strings.Contains(errMsg, "broken pipe") ||
+				strings.Contains(errMsg, "connection reset") {
+				return true
+			}
+		}
+	}
+
+	// Check error message for connection-related issues
+	errMsg := strings.ToLower(err.Error())
+	connectionErrorIndicators := []string{
+		"connection refused",
+		"connection reset",
+		"broken pipe",
+		"connection closed",
+		"transport is closing",
+		"connection lost",
+		"no connection available",
+		"context deadline exceeded", // Often indicates connection timeout
+	}
+
+	for _, indicator := range connectionErrorIndicators {
+		if strings.Contains(errMsg, indicator) {
+			return true
+		}
+	}
+
+	return false
 }
