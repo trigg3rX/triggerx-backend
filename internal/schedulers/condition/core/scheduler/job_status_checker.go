@@ -73,7 +73,7 @@ func (c *JobStatusChecker) checkJobStatuses(ctx context.Context) {
 
 	wg.Wait()
 
-	c.logger.Debug(ctx, "Job status check completed")
+	// c.logger.Debug(ctx, "Job status check completed")
 }
 
 // checkEventJobs checks all active event jobs for expiration

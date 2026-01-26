@@ -1,38 +1,45 @@
 #!/bin/bash
 
 USE_SERVER=false
+SHOW_PAYLOAD=false
 source .env
 
 TASK_DEFINITION_ID=""
 
-# Parse arguments - handle both orders: [-s] <id> or <id> [-s]
+# Parse arguments - handle all orders: [-s] [-o] <id> or <id> [-s] [-o]
 for arg in "$@"; do
   case $arg in
     -s)
       USE_SERVER=true
       ;;
-    [1-7])
+    -o)
+      SHOW_PAYLOAD=true
+      ;;
+    [1-9])
       if [ -z "$TASK_DEFINITION_ID" ]; then
         TASK_DEFINITION_ID=$arg
       else
         echo "Error: Multiple job types specified"
-        echo "Usage: $0 <job_type (1-7)> [-s]"
+        echo "Usage: $0 <job_type (1-9)> [-s] [-o]"
         echo "  -s    Use server (data.triggerx.network) instead of local"
+        echo "  -o    Show payload"
         exit 1
       fi
       ;;
     *)
       echo "Error: Invalid argument: $arg"
-      echo "Usage: $0 <job_type (1-7)> [-s]"
+      echo "Usage: $0 <job_type (1-9)> [-s] [-o]"
       echo "  -s    Use server (data.triggerx.network) instead of local"
+      echo "  -o    Show payload"
       exit 1
       ;;
   esac
 done
 
 if [ -z "$TASK_DEFINITION_ID" ]; then
-  echo "Usage: $0 <job_type (1-7)> [-s]"
+  echo "Usage: $0 <job_type (1-9)> [-s] [-o]"
   echo "  -s    Use server (data.triggerx.network) instead of local"
+  echo "  -o    Show payload"
   exit 1
 fi
 
@@ -74,6 +81,7 @@ fi
 echo "Derived user address: $USER_ADDRESS"
 
 CHAIN_ID=421614
+CREATED_CHAIN_ID="421614"  # String format for API
 JOB_REGISTRY_CONTRACT_ADDRESS=0x476ACc7949a95e31144cC84b8F6BC7abF0967E4b
 TEST_CONTRACT_ADDRESS=0xa92f95FDeF3DB6B2aA115548376c7a2429711497
 RPC_URL=https://arb-sepolia.g.alchemy.com/v2/$ALCHEMY_API_KEY
@@ -125,8 +133,8 @@ read -r -d '' TEST_FUNCTION_ABI <<'EOF'
 EOF
 
 
-if ! [[ "$TASK_DEFINITION_ID" =~ ^[1-7]$ ]]; then
-  echo "Error: job_type must be an integer between 1 and 7."
+if ! [[ "$TASK_DEFINITION_ID" =~ ^[1-9]$ ]]; then
+  echo "Error: job_type must be an integer between 1 and 9."
   exit 1
 fi
 
@@ -137,15 +145,14 @@ JOB_TITLE="$adj $noun"
 
 # Default values for all fields (matching CreateJobData struct)
 # USER_ADDRESS is already derived from PRIVATE_KEY above
-CUSTOM=true
-LANGUAGE="go"
+JOB_TYPE="sdk"
 RECURRING=false
-JOB_COST_PREDICTION=0.1
+JOB_COST_PREDICTION="100"
 TIMEZONE="Asia/Calcutta"
+
 IS_SAFE=false
 SAFE_ADDRESS=""
 SAFE_NAME=""
-IS_IMUA=false
 
 # Time job fields (defaults)
 SCHEDULE_TYPE="interval"
@@ -165,7 +172,8 @@ CONDITION_TYPE="less_than"
 UPPER_LIMIT=4000
 LOWER_LIMIT=3000
 VALUE_SOURCE_TYPE="api"
-VALUE_SOURCE_URL="https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
+# VALUE_SOURCE_URL="https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
+VALUE_SOURCE_URL="http://localhost:8080/api/v1/price"
 SELECTED_KEY_ROUTE=""
 
 # Target fields (common for all job types)
@@ -174,7 +182,11 @@ TARGET_CONTRACT_ADDRESS=$TEST_CONTRACT_ADDRESS
 TARGET_FUNCTION="incrementBy"
 ARG_TYPE=1
 ARGUMENTS="[\"3\"]"
-DYNAMIC_ARGUMENTS_SCRIPT_URL=""
+EXECUTION_SCRIPT_URL=""
+EXECUTION_SCRIPT_LANGUAGE="go"
+EXECUTION_SCRIPT_HASH=""
+MAX_EXECUTION_TIME=50
+CHALLENGE_PERIOD=21600
 
 # Task definition specific overrides
 case $TASK_DEFINITION_ID in
@@ -183,7 +195,6 @@ case $TASK_DEFINITION_ID in
     TIME_FRAME=35
     TIME_INTERVAL=32
     ARG_TYPE=1
-    LANGUAGE="go"
     echo "Creating Time-based Static Args Job..."
     ;;
   2)
@@ -191,66 +202,77 @@ case $TASK_DEFINITION_ID in
     TIME_FRAME=35
     TIME_INTERVAL=32
     ARG_TYPE=2
-    LANGUAGE="go"
-    DYNAMIC_ARGUMENTS_SCRIPT_URL=$IPFS_URL
+    EXECUTION_SCRIPT_LANGUAGE="go"
+    EXECUTION_SCRIPT_URL=$IPFS_URL
     echo "Creating Time-based Dynamic Args Job..."
     ;;
   3)
     # Event Based, Static Args
-    TIME_FRAME=60
+    TIME_FRAME=40
     TIME_INTERVAL=0
     ARG_TYPE=1
-    LANGUAGE="go"
     RECURRING=false
     echo "Creating Event-based Static Args Job..."
     ;;
   4)
     # Event Based, Dynamic Args
-    TIME_FRAME=60
+    TIME_FRAME=40
     TIME_INTERVAL=0
     ARG_TYPE=2
-    LANGUAGE="go"
     RECURRING=false
-    DYNAMIC_ARGUMENTS_SCRIPT_URL=$IPFS_URL
+    EXECUTION_SCRIPT_LANGUAGE="go"
+    EXECUTION_SCRIPT_URL=$IPFS_URL
     echo "Creating Event-based Dynamic Args Job..."
     ;;
   5)
     # Condition Based, Static Args
-    TIME_FRAME=20
+    TIME_FRAME=35
     TIME_INTERVAL=0
     ARG_TYPE=1
-    LANGUAGE="go"
     RECURRING=false
     echo "Creating Condition-based Static Args Job..."
     ;;
   6)
     # Condition Based, Dynamic Args
-    TIME_FRAME=20
+    TIME_FRAME=35
     TIME_INTERVAL=0
     ARG_TYPE=2
-    LANGUAGE="go"
     RECURRING=false
-    DYNAMIC_ARGUMENTS_SCRIPT_URL=$IPFS_URL
+    EXECUTION_SCRIPT_LANGUAGE="go"
+    EXECUTION_SCRIPT_URL=$IPFS_URL
     echo "Creating Condition-based Dynamic Args Job..."
     ;;
   7)
     # Custom
     TIME_FRAME=36
     TIME_INTERVAL=30
-    ARG_TYPE=2
-    LANGUAGE="ts"
-    DYNAMIC_ARGUMENTS_SCRIPT_URL=$CUSTOM_IPFS_URL
-    # Dummy values for validation (not used for custom script jobs)
-    TARGET_CONTRACT_ADDRESS="0x0000000000000000000000000000000000000000"
-    TARGET_FUNCTION="dummyFunction"
-    ABI_JSON='[]'
-    echo "Creating Custom Script Job..."
+    EXECUTION_SCRIPT_LANGUAGE="ts"
+    EXECUTION_SCRIPT_URL=$CUSTOM_IPFS_URL
+    echo "Creating Time-base Agentic Job..."
+    ;;
+  8)
+    # Agent Based, Static Args
+    TIME_FRAME=36
+    TIME_INTERVAL=30
+    RECURRING=false
+    EXECUTION_SCRIPT_LANGUAGE="ts"
+    EXECUTION_SCRIPT_URL=$CUSTOM_IPFS_URL
+    echo "Creating Event-based Agentic Job..."
+    ;;
+  9)
+    # Agent Based, Dynamic Args
+    TIME_FRAME=36
+    TIME_INTERVAL=30
+    RECURRING=false
+    EXECUTION_SCRIPT_LANGUAGE="ts"
+    EXECUTION_SCRIPT_URL=$CUSTOM_IPFS_URL
+    echo "Creating Condition-based Agentic Job..."
     ;;
 esac
 
 # Set ABI based on target function (default to TEST_FUNCTION_ABI)
 # For custom jobs (task definition 7), ABI can be empty
-if [ "$TASK_DEFINITION_ID" = "7" ]; then
+if [ "$TASK_DEFINITION_ID" = "7" ] || [ "$TASK_DEFINITION_ID" = "8" ] || [ "$TASK_DEFINITION_ID" = "9" ]; then
   if [ -z "$ABI_JSON" ]; then
     ABI_JSON='[]'
   fi
@@ -265,13 +287,6 @@ else
   fi
 fi
 
-# Convert boolean strings to proper JSON booleans
-if [ "$CUSTOM" = "true" ]; then
-  CUSTOM_JSON=true
-else
-  CUSTOM_JSON=false
-fi
-
 if [ "$RECURRING" = "true" ]; then
   RECURRING_JSON=true
 else
@@ -284,12 +299,6 @@ else
   IS_SAFE_JSON=false
 fi
 
-if [ "$IS_IMUA" = "true" ]; then
-  IS_IMUA_JSON=true
-else
-  IS_IMUA_JSON=false
-fi
-
 if ! command -v cast >/dev/null 2>&1; then
   echo "Error: foundry 'cast' CLI is required"
   exit 1
@@ -300,14 +309,14 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ -n "$DYNAMIC_ARGUMENTS_SCRIPT_URL" ]; then
-  IPFS_HASH_BYTES32=$(cast keccak "$DYNAMIC_ARGUMENTS_SCRIPT_URL")
+if [ -n "$EXECUTION_SCRIPT_URL" ]; then
+  IPFS_HASH_BYTES32=$(cast keccak "$EXECUTION_SCRIPT_URL")
   if [ $? -ne 0 ] || [ -z "$IPFS_HASH_BYTES32" ]; then
-    echo "Error: failed to hash dynamic arguments script URL"
+    echo "Error: failed to hash execution script URL"
     exit 1
   fi
 else
-  IPFS_HASH_BYTES32=""
+  EXECUTION_SCRIPT_HASH=""
 fi
 
 case $TASK_DEFINITION_ID in
@@ -341,7 +350,7 @@ if [ $? -ne 0 ] || [ -z "$JOB_DATA" ]; then
   exit 1
 fi
 
-echo "\nCalling CreateJob() to TriggerXJobRegistry..."
+echo "Calling createJob() to TriggerXJobRegistry..."
 
 EVENT_SIGNATURE=0x737fc62fbb05dd9fb7c799e68796a2d7c8324e310af7b656c0580e7b3cf8bf8a
 
@@ -395,20 +404,46 @@ else
   TRACE_ID=$(openssl rand -hex 16)
 fi
 
-# Build JSON payload with all fields (matching CreateJobData struct)
-# Use jq to properly construct and escape JSON
+# Parse ARGUMENTS string into JSON array
+if [ -n "$ARGUMENTS" ] && [ "$ARGUMENTS" != "[]" ]; then
+  # Validate that ARGUMENTS is valid JSON
+  if echo "$ARGUMENTS" | jq . >/dev/null 2>&1; then
+    ARGUMENTS_JSON=$(echo "$ARGUMENTS" | jq -c .)
+  else
+    echo "Warning: ARGUMENTS is not valid JSON, using empty array"
+    ARGUMENTS_JSON="[]"
+  fi
+else
+  ARGUMENTS_JSON="[]"
+fi
+
+# Set email_id based on recurring and task definition
+EMAIL_ID=""
+if [ "$RECURRING" = "true" ]; then
+  case $TASK_DEFINITION_ID in
+    3|4|5|6|8|9)
+      # Email required for recurring event/condition jobs
+      EMAIL_ID="test@example.com"  # Default, can be overridden via env var
+      if [ -n "$USER_EMAIL" ]; then
+        EMAIL_ID="$USER_EMAIL"
+      fi
+      ;;
+  esac
+fi
+
+# Build base JSON payload (matching CreateJobData struct)
 JOB_PAYLOAD=$(jq -n \
-  --arg user_address "$USER_ADDRESS" \
-  --arg created_chain_id "$CHAIN_ID" \
   --arg job_id "$JOB_ID" \
+  --arg user_address "$USER_ADDRESS" \
+  --arg email_id "$EMAIL_ID" \
   --arg job_title "$JOB_TITLE" \
+  --arg job_type "$JOB_TYPE" \
   --argjson task_definition_id $TASK_DEFINITION_ID \
-  --argjson custom $CUSTOM_JSON \
-  --arg language "$LANGUAGE" \
   --argjson time_frame $TIME_FRAME \
   --argjson recurring $RECURRING_JSON \
-  --argjson job_cost_prediction $JOB_COST_PREDICTION \
+  --arg job_cost_prediction "$JOB_COST_PREDICTION" \
   --arg timezone "$TIMEZONE" \
+  --arg created_chain_id "$CREATED_CHAIN_ID" \
   --argjson is_safe $IS_SAFE_JSON \
   --arg safe_address "$SAFE_ADDRESS" \
   --arg safe_name "$SAFE_NAME" \
@@ -432,68 +467,86 @@ JOB_PAYLOAD=$(jq -n \
   --arg target_function "$TARGET_FUNCTION" \
   --arg abi "$ABI_JSON" \
   --argjson arg_type $ARG_TYPE \
-  --argjson arguments "$ARGUMENTS" \
-  --arg dynamic_arguments_script_url "$DYNAMIC_ARGUMENTS_SCRIPT_URL" \
-  --argjson is_imua $IS_IMUA_JSON \
-  --argjson task_def_id $TASK_DEFINITION_ID \
+  --arg arguments_json "$ARGUMENTS_JSON" \
+  --arg execution_script_url "$EXECUTION_SCRIPT_URL" \
+  --arg execution_script_language "$EXECUTION_SCRIPT_LANGUAGE" \
+  --arg execution_script_hash "$EXECUTION_SCRIPT_HASH" \
+  --argjson max_execution_time $MAX_EXECUTION_TIME \
+  --argjson challenge_period $CHALLENGE_PERIOD \
   '{
-    user_address: $user_address,
-    created_chain_id: $created_chain_id,
     job_id: $job_id,
+    user_address: $user_address,
+    email_id: $email_id,
     job_title: $job_title,
+    job_type: $job_type,
     task_definition_id: $task_definition_id,
-    custom: $custom,
-    language: $language,
     time_frame: $time_frame,
     recurring: $recurring,
     job_cost_prediction: $job_cost_prediction,
     timezone: $timezone,
+    created_chain_id: $created_chain_id,
     is_safe: $is_safe,
-    safe_address: $safe_address,
-    safe_name: $safe_name,
-    schedule_type: $schedule_type,
-    time_interval: $time_interval,
-    cron_expression: $cron_expression,
-    specific_schedule: $specific_schedule,
-    trigger_chain_id: $trigger_chain_id,
-    trigger_contract_address: $trigger_contract_address,
-    trigger_event: $trigger_event,
-    event_filter_para_name: $event_filter_para_name,
-    event_filter_value: $event_filter_value,
-    condition_type: $condition_type,
-    upper_limit: $upper_limit,
-    lower_limit: $lower_limit,
-    value_source_type: $value_source_type,
-    value_source_url: $value_source_url,
-    selected_key_route: $selected_key_route,
-    target_chain_id: $target_chain_id,
     arg_type: $arg_type,
-    arguments: $arguments,
-    dynamic_arguments_script_url: $dynamic_arguments_script_url,
-    is_imua: $is_imua
-  } + (if $task_def_id == 7 then
-    {} + (if ($target_contract_address | length) > 0 then {target_contract_address: $target_contract_address} else {} end) +
-    (if ($target_function | length) > 0 then {target_function: $target_function} else {} end) +
-    (if ($abi | length) > 0 and $abi != "[]" then {abi: $abi} else {} end)
-  else
-    {
-      target_contract_address: $target_contract_address,
-      target_function: $target_function,
-      abi: $abi
-    }
-  end)')
+    arguments: ($arguments_json | fromjson)
+  } + 
+  (if ($safe_address | length) > 0 then {safe_address: $safe_address} else {} end) +
+  (if ($safe_name | length) > 0 then {safe_name: $safe_name} else {} end) +
+  (if ($schedule_type | length) > 0 then {schedule_type: $schedule_type} else {} end) +
+  (if $time_interval > 0 then {time_interval: $time_interval} else {} end) +
+  (if ($cron_expression | length) > 0 then {cron_expression: $cron_expression} else {} end) +
+  (if ($specific_schedule | length) > 0 then {specific_schedule: $specific_schedule} else {} end) +
+  (if ($trigger_chain_id | length) > 0 then {trigger_chain_id: $trigger_chain_id} else {} end) +
+  (if ($trigger_contract_address | length) > 0 then {trigger_contract_address: $trigger_contract_address} else {} end) +
+  (if ($trigger_event | length) > 0 then {trigger_event: $trigger_event} else {} end) +
+  (if ($event_filter_para_name | length) > 0 then {event_filter_para_name: $event_filter_para_name} else {} end) +
+  (if ($event_filter_value | length) > 0 then {event_filter_value: $event_filter_value} else {} end) +
+  (if ($condition_type | length) > 0 then {condition_type: $condition_type} else {} end) +
+  (if $upper_limit != 0 then {upper_limit: $upper_limit} else {} end) +
+  (if $lower_limit != 0 then {lower_limit: $lower_limit} else {} end) +
+  (if ($value_source_type | length) > 0 then {value_source_type: $value_source_type} else {} end) +
+  (if ($value_source_url | length) > 0 then {value_source_url: $value_source_url} else {} end) +
+  (if ($selected_key_route | length) > 0 then {selected_key_route: $selected_key_route} else {} end) +
+  (if ($target_chain_id | length) > 0 then {target_chain_id: $target_chain_id} else {} end) +
+  (if ($target_contract_address | length) > 0 then {target_contract_address: $target_contract_address} else {} end) +
+  (if ($target_function | length) > 0 then {target_function: $target_function} else {} end) +
+  (if ($abi | length) > 0 and $abi != "[]" then {abi: $abi} else {} end) +
+  (if ($execution_script_url | length) > 0 then {execution_script_url: $execution_script_url} else {} end) +
+  (if ($execution_script_language | length) > 0 then {execution_script_language: $execution_script_language} else {} end) +
+  (if ($execution_script_hash | length) > 0 then {execution_script_hash: $execution_script_hash} else {} end) +
+  (if $max_execution_time > 0 then {max_execution_time: $max_execution_time} else {} end) +
+  (if $challenge_period > 0 then {challenge_period: $challenge_period} else {} end)')
 
-curl -X POST $DB_SERVER_URL/api/jobs \
+echo "Calling CreateJob API on $DB_SERVER_URL..."
+if [ "$SHOW_PAYLOAD" = true ]; then
+  echo "Payload:"
+  echo "$JOB_PAYLOAD" | jq .
+fi
+
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST $DB_SERVER_URL/api/jobs \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: $TRIGGERX_API_KEY" \
   -H "X-Trace-ID: $TRACE_ID" \
-  -d "[$JOB_PAYLOAD]"
+  -d "[$JOB_PAYLOAD]")
 
-echo "\n"
+HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+BODY=$(echo "$RESPONSE" | sed '$d')
+
+echo "HTTP Status: $HTTP_CODE"
+if [ "$SHOW_PAYLOAD" = true ]; then
+  echo "Response:"
+  echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+fi
+
+if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+  echo "✓ Job successfully created on server!"
+else
+  echo "✗ Failed to create job on server"
+  exit 1
+fi
 
 if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
   sleep 10 
-  echo "\nCalling increment() to trigger the event..."
+  echo "Calling increment() to trigger the event..."
 
   cast send \
     --chain $CHAIN_ID \
@@ -501,5 +554,3 @@ if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
     --private-key $SCRIPT_PRIVATE_KEY \
     $TEST_CONTRACT_ADDRESS "increment()"
 fi
-
-echo "\n"
