@@ -123,7 +123,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 
 		// e.logger.Info(ctx, "Metadata", observability.Any("metadata", metadata))
 
-		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1, config.GetAlchemyAPIKey(), metadata)
+		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.ExecutionScriptURL, targetData.ExecutionScriptLanguage, 1, config.GetAlchemyAPIKey(), metadata)
 		if execErr != nil {
 			return types.PerformerActionData{}, false, fmt.Errorf("failed to execute script: %v", execErr)
 		}
@@ -172,9 +172,6 @@ skipArgumentProcessing:
 	var jobIDBigInt *big.Int
 	if targetData.JobID != "" {
 		jobIDBigInt = types.ConvertToBigInt(targetData.JobID)
-		if err != nil {
-			return types.PerformerActionData{}, false, fmt.Errorf("failed to parse job ID: %v", err)
-		}
 	} else {
 		jobIDBigInt = big.NewInt(0)
 	}

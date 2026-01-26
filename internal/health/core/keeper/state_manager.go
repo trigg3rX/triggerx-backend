@@ -137,13 +137,13 @@ func (sm *StateManager) GetKeeperUptimes(ctx context.Context) (map[string]int64,
 }
 
 // GetActiveKeepersByNetwork returns all active keepers for a specific network
-func (sm *StateManager) GetActiveKeepersByNetwork(ctx context.Context, network types.KeeperNetwork) []types.KeeperInfo {
+func (sm *StateManager) GetActiveKeepersByNetwork(ctx context.Context, network types.Network) []types.KeeperInfo {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
 	var keepers []types.KeeperInfo
 	for address, state := range sm.keepers {
-		if state.IsActive && state.Network == string(network) {
+		if state.IsActive && state.Network == network {
 			keepers = append(keepers, types.KeeperInfo{
 				KeeperName:       state.KeeperName,
 				KeeperAddress:    address,

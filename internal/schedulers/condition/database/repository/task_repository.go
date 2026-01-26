@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 // TaskRepository defines the interface for task data operations.
 type TaskRepository interface {
 	// CreateTaskDataInDB creates a new task record in the database.
-	CreateTaskDataInDB(ctx context.Context, task *types.CreateTaskDataRequest) (int64, error)
+	CreateTaskDataInDB(task *types.CreateTaskDataRequest) (int64, error)
 
 	// AddTaskIDToJob adds a task ID to the job's task_ids list.
 	AddTaskIDToJob(jobID string, taskID int64) error
@@ -32,15 +31,23 @@ func NewTaskRepository(db *database.Connection) TaskRepository {
 
 // CreateTaskDataInDB creates a new task record in the database.
 // It generates a new task ID by getting the max task ID and incrementing it.
-func (r *taskRepository) CreateTaskDataInDB(ctx context.Context, task *types.CreateTaskDataRequest) (int64, error) {
+// It also fetches the job_cost_prediction from job_data and sets it as task_opx_predicted_cost.
+func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (int64, error) {
 	var maxTaskID int64
 	err := r.db.Session().Query(getMaxTaskIDQuery).Scan(&maxTaskID)
 	if err != nil {
 		return -1, errors.New("error getting max task ID")
 	}
 
+	// Fetch job_cost_prediction from job_data
+	var jobCostPrediction string
+	err = r.db.Session().Query(getJobCostPredictionQuery, task.JobID).Scan(&jobCostPrediction)
+	if err != nil {
+		return -1, errors.New("error getting job cost prediction")
+	}
+
 	taskID := maxTaskID + 1
-	err = r.db.Session().Query(createTaskDataQuery, taskID, task.JobID, task.TaskDefinitionID, time.Now(), task.IsImua).Exec()
+	err = r.db.Session().Query(createTaskDataQuery, taskID, task.JobID, task.TaskDefinitionID, task.Network, string(types.TaskStatusCreated), time.Now().UTC(), jobCostPrediction).Exec()
 	if err != nil {
 		return -1, errors.New("error creating task data")
 	}
@@ -63,11 +70,6 @@ func (r *taskRepository) AddTaskIDToJob(jobID string, taskID int64) error {
 		}
 	}
 
-	// Handle case where existingTaskIDs might be nil (null in database)
-	if existingTaskIDs == nil {
-		existingTaskIDs = []int64{}
-	}
-
 	// Append the new task ID
 	taskIDs := append(existingTaskIDs, taskID)
 	err = r.db.Session().Query(addTaskIDToJobQuery, taskIDs, jobID).Exec()
@@ -77,22 +79,3 @@ func (r *taskRepository) AddTaskIDToJob(jobID string, taskID int64) error {
 
 	return nil
 }
-
-// Query constants
-const (
-	getMaxTaskIDQuery = `SELECT MAX(task_id) FROM triggerx.task_data`
-
-	createTaskDataQuery = `
-        INSERT INTO triggerx.task_data (
-            task_id, job_id, task_definition_id, created_at, is_imua, task_status
-        ) VALUES (?, ?, ?, ?, ?, 'processing')`
-
-	getTaskIDsByJobIDQuery = `
-		SELECT task_ids FROM triggerx.job_data 
-		WHERE job_id = ?`
-
-	addTaskIDToJobQuery = `
-		UPDATE triggerx.job_data
-		SET task_ids = ?
-		WHERE job_id = ?`
-)

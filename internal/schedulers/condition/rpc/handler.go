@@ -68,22 +68,22 @@ func (h *Handler) Handle(ctx context.Context, method string, request interface{}
 
 // handleScheduleJob handles the schedule-job RPC method
 func (h *Handler) handleScheduleJob(ctx context.Context, request interface{}) (interface{}, error) {
-	// Convert request to ScheduleConditionJobData
-	var jobData types.ScheduleConditionJobData
+	// Convert request to ScheduleConditionJobRequest
+	var scheduleRequest types.ScheduleConditionJobRequest
 
 	// Handle JSON request - convert map to JSON bytes then unmarshal
 	jsonBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	if err := json.Unmarshal(jsonBytes, &jobData); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal job data: %w", err)
+	if err := json.Unmarshal(jsonBytes, &scheduleRequest); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal job request: %w", err)
 	}
 
 	// Schedule the job
-	if err := h.scheduler.ScheduleJob(ctx, &jobData); err != nil {
+	if err := h.scheduler.ScheduleJob(ctx, &scheduleRequest); err != nil {
 		h.logger.Error(ctx, "Failed to schedule job via RPC",
-			observability.String("job_id", jobData.JobID),
+			observability.String("job_id", scheduleRequest.JobID),
 			observability.Error(err))
 		return map[string]interface{}{
 			"success": false,
@@ -92,11 +92,11 @@ func (h *Handler) handleScheduleJob(ctx context.Context, request interface{}) (i
 	}
 
 	h.logger.Info(ctx, "Job scheduled successfully via RPC",
-		observability.String("job_id", jobData.JobID))
+		observability.String("job_id", scheduleRequest.JobID))
 
 	return map[string]interface{}{
 		"success": true,
-		"job_id":  jobData.JobID,
+		"job_id":  scheduleRequest.JobID,
 		"message": "Job scheduled successfully",
 	}, nil
 }
@@ -222,7 +222,7 @@ func (h *Handler) GetMethods() []rpcpkg.RPCMethod {
 		{
 			Name:        "schedule-job",
 			Description: "Schedule a new condition-based or event-based job",
-			RequestType: types.ScheduleConditionJobData{},
+			RequestType: types.ScheduleConditionJobRequest{},
 			ResponseType: map[string]interface{}{
 				"success": true,
 				"job_id":  "string",

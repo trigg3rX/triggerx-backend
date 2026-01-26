@@ -4,6 +4,7 @@ import "time"
 
 // MonitoringRequest represents a request to monitor a contract/event
 // Used by eventmonitor service for external API requests
+// Owned by: eventmonitor gRPC Server
 type MonitoringRequest struct {
 	RequestID    string    `json:"request_id" binding:"required"`       // Unique request identifier
 	ChainID      string    `json:"chain_id" binding:"required"`         // Chain identifier
@@ -17,6 +18,7 @@ type MonitoringRequest struct {
 
 // EventNotification represents an event notification sent to subscribers
 // Used by eventmonitor service to notify subscribers of detected events
+// Owned by: eventmonitor gRPC Server
 type EventNotification struct {
 	RequestID    string    `json:"request_id"`       // Request identifier
 	ChainID      string    `json:"chain_id"`         // Chain identifier
@@ -32,6 +34,7 @@ type EventNotification struct {
 
 // RegisterResponse represents the response for a register request
 // Used by eventmonitor service for registration responses
+// Owned by: eventmonitor gRPC Server
 type RegisterResponse struct {
 	Success   bool   `json:"success"`    // Whether registration was successful
 	RequestID string `json:"request_id"` // Request identifier
@@ -41,12 +44,14 @@ type RegisterResponse struct {
 
 // UnregisterRequest represents a request to unregister monitoring
 // Used by eventmonitor service for unregistration requests
+// Owned by: eventmonitor gRPC Server
 type UnregisterRequest struct {
 	RequestID string `json:"request_id" binding:"required"` // Request identifier to unregister
 }
 
 // UnregisterResponse represents the response for an unregister request
 // Used by eventmonitor service for unregistration responses
+// Owned by: eventmonitor gRPC Server
 type UnregisterResponse struct {
 	Success   bool   `json:"success"`    // Whether unregistration was successful
 	RequestID string `json:"request_id"` // Request identifier
@@ -56,6 +61,7 @@ type UnregisterResponse struct {
 
 // StatusResponse represents the status of a monitoring request
 // Used by eventmonitor service for status queries
+// Owned by: eventmonitor gRPC Server
 type StatusResponse struct {
 	RequestID          string    `json:"request_id"`           // Request identifier
 	Status             string    `json:"status"`               // Current status
@@ -68,6 +74,7 @@ type StatusResponse struct {
 
 // HealthResponse represents the health check response for eventmonitor
 // Used by eventmonitor service for health checks
+// Owned by: eventmonitor gRPC Server
 type HealthResponse struct {
 	Status          string   `json:"status"`           // Service status
 	Version         string   `json:"version"`          // Service version

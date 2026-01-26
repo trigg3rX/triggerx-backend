@@ -72,7 +72,8 @@ type JobTasksSnapshot struct {
 type JobTaskSnapshotData struct {
 	TaskID             int64     `json:"task_id"`
 	TaskNumber         int64     `json:"task_number"`
-	TaskOpXCost        float64   `json:"task_opx_cost"`
+	TaskOpxPredictedCost string    `json:"task_opx_predicted_cost"`
+	TaskOpxActualCost    string    `json:"task_opx_actual_cost"`
 	ExecutionTimestamp time.Time `json:"execution_timestamp"`
 	ExecutionTxHash    string    `json:"execution_tx_hash"`
 	TaskPerformerAddress    []string     `json:"task_performer_address"`

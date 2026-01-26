@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -9,7 +10,7 @@ import (
 )
 
 type SafeAddressRepository interface {
-	CreateSafeAddress(userAddress string, safeAddress string, safeName string) error
+	CreateSafeAddress(safeAddress *types.SafeAddressDataEntity) error
 	GetSafeAddressesByUser(userAddress string) ([]types.SafeAddressDataDTO, error)
 	CheckSafeAddressExists(userAddress string, safeAddress string) (bool, error)
 }
@@ -24,9 +25,9 @@ func NewSafeAddressRepository(db *database.Connection) SafeAddressRepository {
 	}
 }
 
-func (r *safeAddressRepository) CreateSafeAddress(userAddress string, safeAddress string, safeName string) error {
+func (r *safeAddressRepository) CreateSafeAddress(safeAddress *types.SafeAddressDataEntity) error {
 	err := r.db.Session().Query(CreateSafeAddressQuery,
-		userAddress, safeAddress, safeName, time.Now()).Exec()
+		strings.ToLower(safeAddress.UserAddress), strings.ToLower(safeAddress.SafeAddress), safeAddress.SafeName, time.Now().UTC()).Exec()
 	if err != nil {
 		return errors.New("failed to create safe address")
 	}
@@ -35,7 +36,7 @@ func (r *safeAddressRepository) CreateSafeAddress(userAddress string, safeAddres
 
 func (r *safeAddressRepository) GetSafeAddressesByUser(userAddress string) ([]types.SafeAddressDataDTO, error) {
 	session := r.db.Session()
-	iter := session.Query(GetSafeAddressesByUserQuery, userAddress).Iter()
+	iter := session.Query(GetSafeAddressesByUserQuery, strings.ToLower(userAddress)).Iter()
 
 	var safeAddresses []types.SafeAddressDataDTO
 	var safeAddress types.SafeAddressDataDTO
@@ -52,7 +53,7 @@ func (r *safeAddressRepository) GetSafeAddressesByUser(userAddress string) ([]ty
 func (r *safeAddressRepository) CheckSafeAddressExists(userAddress string, safeAddress string) (bool, error) {
 	var foundUserAddress string
 	var foundSafeAddress string
-	err := r.db.Session().Query(CheckSafeAddressExistsQuery, userAddress, safeAddress).Scan(&foundUserAddress, &foundSafeAddress)
+	err := r.db.Session().Query(CheckSafeAddressExistsQuery, strings.ToLower(userAddress), strings.ToLower(safeAddress)).Scan(&foundUserAddress, &foundSafeAddress)
 	if err != nil {
 		return false, nil // Address doesn't exist
 	}

@@ -11,128 +11,54 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// getNetworkFromChainID converts a chain ID to KeeperNetwork
-// Mainnet chains: 1 (Ethereum), 10 (Optimism), 8453 (Base), 42161 (Arbitrum)
-// Testnet chains: 11155111 (Ethereum Sepolia), 11155420 (Optimism Sepolia), 84532 (Base Sepolia), 421614 (Arbitrum Sepolia)
-func getNetworkFromChainID(chainID string) types.KeeperNetwork {
-	switch chainID {
-	// Mainnet chains
-	case "1", "10", "8453", "42161":
-		return types.NetworkMainnet
-	// Testnet chains
-	case "11155111", "11155420", "84532", "421614":
-		return types.NetworkSepolia
-	case "imua":
-		return types.NetworkImua
-	default:
-		// Default to sepolia for unknown chains
-		return types.NetworkSepolia
-	}
-}
-
 // processBatch processes a batch of tasks by submitting them to the task dispatcher.
 // It filters out expired tasks, builds the task data structures, and submits
 // the batch via RPC to the task dispatcher service.
-func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.ScheduleTimeTaskData) {
-	s.logger.Debug(ctx, "Processing batch of time-based tasks", observability.Int("task_count", len(tasks)))
+func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks types.SendTaskDataToKeeper) {
+	s.logger.Debug(ctx, "Processing batch of time-based tasks", observability.Int("task_count", len(tasks.TaskID)))
 
-	var targetDataList []types.TaskTargetData
-	var triggerDataList []types.TaskTriggerData
-	var validTaskIDs []int64
-
-	for _, task := range tasks {
+	for _, triggerData := range tasks.TriggerData {
 		// Final safety check: This should not happen as expired jobs are filtered before task creation
 		// This check catches edge cases where a job expired between fetching and processing
-		if task.ExpirationTime.Before(time.Now()) {
+		if triggerData.ExpirationTime.Before(time.Now()) {
 			s.logger.Warn(ctx, "Task has expired (unexpected - should have been filtered earlier), skipping execution",
-				observability.Int64("task_id", task.TaskID),
-				observability.String("job_id", task.TaskTargetData.JobID),
-				observability.Time("expiration_time", task.ExpirationTime))
+				observability.Int64("task_id", triggerData.TaskID),
+				observability.Time("expiration_time", triggerData.ExpirationTime))
 			metrics.TrackTaskExpired()
 			continue
 		}
 
 		// Track task by schedule type
-		metrics.TrackTaskByScheduleType(task.ScheduleType)
-
-		// Generate the task data to send to the performer
-		targetData := types.TaskTargetData{
-			JobID:                     task.TaskTargetData.JobID,
-			TaskID:                    task.TaskID,
-			TaskDefinitionID:          task.TaskDefinitionID,
-			TargetChainID:             task.TaskTargetData.TargetChainID,
-			TargetContractAddress:     task.TaskTargetData.TargetContractAddress,
-			TargetFunction:            task.TaskTargetData.TargetFunction,
-			ABI:                       task.TaskTargetData.ABI,
-			ArgType:                   task.TaskTargetData.ArgType,
-			Arguments:                 task.TaskTargetData.Arguments,
-			DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
-			IsImua:                    task.IsImua,
-		}
-		triggerData := types.TaskTriggerData{
-			TaskID:                  task.TaskID,
-			TaskDefinitionID:        task.TaskDefinitionID,
-			ExpirationTime:          task.ExpirationTime,
-			CurrentTriggerTimestamp: task.LastExecutedAt,
-			NextTriggerTimestamp:    task.NextExecutionTimestamp,
-			TimeScheduleType:        task.ScheduleType,
-			TimeCronExpression:      task.CronExpression,
-			TimeSpecificSchedule:    task.SpecificSchedule,
-			TimeInterval:            task.TimeInterval,
-		}
-
-		targetDataList = append(targetDataList, targetData)
-		triggerDataList = append(triggerDataList, triggerData)
-		validTaskIDs = append(validTaskIDs, task.TaskID)
+		metrics.TrackTaskByScheduleType(triggerData.TimeScheduleType)
 	}
 
 	// If no valid tasks, return early
-	if len(validTaskIDs) == 0 {
+	if len(tasks.TaskID) == 0 {
 		s.logger.Debug(ctx, "No valid tasks in batch after filtering expired tasks")
 		return
 	}
 
-	// Determine network from the first task's target chain ID
-	// All tasks in a batch should have the same network
-	var network types.KeeperNetwork
-	if len(targetDataList) > 0 {
-		network = getNetworkFromChainID(targetDataList[0].TargetChainID)
-	} else {
-		// Default to sepolia if no target data
-		network = types.NetworkSepolia
-	}
-
-	// Create the batch task data
-	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID:           validTaskIDs,
-		TargetData:       targetDataList,
-		TriggerData:      triggerDataList,
-		SchedulerID:      s.schedulerID,
-		ManagerSignature: "",
-		Network:          network,
-	}
-
 	// Create request for task dispatcher
 	request := types.SchedulerTaskRequest{
-		SendTaskDataToKeeper: sendTaskData,
+		SendTaskDataToKeeper: tasks,
 		Source:               "time_scheduler",
 	}
 
 	// Convert validTaskIDs ([]int64) to []string for joining
-	taskIDStrs := make([]string, len(validTaskIDs))
-	for i, id := range validTaskIDs {
+	taskIDStrs := make([]string, len(tasks.TaskID))
+	for i, id := range tasks.TaskID {
 		taskIDStrs[i] = fmt.Sprintf("%d", id)
 	}
 	taskIDs := strings.Join(taskIDStrs, ", ")
 
 	// Submit batch to task dispatcher
-	success := s.submitBatchToTaskDispatcher(ctx, request, taskIDs, len(validTaskIDs))
+	success := s.submitBatchToTaskDispatcher(ctx, request, taskIDs, len(tasks.TaskID))
 
 	if success {
-		s.logger.Info(ctx, "Batch processing completed successfully", observability.Int("task_count", len(validTaskIDs)))
+		s.logger.Info(ctx, "Batch processing completed successfully", observability.Int("task_count", len(tasks.TaskID)))
 		metrics.UpdateTasksDispatched("success")
 	} else {
-		s.logger.Error(ctx, "Batch processing failed", observability.Int("task_count", len(validTaskIDs)))
+		s.logger.Error(ctx, "Batch processing failed", observability.Int("task_count", len(tasks.TaskID)))
 		metrics.UpdateTasksDispatched("failed")
 	}
 }

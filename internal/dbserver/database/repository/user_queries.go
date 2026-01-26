@@ -17,7 +17,7 @@ const (
 			SET job_ids = ?, total_jobs = ?, last_updated_at = ?
 			WHERE user_address = ?`
 
-	UpdateUserEmailByAddressQuery = `
+	UpdateUserEmailQuery = `
 		UPDATE triggerx.user_data
 		SET email_id = ?, last_updated_at = ?
 		WHERE user_address = ?`
@@ -32,25 +32,25 @@ const (
 // Read Queries
 const (
 	// Get User Data by Address
-	GetUserDataByAddressQuery = `
+	GetUserDataQuery = `
 			SELECT user_address, email_id, job_ids, user_points,
 				total_jobs, total_tasks, created_at, last_updated_at
 			FROM triggerx.user_data 
 			WHERE user_address = ?`
 
 	// Get User Points by Address for Update after Task Execution
-	GetUserPointsByAddressQuery = `
+	GetUserPointsQuery = `
 			SELECT user_points 
 			FROM triggerx.user_data 
 			WHERE user_address = ?`
 
 	// Get User Job IDs by Address for Frontend Display
-	GetUserJobIDsByAddressQuery = `
+	GetUserJobIDsQuery = `
 			SELECT job_ids
 			FROM triggerx.user_data 
 			WHERE user_address = ?`
 
-	GetUserCountersByAddressQuery = `
+	GetUserCountersQuery = `
 			SELECT total_jobs, total_tasks
 			FROM triggerx.user_data 
 			WHERE user_address = ?`

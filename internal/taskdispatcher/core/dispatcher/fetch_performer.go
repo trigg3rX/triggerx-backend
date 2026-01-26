@@ -24,7 +24,7 @@ func NewPerformerFetcher(healthClient *health.Client, logger observability.Logge
 }
 
 // FetchPerformer retrieves a performer from the health service based on network
-func (pf *PerformerFetcher) FetchPerformer(ctx context.Context, network types.KeeperNetwork) (types.PerformerData, error) {
+func (pf *PerformerFetcher) FetchPerformer(ctx context.Context, network types.Network) (types.PerformerData, error) {
 	pf.logger.Debug(ctx, "Fetching performer data",
 		observability.String("network", string(network)))
 
@@ -37,7 +37,7 @@ func (pf *PerformerFetcher) FetchPerformer(ctx context.Context, network types.Ke
 	}
 
 	pf.logger.Info(ctx, "Successfully fetched performer",
-		observability.Int64("operator_id", performer.OperatorID),
+		observability.Int("operator_id", performer.OperatorID),
 		observability.String("keeper_address", performer.KeeperAddress),
 		observability.String("network", string(network)))
 

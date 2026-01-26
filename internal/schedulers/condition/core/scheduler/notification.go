@@ -68,7 +68,7 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 	}
 
 	// Check cooldown for recurring condition-based jobs (TaskDefinitionID 5, 6, or 9)
-	if (jobData.TaskDefinitionID == types.TaskDefConditionBasedStatic || jobData.TaskDefinitionID == types.TaskDefConditionBasedDynamic || jobData.TaskDefinitionID == types.TaskDefConditionBasedAgent) && jobData.ConditionWorkerData.Recurring {
+	if (jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6 || jobData.TaskDefinitionID == 9) && jobData.ConditionWorkerData.Recurring {
 		s.workersMutex.RLock()
 		lastTrigger, hasLastTrigger := s.lastTriggerTime[jobIDStr]
 		s.workersMutex.RUnlock()
@@ -92,10 +92,10 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 	}
 
 	// Create Task in Database
-	taskID, err := s.taskRepository.CreateTaskDataInDB(ctx, &types.CreateTaskDataRequest{
+	taskID, err := s.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
 		JobID:            jobData.JobID,
 		TaskDefinitionID: jobData.TaskDefinitionID,
-		IsImua:           jobData.IsImua,
+		Network:          string(jobData.Network),
 	})
 	if err != nil {
 		s.logger.Error(ctx, "Failed to create task in database", observability.String("job_id", notification.JobID), observability.Error(err))
@@ -112,7 +112,7 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 	jobData.TaskTargetData.TaskID = taskID
 
 	// Update last trigger time for recurring condition-based jobs (after successful task creation)
-	if (jobData.TaskDefinitionID == types.TaskDefConditionBasedStatic || jobData.TaskDefinitionID == types.TaskDefConditionBasedDynamic || jobData.TaskDefinitionID == types.TaskDefConditionBasedAgent) && jobData.ConditionWorkerData.Recurring {
+	if (jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6 || jobData.TaskDefinitionID == 9) && jobData.ConditionWorkerData.Recurring {
 		s.workersMutex.Lock()
 		s.lastTriggerTime[jobIDStr] = time.Now()
 		s.workersMutex.Unlock()
@@ -156,25 +156,21 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(ctx contex
 
 	// Create single task data (not batch like time scheduler)
 	targetData := types.TaskTargetData{
-		JobID:                     jobData.JobID,
-		TaskID:                    jobData.TaskTargetData.TaskID,
-		TaskDefinitionID:          jobData.TaskDefinitionID,
-		TargetChainID:             jobData.TaskTargetData.TargetChainID,
-		TargetContractAddress:     jobData.TaskTargetData.TargetContractAddress,
-		TargetFunction:            jobData.TaskTargetData.TargetFunction,
-		ABI:                       jobData.TaskTargetData.ABI,
-		ArgType:                   jobData.TaskTargetData.ArgType,
-		Arguments:                 jobData.TaskTargetData.Arguments,
-		DynamicArgumentsScriptUrl: jobData.TaskTargetData.DynamicArgumentsScriptUrl,
-		IsImua:                    jobData.IsImua,
-		// Agent job fields (TDI 8, 9) - populated from jobData.TaskTargetData
-		AgentScriptURL:      jobData.TaskTargetData.AgentScriptURL,
-		AgentScriptLanguage: jobData.TaskTargetData.AgentScriptLanguage,
-		AgentScriptHash:     jobData.TaskTargetData.AgentScriptHash,
-		AgentTargetChainID:  jobData.TaskTargetData.AgentTargetChainID,
-		MaxExecutionTime:    jobData.TaskTargetData.MaxExecutionTime,
-		ChallengePeriod:     jobData.TaskTargetData.ChallengePeriod,
-		ScriptStorage:       jobData.TaskTargetData.ScriptStorage,
+		JobID:                   jobData.JobID,
+		TaskID:                  jobData.TaskTargetData.TaskID,
+		TaskDefinitionID:        jobData.TaskDefinitionID,
+		TargetChainID:           jobData.TaskTargetData.TargetChainID,
+		TargetContractAddress:   jobData.TaskTargetData.TargetContractAddress,
+		TargetFunction:          jobData.TaskTargetData.TargetFunction,
+		ABI:                     jobData.TaskTargetData.ABI,
+		ArgType:                 jobData.TaskTargetData.ArgType,
+		Arguments:               jobData.TaskTargetData.Arguments,
+		ExecutionScriptURL:      jobData.TaskTargetData.ExecutionScriptURL,
+		ExecutionScriptLanguage: jobData.TaskTargetData.ExecutionScriptLanguage,
+		ExecutionScriptHash:     jobData.TaskTargetData.ExecutionScriptHash,
+		MaxExecutionTime:        jobData.TaskTargetData.MaxExecutionTime,
+		ChallengePeriod:         jobData.TaskTargetData.ChallengePeriod,
+		ScriptStorage:           jobData.TaskTargetData.ScriptStorage,
 	}
 
 	// Create trigger data based on job type
@@ -187,6 +183,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(ctx contex
 		TriggerData:      []types.TaskTriggerData{triggerData},
 		SchedulerID:      s.schedulerID,
 		ManagerSignature: "",
+		Network:          jobData.Network,
 	}
 
 	// Create request for Redis API
@@ -208,7 +205,7 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(ctx context.
 	}
 
 	switch jobData.TaskDefinitionID {
-	case types.TaskDefConditionBasedStatic, types.TaskDefConditionBasedDynamic, types.TaskDefConditionBasedAgent: // Condition-based (5, 6, 9)
+	case 5, 6, 9: // Condition-based
 		baseTriggerData.ExpirationTime = jobData.ConditionWorkerData.ExpirationTime
 		baseTriggerData.ConditionSatisfiedValue = int(notification.TriggerValue)
 		baseTriggerData.ConditionType = jobData.ConditionWorkerData.ConditionType
@@ -218,7 +215,7 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(ctx context.
 		baseTriggerData.ConditionLowerLimit = int(jobData.ConditionWorkerData.LowerLimit)
 		s.logger.Info(ctx, "Condition job expiration time", observability.Time("expiration_time", jobData.ConditionWorkerData.ExpirationTime))
 
-	case types.TaskDefEventBasedStatic, types.TaskDefEventBasedDynamic, types.TaskDefEventBasedAgent: // Event-based (3, 4, 8)
+	case 3, 4, 8: // Event-based
 		baseTriggerData.ExpirationTime = jobData.EventWorkerData.ExpirationTime
 		baseTriggerData.EventTxHash = notification.TriggerTxHash
 		baseTriggerData.EventChainId = jobData.EventWorkerData.TriggerChainID
@@ -260,7 +257,7 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 		defer rpcCancel()
 
 		// Make RPC call to task dispatcher
-		var response types.TaskManagerAPIResponse
+		var response types.TaskDispatcherRPCResponse
 		err := s.taskDispatcherClient.Call(rpcCtx, "submit-task", &request, &response)
 		if err != nil {
 			return false, fmt.Errorf("RPC call failed: %w", err)

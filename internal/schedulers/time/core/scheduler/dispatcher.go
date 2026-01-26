@@ -55,7 +55,7 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(ctx context.Context, re
 		}
 
 		// Make RPC call to task dispatcher
-		var response types.TaskManagerAPIResponse
+		var response types.TaskDispatcherRPCResponse
 		err := s.taskDispatcherClient.Call(rpcCtx, "submit-task", &request, &response)
 		if err != nil {
 			return false, fmt.Errorf("RPC call failed: %w", err)

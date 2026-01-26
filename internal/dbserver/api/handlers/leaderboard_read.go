@@ -21,11 +21,11 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	switch host {
 	case "app.triggerx.network":
 		trackDBOp = metrics.TrackDBOperation("read", "keeper_leaderboard_app")
-		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboardByOnImua(false)
+		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboard()
 		trackDBOp(err)
 	case "imua.triggerx.network":
 		trackDBOp = metrics.TrackDBOperation("read", "keeper_leaderboard_imua")
-		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboardByOnImua(true)
+		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboardOnImua()
 		trackDBOp(err)
 	default:
 		trackDBOp = metrics.TrackDBOperation("read", "keeper_leaderboard_all")

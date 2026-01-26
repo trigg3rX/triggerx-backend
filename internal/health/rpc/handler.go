@@ -88,7 +88,7 @@ func (h *Handler) handleGetPerformer(ctx context.Context, request interface{}) (
 	}
 
 	h.logger.Debug(ctx, "Selected performer via gRPC",
-		observability.Int64("operator_id", performer.OperatorID),
+		observability.Int("operator_id", performer.OperatorID),
 		observability.String("keeper_address", performer.KeeperAddress),
 		observability.String("network", string(performer.Network)),
 	)
@@ -120,7 +120,7 @@ func (h *Handler) GetMethods() []rpcpkg.RPCMethod {
 	return []rpcpkg.RPCMethod{
 		{
 			Name:         "get-performer",
-			Description:  "Get a performer based on isImua and isMainnet flags",
+			Description:  "Get a performer based on network",
 			RequestType:  types.GetPerformerRequest{},
 			ResponseType: types.GetPerformerResponse{},
 			Timeout:      config.GetRPCGetPerformerTimeout(),

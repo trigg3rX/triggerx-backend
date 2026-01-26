@@ -69,7 +69,11 @@ func checkKeeperRegistration() error {
 		return fmt.Errorf("keeper address %s is not registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed", GetKeeperAddress())
 	}
 
-	fmt.Printf("Keeper address %s is registered on L2 with operator ID %s\n", GetKeeperAddress(), operatorID.String())
+	// convert operatorID to int
+	operatorIDInt := int(operatorID.Int64())
+	SetOperatorID(operatorIDInt)
+
+	fmt.Printf("Keeper address %s is registered on L2 with operator ID %d\n", GetKeeperAddress(), GetOperatorID())
 
 	return nil
 }

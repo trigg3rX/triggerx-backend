@@ -694,11 +694,11 @@ func (p *containerPool) healthCheck(ctx context.Context) {
 	currentCount := len(p.containers)
 	shouldReplenish := currentCount < p.config.BasePoolConfig.MinContainers
 
-	if containersChecked > 0 {
-		totalContainers := len(p.containers)
-		checkPercentage := float64(containersChecked) / float64(totalContainers+len(containersToRemove)) * 100
-		p.logger.Debug(ctx, "Health check completed for pool", observability.String("language", string(p.language)), observability.Int("containers_checked", containersChecked), observability.Float64("check_percentage", checkPercentage), observability.Int("containers_with_issues", containersWithIssues), observability.Int("containers_removed", len(containersToRemove)))
-	}
+	// if containersChecked > 0 {
+		// totalContainers := len(p.containers)
+		// checkPercentage := float64(containersChecked) / float64(totalContainers+len(containersToRemove)) * 100
+		// p.logger.Debug(ctx, "Health check completed for pool", observability.String("language", string(p.language)), observability.Int("containers_checked", containersChecked), observability.Float64("check_percentage", checkPercentage), observability.Int("containers_with_issues", containersWithIssues), observability.Int("containers_removed", len(containersToRemove)))
+	// }
 
 	// Replenish pool if needed (async, don't block)
 	if shouldReplenish {

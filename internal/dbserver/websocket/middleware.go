@@ -94,7 +94,7 @@ func (wam *WebSocketAuthMiddleware) AuthenticateWebSocket(c *gin.Context) (strin
 	}
 
 	// Update last used timestamp asynchronously
-	go wam.apiKeyAuth.UpdateLastUsed(apiKey)
+	go wam.apiKeyAuth.UpdateApiKeyUsage(apiKey, true)
 
 	// Extract user ID from the API key owner
 	userID := wam.extractUserIDFromApiKey(apiKeyData)

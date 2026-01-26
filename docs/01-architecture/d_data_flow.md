@@ -76,11 +76,17 @@ Each stage involves multiple services communicating via HTTP, gRPC, or P2P proto
          ▼               WHERE is_active=true AND next_execution_timestamp <= now() + 40s
 ┌─────────────────┐ For Each Job:
 │  Task Creation  │ 2. Parse cron expression / calculate next interval, update next_execution_timestamp
-│    (ScyllaDB)   │ 3. Create TaskDataEntity in database
-└────────┬────────┘ 4. Add task_id to job's task_ids set
+│    (ScyllaDB)   │ 3. Fetch job_cost_prediction from job_data
+│                 │ 4. Create TaskDataEntity in database with:
+│                 │    - task_id (auto-increment)
+│                 │    - job_id, task_definition_id, network
+│                 │    - task_status = 'created'
+│                 │    - created_at
+│                 │    - task_opx_predicted_cost (from job_cost_prediction)
+└────────┬────────┘ 5. Add task_id to job's task_ids set
          │
          ▼
-┌─────────────────┐ 5. Send batch to TaskDispatcher via gRPC
+┌─────────────────┐ 6. Send batch to TaskDispatcher via gRPC
 │ TaskDispatcher  │    (RPC method: submit-task)
 └─────────────────┘
 ```
@@ -103,8 +109,14 @@ Each stage involves multiple services communicating via HTTP, gRPC, or P2P proto
          ▼               "topics": [event_signature_hash] })
 ┌─────────────────┐
 │  Task Creation  │ 4. Event notification received from worker
-│    (ScyllaDB)   │ 5. Create TaskDataEntity in database
-└────────┬────────┘ 6. Stop Worker if recurring = false, or expiration_time reached
+│    (ScyllaDB)   │ 5. Fetch job_cost_prediction from job_data
+│                 │ 6. Create TaskDataEntity in database with:
+│                 │    - task_id (auto-increment)
+│                 │    - job_id, task_definition_id, network
+│                 │    - task_status = 'created'
+│                 │    - created_at
+│                 │    - task_opx_predicted_cost (from job_cost_prediction)
+└────────┬────────┘ 7. Stop Worker if recurring = false, or expiration_time reached
          │
          ▼
 ┌─────────────────┐ 7. Send to TaskDispatcher via gRPC
@@ -129,8 +141,14 @@ Each stage involves multiple services communicating via HTTP, gRPC, or P2P proto
          ▼
 ┌─────────────────┐
 │  Task Creation  │ 4. Condition satisfied - trigger notification from worker
-│    (ScyllaDB)   │ 5. Create TaskDataEntity in database
-└────────┬────────┘ 6. Stop Worker if recurring = false, or expiration_time reached
+│    (ScyllaDB)   │ 5. Fetch job_cost_prediction from job_data
+│                 │ 6. Create TaskDataEntity in database with:
+│                 │    - task_id (auto-increment)
+│                 │    - job_id, task_definition_id, network
+│                 │    - task_status = 'created'
+│                 │    - created_at
+│                 │    - task_opx_predicted_cost (from job_cost_prediction)
+└────────┬────────┘ 7. Stop Worker if recurring = false, or expiration_time reached
          │
          ▼
 ┌─────────────────┐ 7. Send to TaskDispatcher via gRPC
@@ -160,18 +178,23 @@ Each stage involves multiple services communicating via HTTP, gRPC, or P2P proto
 │     - Load balancing                                    │
 │  4. Sign task data with manager signature               │
 └────┬────────────────────────────────────────────────────┘
-     │ 5. Assign performer role
+     │ 5. Create TaskStreamData with:
+     │    - JobID, TaskDefinitionID, Network
+     │    - SendTaskDataToKeeper (full task data)
+     │    - CreatedAt timestamp
+     │    - RetryCount = 0
      ▼
 ┌─────────────────┐
 │  HTTP Request   │ 6. Send task to Keeper via HTTP POST
-│                 │    Endpoint: Keeper's /execute endpoint
-│                 │    Message: SendTaskDataToKeeper
-└────┬────────────┘ 7. Wait for acknowledgment (30s timeout)
-     │                 Accepts 200 OK or 202 Accepted
+│                 │    Endpoint: Keeper's /p2p/message endpoint
+│                 │    Message: SendTaskDataToKeeper (hex-encoded)
+└────┬────────────┘ 7. Wait for acknowledgment
+     │
      ▼
 ┌─────────────────┐
-│  Keeper Node    │ 8. Receive task assignment via HTTP
-│                 │ 9. Add to Redis Stream (task:dispatched)
+│  Redis Stream   │ 8. Add TaskStreamData to task:dispatched stream
+│                 │    - Set DispatchedAt timestamp
+│                 │    - Store full task data for lifecycle tracking
 └─────────────────┘
 ```
 
@@ -288,6 +311,48 @@ Each stage involves multiple services communicating via HTTP, gRPC, or P2P proto
 
 ## Consensus and Blockchain Submission
 
+### Execution Status Report Flow
+
+```bash
+┌─────────────────┐
+│  Keeper Node    │ After task execution and aggregator submission
+└────┬────────────┘
+     │ 1. Execute task (on-chain transaction)
+     │ 2. Upload execution data to IPFS (IPFSData)
+     │ 3. Submit to aggregator
+     ▼
+┌─────────────────┐
+│  TaskMonitor    │ 4. Receive ReportTaskExecutionStatusRequest
+│  (RPC Handler)  │    - ExecutionSuccessful
+│                 │    - AggregatorSubmitted
+│                 │    - ExecutionTxHash
+│                 │    - ProofCID (IPFS CID)
+└────┬────────────┘
+     │
+     ▼
+┌────────────────────────────────────────────────────────┐
+│  If Execution Failed:                                  │
+│  5. Update TaskDataEntity:                             │
+│     - task_status = 'failed'                           │
+│     - is_successful = false                            │
+│     - task_error = error message                       │
+│     - execution_tx_hash                                │
+│     - proof_of_task                                    │
+│  6. Move task to task:failed stream                    │
+└────┬───────────────────────────────────────────────────┘
+     │
+     ▼
+┌────────────────────────────────────────────────────────┐
+│  If Execution Succeeded:                               │
+│  7. Update TaskDataEntity:                             │
+│     - task_status = 'pending_confirmation'             │
+│     - is_successful = true                             │
+│     - execution_tx_hash                                │
+│     - proof_of_task                                    │
+│  8. Move task to task:executed stream (15min timeout)  │
+└────────────────────────────────────────────────────────┘
+```
+
 ### Aggregator Consensus Flow
 
 **Note**: The Aggregator is built on the Othentic Network and handles consensus externally. This flow represents the conceptual process.
@@ -296,55 +361,120 @@ Each stage involves multiple services communicating via HTTP, gRPC, or P2P proto
 ┌─────────────────┐
 │   Aggregator    │ (Othentic Network)
 └────┬────────────┘
-     │ 1. Collect performer result (via P2P)
+     │ 1. Receive performer result (via P2P)
      │ 2. Broadcast to attester Keepers (via P2P)
-     │ 3. Collect N attester attestations
+     │ 3. Receive N attester attestations
      ▼
-┌─────────────────────────────────────────────────────────┐
-│  Consensus Algorithm (BFT):                             │
-│  4. Count attestations:                                 │
-│     - Positive: attestation_result = true               │
-│     - Negative: attestation_result = false              │
-│  5. Calculate threshold (2/3+ majority):                │
-│     required = ceil(N * 2 / 3)                          │
-│  6. Check consensus:                                    │
-│     - If positive >= required → Task VALID              │
-│     - Else → Task INVALID                               │
-└────┬────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  Consensus Algorithm (BFT):                          │
+│  4. Count attestations:                              │
+│     - Positive: attestation_result = true            │
+│     - Negative: attestation_result = false           │
+│  5. Calculate threshold (2/3+ majority):             │
+│     required = ceil(N * 2 / 3)                       │
+│  6. Check consensus:                                 │
+│     - If positive >= required → Task VALID           │
+│     - If negative >= required → Task INVALID         │
+│     - else → Task is still pending                   │
+└────┬─────────────────────────────────────────────────┘
      │ 7. Consensus decision
      ▼
-┌─────────────────────────────────────────────────────────┐
-│  If Task VALID:                                         │
-│  8. Aggregate signatures (BLS signature aggregation)    │
-│  9. Generate Merkle proof for batch                     │
-│  10. Prepare blockchain submission payload:             │
-│     - Task ID                                           │
-│     - Proof of task (Merkle root)                       │
-│     - Aggregated signature                              │
-│     - Performer and attester addresses                  │
-└────┬────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  If Task VALID:                                      │
+│  8. Aggregate signatures (BLS signature aggregation) │
+│  9. Generate Merkle proof for batch                  │
+│  10. Prepare blockchain submission payload:          │
+│     - Task ID                                        │
+│     - Proof of task (Merkle root)                    │
+│     - Aggregated signature                           │
+│     - Performer and attester addresses               │
+└────┬─────────────────────────────────────────────────┘
      │ 11. Submit to blockchain
      ▼
 ┌─────────────────┐
 │  L2 Blockchain  │ 12. Call TriggerX Validation Contract
-│  (Base/Arbitrum)│     function submitTaskValidation(
-│                 │       uint256 taskId,
-│                 │       bytes32 proofOfTask,
-│                 │       bytes aggregatedSignature,
-│                 │       address[] attesters
-└────┬────────────┘     )
+│  (Base/Arbitrum)│     Emit TaskSubmitted event
+└────┬────────────┘     OR TaskRejected event
      │ 13. Transaction confirmed
      ▼
 ┌─────────────────┐
-│  TaskMonitor    │ 14. Listen for on-chain events
-│                 │ 15. Update TaskDataEntity:
-└────┬────────────┘     - submission_tx_hash
-     │                  - is_accepted = true
-     ▼                  - proof_of_task
-┌─────────────────┐ 16. Update keeper points
-│    ScyllaDB     │ 17. Update user points
+│ EventMonitor    │ 14. Detect on-chain event (TaskSubmitted/TaskRejected)
+│                 │ 15. Fetch IPFS data using CID from event
+└────┬────────────┘ 16. Extract trace context from IPFS data
+     │
+     ▼
+┌─────────────────┐
+│  TaskMonitor    │ 17. Receive ReportTaskConsensusStatusRequest
+│  (RPC Handler)  │    - TaskNumber
+│                 │    - TaskSubmissionTxHash
+│                 │    - IsAccepted
+│                 │    - PerformerAddress
+│                 │    - AttesterIds
+│                 │    - IPFSData (with trace context)
+│                 │    - IPFSCID
+└────┬────────────┘
+     │
+     ▼
+┌──────────────────────────────────────────────────────┐
+│  Build TaskSubmissionData:                           │
+│  18. From IPFSData.ActionData:                       │
+│     - TaskID                                         │
+│     - ExecutionTxHash                                │
+│     - ExecutedAt                                     │
+│     - TaskOpxActualCost (from TotalFee)              │
+│     - ConvertedArguments                             │
+│  19. From IPFSData.ProofData:                        │
+│     - ProofOfTask                                    │
+│  20. From IPFSData.PerformerSignature:               │
+│     - PerformerAddress                               │
+│  21. From consensus event:                           │
+│     - TaskNumber                                     │
+│     - IsAccepted                                     │
+│     - TaskSubmissionTxHash                           │
+│     - AttesterIds                                    │
+└────┬─────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────┐
+│  Redis Stream   │ 22. Move task from task:executed to task:validated
+│                 │    - Set ValidatedAt timestamp
+│                 │    - Remove timeout tracking
+└────┬────────────┘
+     │
+     ▼
+┌─────────────────┐
+│  TaskMonitor    │ 23. Update TaskDataEntity with TaskSubmissionData:
+│  (Repository)   │    - task_number
+│                 │    - is_accepted
+│                 │    - task_status = 'completed'
+│                 │    - submission_tx_hash
+│                 │    - task_performer_address (converted from consensus)
+│                 │    - task_attester_address (converted from operator IDs)
+│                 │    - execution_tx_hash
+│                 │    - executed_at
+│                 │    - submitted_at (current time)
+│                 │    - task_opx_actual_cost
+│                 │    - proof_of_task
+│                 │    - converted_arguments
+└────┬────────────┘
+     │
+     ▼
+┌─────────────────┐
+│  TaskMonitor    │ 24. Update keeper points (performer + attesters)
+│                 │ 25. Update user points
+│                 │ 26. Update job cost actual
+│                 │ 27. Update script storage (for TDI 7, 8, 9)
+│                 │ 28. Send user notification
 └─────────────────┘
 ```
+
+**Key Points**:
+
+- **Execution Status**: Reported by keeper after execution attempt, updates `task_status` to 'pending_confirmation' or 'failed'
+- **Consensus Status**: Reported by eventmonitor after on-chain event, updates all remaining fields in `task_data` table
+- **TaskSubmissionData**: Internal aggregation type that combines IPFS data and consensus event data for final DB update
+- **Stream Management**: Tasks move through Redis streams: `task:dispatched` → `task:executed` → `task:validated` → `task:completed`
+- **Field Completion**: After both execution and consensus status are submitted, all fields in `task_data` table are filled
 
 ---
 

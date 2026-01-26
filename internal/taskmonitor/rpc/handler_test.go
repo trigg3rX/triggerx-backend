@@ -15,20 +15,20 @@ type MockTaskMonitor struct {
 	mock.Mock
 }
 
-func (m *MockTaskMonitor) ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error) {
+func (m *MockTaskMonitor) ReportTaskStatus(ctx context.Context, req *types.ReportTaskExecutionStatusRequest) (*types.ReportTaskExecutionStatusResponse, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.ReportTaskStatusResponse), args.Error(1)
+	return args.Get(0).(*types.ReportTaskExecutionStatusResponse), args.Error(1)
 }
 
-func (m *MockTaskMonitor) ReportConsensusEvent(ctx context.Context, req *types.ReportConsensusEventRequest) (*types.ReportConsensusEventResponse, error) {
+func (m *MockTaskMonitor) ReportConsensusEvent(ctx context.Context, req *types.ReportTaskConsensusStatusRequest) (*types.ReportTaskConsensusStatusResponse, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.ReportConsensusEventResponse), args.Error(1)
+	return args.Get(0).(*types.ReportTaskConsensusStatusResponse), args.Error(1)
 }
 
 func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
@@ -48,7 +48,7 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 		{
 			name:   "Success - Task succeeded",
 			method: "report-task-status",
-			request: &types.ReportTaskStatusRequest{
+			request: &types.ReportTaskExecutionStatusRequest{
 				TaskID:              123,
 				KeeperAddress:       "0x1234567890abcdef",
 				ExecutionSuccessful: true,
@@ -59,14 +59,14 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 				Signature:           "valid_signature",
 			},
 			setupMock: func() {
-				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskStatusRequest) bool {
+				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
 					return req.TaskID == 123 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == true
-				})).Return(&types.ReportTaskStatusResponse{
+				})).Return(&types.ReportTaskExecutionStatusResponse{
 					Success: true,
 					Message: "Task status updated",
 				}, nil)
 			},
-			expectedResp: &types.ReportTaskStatusResponse{
+			expectedResp: &types.ReportTaskExecutionStatusResponse{
 				Success: true,
 				Message: "Task status updated",
 			},
@@ -75,7 +75,7 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 		{
 			name:   "Success - Task failed (aggregator submission failed)",
 			method: "report-task-status",
-			request: &types.ReportTaskStatusRequest{
+			request: &types.ReportTaskExecutionStatusRequest{
 				TaskID:              456,
 				KeeperAddress:       "0xabcdef1234567890",
 				ExecutionSuccessful: true,
@@ -86,14 +86,14 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 				Signature:           "valid_signature",
 			},
 			setupMock: func() {
-				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskStatusRequest) bool {
+				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
 					return req.TaskID == 456 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == false
-				})).Return(&types.ReportTaskStatusResponse{
+				})).Return(&types.ReportTaskExecutionStatusResponse{
 					Success: true,
 					Message: "Task failure recorded",
 				}, nil)
 			},
-			expectedResp: &types.ReportTaskStatusResponse{
+			expectedResp: &types.ReportTaskExecutionStatusResponse{
 				Success: true,
 				Message: "Task failure recorded",
 			},
@@ -122,14 +122,14 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 				"signature":            "valid_signature",
 			},
 			setupMock: func() {
-				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskStatusRequest) bool {
+				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
 					return req.TaskID == 789 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == true
-				})).Return(&types.ReportTaskStatusResponse{
+				})).Return(&types.ReportTaskExecutionStatusResponse{
 					Success: true,
 					Message: "Task status updated",
 				}, nil)
 			},
-			expectedResp: &types.ReportTaskStatusResponse{
+			expectedResp: &types.ReportTaskExecutionStatusResponse{
 				Success: true,
 				Message: "Task status updated",
 			},
@@ -188,7 +188,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       map[string]interface{}
-		expected    *types.ReportTaskStatusRequest
+		expected    *types.ReportTaskExecutionStatusRequest
 		expectError bool
 	}{
 		{
@@ -203,7 +203,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				"error":                "",
 				"signature":            "sig123",
 			},
-			expected: &types.ReportTaskStatusRequest{
+			expected: &types.ReportTaskExecutionStatusRequest{
 				TaskID:              123,
 				KeeperAddress:       "0x1234",
 				ExecutionSuccessful: true,
@@ -227,7 +227,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				"error":                "aggregator submission failed",
 				"signature":            "sig456",
 			},
-			expected: &types.ReportTaskStatusRequest{
+			expected: &types.ReportTaskExecutionStatusRequest{
 				TaskID:              456,
 				KeeperAddress:       "0x5678",
 				ExecutionSuccessful: true,

@@ -35,18 +35,10 @@ func NewClient(serverAddress string, logger observability.Logger, tracer observa
 	}, nil
 }
 
-// ReportConsensusEvent reports a consensus event (TaskSubmitted or TaskRejected) to TaskMonitor
-// The EventMonitor fetches IPFS data (containing trace context) and passes it here
-func (c *Client) ReportConsensusEvent(ctx context.Context, txHash string, isAccepted bool, ipfsData *types.IPFSData, ipfsCID string) error {
-	req := &types.ReportConsensusEventRequest{
-		TxHash:     txHash,
-		IsAccepted: isAccepted,
-		IPFSData:   ipfsData,
-		IPFSCID:    ipfsCID,
-	}
-
-	var resp types.ReportConsensusEventResponse
-	if err := c.rpcClient.Call(ctx, "report-consensus-event", req, &resp); err != nil {
+// ReportTaskConsensusStatus reports a consensus event (TaskSubmitted or TaskRejected) to TaskMonitor
+func (c *Client) ReportTaskConsensusStatus(ctx context.Context, request types.ReportTaskConsensusStatusRequest) error {
+	var resp types.ReportTaskConsensusStatusResponse
+	if err := c.rpcClient.Call(ctx, "report-task-consensus-status", request, &resp); err != nil {
 		return fmt.Errorf("failed to call task monitor: %w", err)
 	}
 

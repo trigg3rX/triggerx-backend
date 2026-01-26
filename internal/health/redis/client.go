@@ -64,7 +64,7 @@ func (c *Client) CheckConnection() error {
 
 // GetLastOperatorID retrieves the last selected operator ID for a network
 // Returns 0 if no operator ID has been stored yet
-func (c *Client) GetLastOperatorID(ctx context.Context, network string) (int64, error) {
+func (c *Client) GetLastOperatorID(ctx context.Context, network string) (int, error) {
 	key := lastOperatorIDKeyPrefix + network
 
 	val, err := c.client.Get(ctx, key).Result()
@@ -79,7 +79,7 @@ func (c *Client) GetLastOperatorID(ctx context.Context, network string) (int64, 
 		return 0, fmt.Errorf("failed to get last operator ID: %w", err)
 	}
 
-	operatorID, err := strconv.ParseInt(val, 10, 64)
+	operatorID, err := strconv.Atoi(val)
 	if err != nil {
 		c.logger.Error(ctx, "Failed to parse last operator ID",
 			observability.Error(err),
@@ -92,22 +92,22 @@ func (c *Client) GetLastOperatorID(ctx context.Context, network string) (int64, 
 }
 
 // SetLastOperatorID stores the last selected operator ID for a network
-func (c *Client) SetLastOperatorID(ctx context.Context, network string, operatorID int64) error {
+func (c *Client) SetLastOperatorID(ctx context.Context, network string, operatorID int) error {
 	key := lastOperatorIDKeyPrefix + network
 
-	err := c.client.Set(ctx, key, strconv.FormatInt(operatorID, 10), 0).Err()
+	err := c.client.Set(ctx, key, strconv.Itoa(operatorID), 0).Err()
 	if err != nil {
 		c.logger.Error(ctx, "Failed to set last operator ID",
 			observability.Error(err),
 			observability.String("network", network),
-			observability.Int64("operator_id", operatorID),
+			observability.Int("operator_id", operatorID),
 		)
 		return fmt.Errorf("failed to set last operator ID: %w", err)
 	}
 
 	c.logger.Debug(ctx, "Stored last operator ID",
 		observability.String("network", network),
-		observability.Int64("operator_id", operatorID),
+		observability.Int("operator_id", operatorID),
 	)
 	return nil
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -30,7 +31,7 @@ func NewApiKeysRepository(db *database.Connection) ApiKeysRepository {
 
 func (r *apiKeysRepository) CreateApiKey(apiKey *types.ApiKeyDataEntity) error {
 	err := r.db.Session().Query(CreateApiKeyQuery,
-		apiKey.Key, apiKey.Owner, apiKey.IsActive, apiKey.RateLimit,
+		apiKey.Key, strings.ToLower(apiKey.Owner), apiKey.IsActive, apiKey.RateLimit,
 		apiKey.SuccessCount, apiKey.FailedCount, apiKey.LastUsed, apiKey.CreatedAt).Exec()
 	if err != nil {
 		return err
@@ -39,7 +40,7 @@ func (r *apiKeysRepository) CreateApiKey(apiKey *types.ApiKeyDataEntity) error {
 }
 
 func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyDataDTO, error) {
-	iter := r.db.Session().Query(GetApiKeyDataByOwnerQuery, owner).Iter()
+	iter := r.db.Session().Query(GetApiKeyDataByOwnerQuery, strings.ToLower(owner)).Iter()
 	var apiKeys []*types.ApiKeyDataDTO
 
 	var entity types.ApiKeyDataEntity
@@ -77,7 +78,6 @@ func (r *apiKeysRepository) GetApiKeyDataByKey(key string) (*types.ApiKeyDataDTO
 }
 
 func (r *apiKeysRepository) UpdateApiKey(apiKey *types.UpdateApiKeyRequest) error {
-	// Handle nullable fields - need to get current values first if not provided
 	var isActive bool
 	var rateLimit int
 
@@ -112,21 +112,22 @@ func (r *apiKeysRepository) UpdateApiKey(apiKey *types.UpdateApiKeyRequest) erro
 }
 
 func (r *apiKeysRepository) UpdateApiKeyLastUsed(key string, isSuccess bool) error {
-	now := time.Now()
+	var successCount int64
+	var failedCount int64
+	err := r.db.Session().Query(GetApiKeyUseCounterQuery, key).Scan(&successCount, &failedCount)
+	if err != nil {
+		return err
+	}
+
 	if isSuccess {
-		// Increment success_count, reset failed_count to 0
-		err := r.db.Session().Query(UpdateApiKeyLastUsedQuery,
-			now, 1, 0, key).Exec()
-		if err != nil {
-			return err
-		}
+		successCount++
 	} else {
-		// Increment failed_count, keep success_count
-		err := r.db.Session().Query(UpdateApiKeyLastUsedQuery,
-			now, 0, 1, key).Exec()
-		if err != nil {
-			return err
-		}
+		failedCount++
+	}
+	
+	err = r.db.Session().Query(UpdateApiKeyLastUsedQuery, time.Now().UTC(), successCount, failedCount, key).Exec()
+	if err != nil {
+		return err
 	}
 	return nil
 }

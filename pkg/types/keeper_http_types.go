@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// Data from performer's action execution
+// PerformerActionData represents data from performer's action execution
+// Owned by: keeper (added to IPFSData struct)
 type PerformerActionData struct {
 	TaskID       int64  `json:"task_id"`
 	ActionTxHash string `json:"action_tx_hash"`
@@ -26,7 +27,7 @@ type PerformerActionData struct {
 	ExecutionTimestamp time.Time     `json:"execution_timestamp"`
 	ConvertedArguments []interface{} `json:"converted_arguments"`
 
-	// Custom script fields (TaskDefinitionID = 7)
+	// Agentic script fields (TaskDefinitionID = 7/8/9)
 	StorageUpdates       map[string]string `json:"storage_updates,omitempty"`        // Storage updates to save in DB
 	ScriptTargetContract string            `json:"script_target_contract,omitempty"` // Target contract from script output
 	ScriptCalldata       string            `json:"script_calldata,omitempty"`        // Calldata from script output
@@ -34,13 +35,15 @@ type PerformerActionData struct {
 }
 
 // ScriptMetadata contains metadata from custom script execution
+// Owned by: keeper (added to IPFSData struct)
 type ScriptMetadata struct {
 	Timestamp   int64  `json:"timestamp"`
 	Reason      string `json:"reason,omitempty"`
 	GasEstimate uint64 `json:"gas_estimate,omitempty"`
 }
 
-// Data from keeper's proof generation for execution done above
+// ProofData represents data from keeper's proof generation for execution
+// Owned by: keeper (added to IPFSData struct)
 type ProofData struct {
 	TaskID               int64     `json:"task_id"`
 	ProofOfTask          string    `json:"proof_of_task"`
@@ -48,13 +51,16 @@ type ProofData struct {
 	CertificateTimestamp time.Time `json:"certificate_timestamp"`
 }
 
+// PerformerSignatureData represents performer signature data
+// Owned by: keeper (added to IPFSData struct)
 type PerformerSignatureData struct {
 	TaskID                  int64  `json:"task_id"`
 	PerformerSigningAddress string `json:"performer_signing_address"`
 	PerformerSignature      string `json:"performer_signature"`
 }
 
-// Data to Upload to IPFS
+// IPFSData represents data to upload to IPFS
+// Shared across: keeper, taskmonitor, eventmonitor
 type IPFSData struct {
 	TaskData           *SendTaskDataToKeeper   `json:"task_data"`
 	ActionData         *PerformerActionData    `json:"action_data"`
@@ -65,13 +71,14 @@ type IPFSData struct {
 	SpanID  string `json:"span_id,omitempty"`
 }
 
-// Data to Broadcast to Attesters from performer
+// BroadcastDataForValidators represents data to broadcast to attesters (validators) from performer via aggregator JSON-RPC API, SendTask method
+// Owned by: keeper (used by keeper to broadcast data to attesters, via pkg/client/aggregator/task.go)
 type BroadcastDataForValidators struct {
-	ProofOfTask        string `json:"proof_of_task"`
-	Data               []byte `json:"data"`
-	TaskDefinitionID   int    `json:"task_definition_id"`
-	PerformerAddress   string `json:"performer_address"`
-	PerformerSignature string `json:"performer_signature"`
-	SignatureType      string `json:"signature_type"`
-	TargetChainID      int    `json:"target_chain_id"`
+	ProofOfTask        string `json:"proof_of_task"`  // Hash of Serialized IPFSData struct
+	Data               []byte `json:"data"`             // CID of IPFSData struct uploaded to IPFS
+	TaskDefinitionID   int    `json:"task_definition_id"` // Task definition ID (1-9)
+	PerformerAddress   string `json:"performer_address"`  // Performer address (Controller key, Consensus key would be used for BLS)
+	PerformerSignature string `json:"performer_signature"` // Performer signature (ECDSA signature)
+	SignatureType      string `json:"signature_type"`     // Signature type (currently only ECDSA is supported, BLS is WIP)
+	TargetChainID      int    `json:"target_chain_id"`    // Base Mainnet or Sepolia based on Network type
 }

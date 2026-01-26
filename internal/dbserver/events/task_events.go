@@ -29,7 +29,7 @@ type TaskCreatedEvent struct {
 	TaskID           int64     `json:"task_id"`
 	JobID            string    `json:"job_id"`
 	TaskDefinitionID int64     `json:"task_definition_id"`
-	IsImua           bool      `json:"is_imua"`
+	Network          string    `json:"network"`
 	CreatedAt        time.Time `json:"created_at"`
 	UserID           string    `json:"user_id,omitempty"`
 }
@@ -87,12 +87,12 @@ func NewTaskEvent(eventType TaskEventType, taskID int64, jobID string, userID st
 }
 
 // NewTaskCreatedEvent creates a new task created event
-func NewTaskCreatedEvent(taskID int64, jobID string, taskDefinitionID int64, isImua bool, userID string) *TaskEvent {
+func NewTaskCreatedEvent(taskID int64, jobID string, taskDefinitionID int64, network string, userID string) *TaskEvent {
 	changes := &TaskCreatedEvent{
 		TaskID:           taskID,
 		JobID:            jobID,
 		TaskDefinitionID: taskDefinitionID,
-		IsImua:           isImua,
+		Network:          network,
 		CreatedAt:        time.Now(),
 		UserID:           userID,
 	}

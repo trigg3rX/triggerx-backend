@@ -16,12 +16,12 @@ type MockTaskDispatcherInterface struct {
 	mock.Mock
 }
 
-func (m *MockTaskDispatcherInterface) SubmitTaskFromScheduler(ctx context.Context, req *types.SchedulerTaskRequest) (*types.TaskManagerAPIResponse, error) {
+func (m *MockTaskDispatcherInterface) SubmitTaskFromScheduler(ctx context.Context, req *types.SchedulerTaskRequest) (*types.TaskDispatcherRPCResponse, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.TaskManagerAPIResponse), args.Error(1)
+	return args.Get(0).(*types.TaskDispatcherRPCResponse), args.Error(1)
 }
 
 func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
@@ -50,7 +50,7 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 		Source: "test_scheduler",
 	}
 
-	expectedResp := &types.TaskManagerAPIResponse{
+	expectedResp := &types.TaskDispatcherRPCResponse{
 		Success:   true,
 		TaskID:    []int64{123},
 		Message:   "Task submitted successfully",
@@ -67,7 +67,7 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
-	resp, ok := result.(*types.TaskManagerAPIResponse)
+	resp, ok := result.(*types.TaskDispatcherRPCResponse)
 	assert.True(t, ok)
 	assert.Equal(t, expectedResp.Success, resp.Success)
 	assert.Equal(t, expectedResp.TaskID, resp.TaskID)

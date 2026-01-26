@@ -34,7 +34,7 @@ func NewClient(serviceURL string, logger observability.Logger, tracer observabil
 }
 
 // GetPerformerData gets a performer using the dynamic selection system via gRPC
-func (c *Client) GetPerformerData(ctx context.Context, network types.KeeperNetwork) (types.PerformerData, error) {
+func (c *Client) GetPerformerData(ctx context.Context, network types.Network) (types.PerformerData, error) {
 	c.logger.Debug(ctx, "Getting performer data from health service via gRPC", observability.String("network", string(network)))
 
 	req := types.GetPerformerRequest{
@@ -54,7 +54,7 @@ func (c *Client) GetPerformerData(ctx context.Context, network types.KeeperNetwo
 	}
 
 	c.logger.Info(ctx, "Selected performer from health service via gRPC",
-		observability.Int64("operator_id", response.Performer.OperatorID),
+		observability.Int("operator_id", response.Performer.OperatorID),
 		observability.String("keeper_address", response.Performer.KeeperAddress),
 		observability.String("network", string(response.Performer.Network)))
 

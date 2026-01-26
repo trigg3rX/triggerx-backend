@@ -17,7 +17,7 @@ import (
 )
 
 // ScheduleJob creates and starts a new condition worker for monitoring
-func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *types.ScheduleConditionJobData) error {
+func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, request *types.ScheduleConditionJobRequest) error {
 	// Create trace with format "condition-{scheduler_id}-{timestamp}"
 	traceName := fmt.Sprintf("condition-%s-%d", s.schedulerID, time.Now().Unix())
 
@@ -27,8 +27,8 @@ func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *type
 		observability.WithAttributes(
 			attribute.String("scheduler.id", s.schedulerID),
 			attribute.String("scheduler.type", "condition"),
-			attribute.String("job.id", jobData.JobID),
-			attribute.Int("task_definition_id", jobData.TaskDefinitionID),
+			attribute.String("job.id", request.JobID),
+			attribute.Int("task_definition_id", request.TaskDefinitionID),
 			attribute.String("trace.name", traceName),
 		),
 	)
@@ -36,18 +36,25 @@ func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *type
 
 	scheduleSpan.AddEvent("schedule.started")
 
+	// Read job data from database
+	jobData, err := s.readJobDataFromDB(ctx, request.JobID, request.TaskDefinitionID)
+	if err != nil {
+		scheduleSpan.RecordError(err)
+		return fmt.Errorf("failed to read job data from DB: %w", err)
+	}
+
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
 	startTime := time.Now()
 
 	switch jobData.TaskDefinitionID {
-	case types.TaskDefEventBasedStatic, types.TaskDefEventBasedDynamic, types.TaskDefEventBasedAgent: // Event-based jobs (3, 4, 8)
+	case 3, 4, 8: // Event-based jobs
 		if err := s.scheduleEventJob(ctx, jobData, startTime); err != nil {
 			return err
 		}
 
-	case types.TaskDefConditionBasedStatic, types.TaskDefConditionBasedDynamic, types.TaskDefConditionBasedAgent: // Condition-based jobs (5, 6, 9)
+	case 5, 6, 9: // Condition-based jobs
 		if err := s.scheduleConditionJob(ctx, jobData, startTime); err != nil {
 			return err
 		}
@@ -55,6 +62,9 @@ func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *type
 	default:
 		return fmt.Errorf("unsupported task definition id: %d", jobData.TaskDefinitionID)
 	}
+
+	// Store job data for notifications
+	s.jobDataStore[request.JobID] = jobData
 
 	// Update metrics
 	metrics.TrackJobScheduled()
@@ -71,6 +81,109 @@ func (s *ConditionBasedScheduler) ScheduleJob(ctx context.Context, jobData *type
 	return nil
 }
 
+// readJobDataFromDB reads job data from database and creates ScheduleConditionJobData
+func (s *ConditionBasedScheduler) readJobDataFromDB(ctx context.Context, jobID string, taskDefinitionID int) (*types.ScheduleConditionJobData, error) {
+	var jobData *types.ScheduleConditionJobData
+
+	switch taskDefinitionID {
+	case 3, 4, 8: // Event-based jobs
+		eventEntity, err := s.jobRepository.GetEventJobByJobID(jobID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get event job: %w", err)
+		}
+
+		// Create EventWorkerData
+		eventWorkerData := &types.EventWorkerData{
+			JobID:                  eventEntity.JobID,
+			ExpirationTime:         eventEntity.ExpirationTime,
+			Recurring:              eventEntity.Recurring,
+			TriggerChainID:         eventEntity.TriggerChainID,
+			TriggerContractAddress: eventEntity.TriggerContractAddress,
+			TriggerEvent:           eventEntity.TriggerEvent,
+			EventFilterParaName:    eventEntity.EventFilterParaName,
+			EventFilterValue:       eventEntity.EventFilterValue,
+		}
+
+		// Create TaskTargetData
+		taskTargetData := types.TaskTargetData{
+			JobID:                eventEntity.JobID,
+			TaskID:               0, // Will be set when task is created
+			TaskDefinitionID:      eventEntity.TaskDefinitionID,
+			TargetChainID:        eventEntity.TargetChainID,
+			TargetContractAddress: eventEntity.TargetContractAddress,
+			TargetFunction:       eventEntity.TargetFunction,
+			ABI:                  eventEntity.ABI,
+			ArgType:              eventEntity.ArgType,
+			Arguments:            eventEntity.Arguments,
+			ExecutionScriptURL:   eventEntity.ExecutionScriptURL,
+			ExecutionScriptLanguage: eventEntity.ExecutionScriptLanguage,
+			ExecutionScriptHash:   eventEntity.ExecutionScriptHash,
+			MaxExecutionTime:     eventEntity.MaxExecutionTime,
+			ChallengePeriod:      eventEntity.ChallengePeriod,
+		}
+
+		jobData = &types.ScheduleConditionJobData{
+			JobID:              eventEntity.JobID,
+			TaskDefinitionID:   eventEntity.TaskDefinitionID,
+			Network:            types.Network(eventEntity.Network),
+			EventWorkerData:    eventWorkerData,
+			ConditionWorkerData: nil,
+			TaskTargetData:     taskTargetData,
+		}
+
+	case 5, 6, 9: // Condition-based jobs
+		conditionEntity, err := s.jobRepository.GetConditionJobByJobID(jobID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get condition job: %w", err)
+		}
+
+		// Create ConditionWorkerData
+		conditionWorkerData := &types.ConditionWorkerData{
+			JobID:            conditionEntity.JobID,
+			ExpirationTime:   conditionEntity.ExpirationTime,
+			Recurring:        conditionEntity.Recurring,
+			ConditionType:    conditionEntity.ConditionType,
+			SelectedKeyRoute: conditionEntity.SelectedKeyRoute,
+			UpperLimit:       conditionEntity.UpperLimit,
+			LowerLimit:       conditionEntity.LowerLimit,
+			ValueSourceType:  conditionEntity.ValueSourceType,
+			ValueSourceUrl:   conditionEntity.ValueSourceURL,
+		}
+
+		// Create TaskTargetData
+		taskTargetData := types.TaskTargetData{
+			JobID:                conditionEntity.JobID,
+			TaskID:               0, // Will be set when task is created
+			TaskDefinitionID:     conditionEntity.TaskDefinitionID,
+			TargetChainID:        conditionEntity.TargetChainID,
+			TargetContractAddress: conditionEntity.TargetContractAddress,
+			TargetFunction:       conditionEntity.TargetFunction,
+			ABI:                  conditionEntity.ABI,
+			ArgType:              conditionEntity.ArgType,
+			Arguments:            conditionEntity.Arguments,
+			ExecutionScriptURL:   conditionEntity.ExecutionScriptURL,
+			ExecutionScriptLanguage: conditionEntity.ExecutionScriptLanguage,
+			ExecutionScriptHash:   conditionEntity.ExecutionScriptHash,
+			MaxExecutionTime:     conditionEntity.MaxExecutionTime,
+			ChallengePeriod:      conditionEntity.ChallengePeriod,
+		}
+
+		jobData = &types.ScheduleConditionJobData{
+			JobID:              conditionEntity.JobID,
+			TaskDefinitionID:   conditionEntity.TaskDefinitionID,
+			Network:            types.Network(conditionEntity.Network),
+			EventWorkerData:    nil,
+			ConditionWorkerData: conditionWorkerData,
+			TaskTargetData:     taskTargetData,
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported task definition id: %d", taskDefinitionID)
+	}
+
+	return jobData, nil
+}
+
 // scheduleConditionJob handles condition-based job scheduling
 func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobData *types.ScheduleConditionJobData, startTime time.Time) error {
 	// Check if job is already scheduled
@@ -80,13 +193,12 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 	}
 	// WebSocket jobs: check and schedule
 	if jobData.ConditionWorkerData.ValueSourceType == worker.SourceTypeWebSocket {
-		websocketWorker, err := s.createWebSocketWorker(&jobData.ConditionWorkerData)
+		websocketWorker, err := s.createWebSocketWorker(jobData.ConditionWorkerData)
 		if err != nil {
 			metrics.TrackCriticalError("websocket_worker_creation_failed")
 			return fmt.Errorf("failed to create websocket worker: %w", err)
 		}
 		s.conditionWorkers[jobData.JobID] = nil // Or: s.websocketWorkers[jobData.JobID] = websocketWorker (if struct field added)
-		s.jobDataStore[jobData.JobID] = jobData
 		go websocketWorker.Start(ctx)
 		duration := time.Since(startTime)
 		s.logger.Debug(ctx, "WebSocket job monitoring started",
@@ -112,15 +224,14 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 	}
 
 	// Create condition worker with Redis callback
-	conditionWorker, err := s.createConditionWorker(&jobData.ConditionWorkerData, s.HTTPClient)
+	conditionWorker, err := s.createConditionWorker(jobData.ConditionWorkerData, s.HTTPClient)
 	if err != nil {
 		metrics.TrackCriticalError("worker_creation_failed")
 		return fmt.Errorf("failed to create condition worker: %w", err)
 	}
 
-	// Store worker and job data separately for Redis integration
+	// Store worker
 	s.conditionWorkers[jobData.JobID] = conditionWorker
-	s.jobDataStore[jobData.JobID] = jobData
 
 	// Start worker
 	go conditionWorker.Start(ctx)
@@ -181,8 +292,7 @@ func (s *ConditionBasedScheduler) scheduleEventJob(ctx context.Context, jobData 
 		return fmt.Errorf("failed to register with Event Monitor Service: %w", err)
 	}
 
-	// Store job data (event monitoring is handled by Event Monitor Service)
-	s.jobDataStore[jobIDStr] = jobData
+	// Job data is already stored in ScheduleJob
 
 	duration := time.Since(startTime)
 
@@ -282,7 +392,7 @@ func (s *ConditionBasedScheduler) UnregisterEventJob(ctx context.Context, jobID 
 	}
 
 	// Verify this is an event job (task definition ID 3, 4, or 8)
-	if jobData.TaskDefinitionID != types.TaskDefEventBasedStatic && jobData.TaskDefinitionID != types.TaskDefEventBasedDynamic && jobData.TaskDefinitionID != types.TaskDefEventBasedAgent {
+	if jobData.TaskDefinitionID != 3 && jobData.TaskDefinitionID != 4 && jobData.TaskDefinitionID != 8 {
 		return fmt.Errorf("job %s is not an event job", jobID)
 	}
 
@@ -335,7 +445,7 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID strin
 
 	// Determine job type and handle accordingly
 	switch jobData.TaskDefinitionID {
-	case types.TaskDefEventBasedStatic, types.TaskDefEventBasedDynamic, types.TaskDefEventBasedAgent:
+	case 3, 4, 8:
 		// Event-based job: unregister from Event Monitor Service
 		if s.eventMonitorClient != nil {
 			if err := s.eventMonitorClient.Unregister(ctx, jobID); err != nil {
@@ -347,7 +457,7 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID strin
 		}
 		delete(s.jobDataStore, jobID)    // Clean up job data
 		delete(s.lastTriggerTime, jobID) // Clean up last trigger time tracking
-	case types.TaskDefConditionBasedStatic, types.TaskDefConditionBasedDynamic, types.TaskDefConditionBasedAgent:
+	case 5, 6, 9:
 		// Condition-based job: stop the worker
 		if conditionWorker, exists := s.conditionWorkers[jobID]; exists {
 			// Handle websocket workers (stored as nil) - they stop via context cancellation

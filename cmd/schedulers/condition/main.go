@@ -64,8 +64,7 @@ func main() {
 
 	// Initialize repositories
 	taskRepo := repository.NewTaskRepository(dbConn)
-	eventJobRepo := repository.NewEventJobRepository(dbConn)
-	conditionJobRepo := repository.NewConditionJobRepository(dbConn)
+	jobRepo := repository.NewJobRepository(dbConn)
 	logger.Info(ctx, "[3/9] Dependency: Repositories Initialised")
 
 	// Initialize Redis client (optional, for job state caching)
@@ -110,8 +109,7 @@ func main() {
 		tracer,
 		obsMetrics,
 		taskRepo,
-		eventJobRepo,
-		conditionJobRepo,
+		jobRepo,
 		taskDispatcherClient,
 		eventMonitorClient,
 	)

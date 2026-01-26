@@ -22,7 +22,7 @@ import (
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
-
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	// Contract bindings
 	contractAttestationCenter "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
 )
@@ -265,6 +265,8 @@ func (p *PermanentPoller) pollEvent(client *nodeclient.NodeClient, chainID, chai
 				observability.String("event_name", eventName),
 				observability.Uint64("from_block", cur),
 				observability.Uint64("to_block", chunkEnd),
+				observability.String("contract_address", contractAddr.Hex()),
+				observability.String("event_id", event.ID.Hex()),
 				observability.Error(err))
 			cur = chunkEnd + 1
 			continue
@@ -353,9 +355,18 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 
 	// Determine if task was accepted based on event name
 	isAccepted := eventName != "TaskRejected"
+	
 
 	// Send to TaskMonitor via RPC with IPFS data
-	if err := p.taskMonitorClient.ReportConsensusEvent(ctx, lg.TxHash.Hex(), isAccepted, &ipfsData, ipfsCID); err != nil {
+	if err := p.taskMonitorClient.ReportTaskConsensusStatus(ctx, types.ReportTaskConsensusStatusRequest{
+		TaskNumber:           int64(lg.BlockNumber),
+		TaskSubmissionTxHash: lg.TxHash.Hex(),
+		IsAccepted:           isAccepted,
+		PerformerAddress:     lg.Address.Hex(),
+		AttesterIds:          []int64{},
+		IPFSData:             &ipfsData,
+		IPFSCID:              ipfsCID,
+	}); err != nil {
 		span.RecordError(err, observability.WithErrorAttributes(
 			attribute.String("error.type", "rpc_call_failed"),
 		))

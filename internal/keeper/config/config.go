@@ -17,6 +17,10 @@ import (
 type Config struct {
 	devMode bool
 
+	// operator ID
+	operatorID int
+	network string
+
 	// RPC URLs for Ethereum and Base
 	ethRPCUrl  string
 	baseRPCUrl string
@@ -73,9 +77,6 @@ type Config struct {
 
 	// Observability configuration
 	otelExporterEndpoint   string
-
-	// Network configuration
-	network string
 
 	// YAML-loaded settings
 	api      APIConfig
@@ -357,11 +358,6 @@ func GetVersion() string {
 	return cfg.version.Version
 }
 
-func IsImua() bool {
-	// Check environment variable, default to false
-	return env.GetEnvBool("IS_IMUA", false)
-}
-
 // IPFS configuration
 func SetIpfsHost(host string) {
 	cfg.ipfsHost = host
@@ -437,4 +433,12 @@ func GetShutdownTimeout() time.Duration {
 
 func GetNetwork() string {
 	return cfg.network
+}
+
+func SetOperatorID(id int) {
+	cfg.operatorID = id
+}
+
+func GetOperatorID() int {
+	return cfg.operatorID
 }

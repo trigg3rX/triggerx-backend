@@ -86,7 +86,11 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize Redis client", observability.Error(err))
 	}
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			logger.Error(ctx, "Failed to close Redis client", observability.Error(err))
+		}
+	}()
 	logger.Info(ctx, "[5/9] Dependency: Redis Client Initialised")
 
 	// Initialize state manager

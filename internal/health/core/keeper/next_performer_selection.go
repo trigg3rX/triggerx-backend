@@ -3,7 +3,6 @@ package keeper
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -28,7 +27,7 @@ func NewPerformerSelector(stateManager *StateManager, redisClient *redis.Client,
 
 // GetNextPerformer selects the next performer using round-robin selection
 // It stores only the last operator ID in Redis to maintain selection state across restarts
-func (ps *PerformerSelector) GetNextPerformer(ctx context.Context, network types.KeeperNetwork) (*types.PerformerData, error) {
+func (ps *PerformerSelector) GetNextPerformer(ctx context.Context, network types.Network) (*types.PerformerData, error) {
 	// Get all active keepers for the specified network
 	activeKeepers := ps.stateManager.GetActiveKeepersByNetwork(ctx, network)
 
@@ -51,18 +50,8 @@ func (ps *PerformerSelector) GetNextPerformer(ctx context.Context, network types
 	// Find the next operator ID available from active keepers
 	selectedKeeper := ps.findNextKeeper(activeKeepers, lastOperatorID)
 
-	// Parse operator ID from string to int64
-	operatorID, err := strconv.ParseInt(selectedKeeper.OperatorID, 10, 64)
-	if err != nil {
-		ps.logger.Error(ctx, "Failed to parse operator ID",
-			observability.Error(err),
-			observability.String("operator_id", selectedKeeper.OperatorID),
-		)
-		operatorID = 0
-	}
-
 	// Update Redis with the new operator ID
-	if err := ps.redisClient.SetLastOperatorID(ctx, string(network), operatorID); err != nil {
+	if err := ps.redisClient.SetLastOperatorID(ctx, string(network), selectedKeeper.OperatorID); err != nil {
 		ps.logger.Warn(ctx, "Failed to update last operator ID in Redis",
 			observability.Error(err),
 		)
@@ -70,16 +59,16 @@ func (ps *PerformerSelector) GetNextPerformer(ctx context.Context, network types
 	}
 
 	performer := &types.PerformerData{
-		OperatorID:    operatorID,
+		OperatorID:    selectedKeeper.OperatorID,
 		KeeperAddress: selectedKeeper.KeeperAddress,
 		Network:       network,
 	}
 
 	ps.logger.Info(ctx, "Selected performer via round-robin",
-		observability.Int64("operator_id", performer.OperatorID),
+		observability.Int("operator_id", performer.OperatorID),
 		observability.String("keeper_address", performer.KeeperAddress),
 		observability.String("network", string(performer.Network)),
-		observability.Int64("last_operator_id", lastOperatorID),
+		observability.Int("last_operator_id", lastOperatorID),
 		observability.Int("total_active", len(activeKeepers)),
 	)
 
@@ -88,7 +77,7 @@ func (ps *PerformerSelector) GetNextPerformer(ctx context.Context, network types
 
 // findNextKeeper finds the next keeper after the last selected operator ID
 // If the last operator ID is not found or is 0, returns the first keeper
-func (ps *PerformerSelector) findNextKeeper(activeKeepers []types.KeeperInfo, lastOperatorID int64) types.KeeperInfo {
+func (ps *PerformerSelector) findNextKeeper(activeKeepers []types.KeeperInfo, lastOperatorID int) types.KeeperInfo {
 	if lastOperatorID == 0 || len(activeKeepers) == 1 {
 		return activeKeepers[0]
 	}
@@ -96,11 +85,7 @@ func (ps *PerformerSelector) findNextKeeper(activeKeepers []types.KeeperInfo, la
 	// Find the index of the last selected operator
 	lastIndex := -1
 	for i, keeper := range activeKeepers {
-		opID, err := strconv.ParseInt(keeper.OperatorID, 10, 64)
-		if err != nil {
-			continue
-		}
-		if opID == lastOperatorID {
+		if keeper.OperatorID == lastOperatorID {
 			lastIndex = i
 			break
 		}
@@ -113,15 +98,15 @@ func (ps *PerformerSelector) findNextKeeper(activeKeepers []types.KeeperInfo, la
 
 // GetNextPerformerWithFallback selects the next performer with fallback options
 // It first tries to use the round-robin selection, then falls back to hardcoded values
-func (ps *PerformerSelector) GetNextPerformerWithFallback(ctx context.Context, network types.KeeperNetwork) (*types.PerformerData, error) {
+func (ps *PerformerSelector) GetNextPerformerWithFallback(ctx context.Context, network types.Network) (*types.PerformerData, error) {
 	// Try round-robin selection first
-	performer, err := ps.GetNextPerformer(ctx, network)
-	if err == nil {
-		return performer, nil
-	}
+	// performer, err := ps.GetNextPerformer(ctx, network)
+	// if err == nil {
+	// 	return performer, nil
+	// }
 
-	ps.logger.Warn(ctx, "Round-robin selection failed, using fallback performers",
-		observability.Error(err),
+	ps.logger.Warn(ctx, "Round-robin selection not yet available, using fallback performers",
+		// observability.Error(err),
 		observability.String("network", string(network)),
 	)
 
@@ -130,17 +115,17 @@ func (ps *PerformerSelector) GetNextPerformerWithFallback(ctx context.Context, n
 }
 
 // getFallbackPerformer returns a hardcoded fallback performer for the given network
-func (ps *PerformerSelector) getFallbackPerformer(network types.KeeperNetwork) (*types.PerformerData, error) {
+func (ps *PerformerSelector) getFallbackPerformer(network types.Network) (*types.PerformerData, error) {
 	switch network {
 	case types.NetworkMainnet:
 		return &types.PerformerData{
-			OperatorID:    1002,
+			OperatorID:    3,
 			KeeperAddress: "0x235813b36eea7e48b7069821a78c0bc8384a3c79",
 			Network:       types.NetworkMainnet,
 		}, nil
 	case types.NetworkSepolia:
 		return &types.PerformerData{
-			OperatorID:    2,
+			OperatorID:    3,
 			KeeperAddress: "0x0a067a261c5F5e8C4c0b9137430b4FE1255EB62e",
 			Network:       types.NetworkSepolia,
 		}, nil

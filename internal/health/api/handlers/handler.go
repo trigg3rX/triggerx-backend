@@ -102,26 +102,21 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	h.logger.Debug(ctx, "CheckIn Successful",
 		observability.String("keeper", keeperHealth.KeeperAddress),
 		observability.String("version", keeperHealth.Version),
-		observability.String("network", keeperHealth.Network),
+		observability.String("network", string(keeperHealth.Network)),
 	)
 
 	// All versions are allowed to check-in and receive encrypted data
 	// Use network field to decide which task execution address to use
 	var taskExecutionAddress string
-	switch strings.ToLower(keeperHealth.Network) {
-	case "imua":
+	switch keeperHealth.Network {
+	case types.NetworkImua:
 		taskExecutionAddress = config.GetImuaTaskExecutionAddress()
-	case "mainnet":
+	case types.NetworkMainnet:
 		taskExecutionAddress = config.GetTaskExecutionAddress()
-	case "sepolia":
+	case types.NetworkSepolia:
 		taskExecutionAddress = config.GetTestTaskExecutionAddress()
 	default:
-		// Fallback to old logic for backward compatibility
-		if keeperHealth.IsImua {
-			taskExecutionAddress = config.GetImuaTaskExecutionAddress()
-		} else {
-			taskExecutionAddress = config.GetTestTaskExecutionAddress()
-		}
+		taskExecutionAddress = config.GetTestTaskExecutionAddress() // fallback to sepolia
 	}
 
 	message := fmt.Sprintf("%s:%s:%s:%s:%s:%s",

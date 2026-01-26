@@ -42,18 +42,17 @@ type SafeAddressDataDTO struct {
 type JobDataDTO struct {
 	JobID             string    `json:"job_id"`              // Unique job identifier (same as Job Registry)
 	JobTitle          string    `json:"job_title"`           // User-defined job name
-	TaskDefinitionID  int       `json:"task_definition_id"`  // Maps to task type (1-9)
+	TaskDefinitionID  TaskDefinitionID       `json:"task_definition_id"`  // Maps to task type (1-9)
 	CreatedChainID    string    `json:"created_chain_id"`    // Chain where job was created
 	UserAddress       string    `json:"user_address"`        // Job owner
 	LinkJobID         string    `json:"link_job_id"`         // Linked job ID (for chaining)
-	ChainStatus       int       `json:"chain_status"`        // 0=None, 1=Chain Head, 2=Chain Block
+	ChainStatus       ChainStatus `json:"chain_status"`        // 0=None, 1=Chain Head, 2=Chain Block
 	SafeAddress       string    `json:"safe_address"`        // Safe address
 	Timezone          string    `json:"timezone"`            // User's timezone (e.g., "America/New_York")
-	IsImua            bool      `json:"is_imua"`             // Special IMUA job type
-	JobType           string    `json:"job_type"`            // "frontend", "sdk", "template", "contract"
+	JobType           JobType   `json:"job_type"`            // "frontend", "sdk", "template", "contract"
 	TimeFrame         int64     `json:"time_frame"`          // Job validity duration (seconds)
 	Recurring         bool      `json:"recurring"`           // Recurring job or one-time
-	Status            string    `json:"status"`              // "created", "running", "completed", "failed", "expired", "deleted"
+	Status            JobStatus `json:"status"`              // "created", "running", "completed", "failed", "expired", "deleted"
 	JobCostPrediction string    `json:"job_cost_prediction"` // Estimated cost (Wei, for a single task)
 	JobCostActual     string    `json:"job_cost_actual"`     // Actual cost (Wei, sum of task costs)
 	TaskIDs           []int64   `json:"task_ids"`            // Tasks executed for this job
@@ -66,30 +65,27 @@ type JobDataDTO struct {
 // Mirrors TimeJobDataEntity but uses json tags for API serialization.
 type TimeJobDataDTO struct {
 	JobID                  string    `json:"job_id"`                   // Unique job identifier (varint in CQL, string in Go)
-	TaskDefinitionID       int       `json:"task_definition_id"`       // Task type (1, 2, or 7)
-	ScheduleType           string    `json:"schedule_type"`            // "cron", "interval", "specific"
+	TaskDefinitionID       TaskDefinitionID       `json:"task_definition_id"`       // Task type (1, 2, or 7)
+	Network                Network   `json:"network"`                  // Network the job is running on
+	ScheduleType           ScheduleType    `json:"schedule_type"`            // "cron", "interval", "specific"
 	TimeInterval           int64     `json:"time_interval"`            // Interval in seconds (for interval type)
 	CronExpression         string    `json:"cron_expression"`          // Cron expression (for cron type)
 	SpecificSchedule       string    `json:"specific_schedule"`        // Specific timestamp (for specific type)
 	Timezone               string    `json:"timezone"`                 // Timezone selected by user
 	NextExecutionTimestamp time.Time `json:"next_execution_timestamp"` // Calculated next run time
 
-	// Traditional job fields (TDI 1, 2) - nullable for agent jobs (TDI 7)
+	// Target data fields
 	TargetChainID             string   `json:"target_chain_id"`              // Chain to execute on
 	TargetContractAddress     string   `json:"target_contract_address"`      // Contract to call
 	TargetFunction            string   `json:"target_function"`              // Function to invoke
 	ABI                       string   `json:"abi"`                          // Contract ABI (JSON)
-	ArgType                   int      `json:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
+	ArgType                   ArgType  `json:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
 	Arguments                 []string `json:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
-	DynamicArgumentsScriptURL string   `json:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-
-	// Agent job fields (TDI 7) - nullable for traditional jobs (TDI 1, 2)
-	AgentScriptURL      string `json:"agent_script_url"`      // IPFS URL of the agent script
-	AgentScriptLanguage string `json:"agent_script_language"` // Script language: 'ts', 'go', 'python', 'javascript'
-	AgentScriptHash     string `json:"agent_script_hash"`     // keccak256(scriptCode) for verification
-	AgentTargetChainID  int    `json:"agent_target_chain_id"` // Default chain ID (script can override)
-	MaxExecutionTime    int    `json:"max_execution_time"`    // Script timeout in seconds (default 60)
-	ChallengePeriod     int64  `json:"challenge_period"`      // Challenge period in seconds (default 21600 = 6 hours)
+	ExecutionScriptURL        string   `json:"execution_script_url"`         // IPFS URL of the agent script
+	ExecutionScriptLanguage   ScriptLanguage   `json:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash       string   `json:"execution_script_hash"`        // keccak256(scriptCode) for verification
+	MaxExecutionTime        int    `json:"max_execution_time"`        // Script timeout in seconds (default 60)
+	ChallengePeriod         int64  `json:"challenge_period"`          // Challenge period in seconds (default 21600 = 6 hours)
 
 	// Common status fields
 	IsActive       bool      `json:"is_active"`        // Job is active (true on creation, false when expiration time is reached)
@@ -101,7 +97,8 @@ type TimeJobDataDTO struct {
 // Mirrors EventJobDataEntity but uses json tags for API serialization.
 type EventJobDataDTO struct {
 	JobID            string `json:"job_id"`             // Unique job identifier (varint in CQL, string in Go)
-	TaskDefinitionID int    `json:"task_definition_id"` // Task type (3, 4, or 8)
+	TaskDefinitionID TaskDefinitionID    `json:"task_definition_id"` // Task type (3, 4, or 8)
+	Network          Network `json:"network"`          // Network the job is running on
 	Recurring        bool   `json:"recurring"`          // Trigger on every event in time frame or once
 
 	// Event trigger fields (common for all)
@@ -111,22 +108,18 @@ type EventJobDataDTO struct {
 	EventFilterParaName    string `json:"event_filter_para_name"`   // Indexed parameter to filter (e.g., "to")
 	EventFilterValue       string `json:"event_filter_value"`       // Filter value (e.g., specific address)
 
-	// Traditional job fields (TDI 3, 4) - nullable for agent jobs (TDI 8)
+	// Target data fields
 	TargetChainID             string   `json:"target_chain_id"`              // Chain to execute on
 	TargetContractAddress     string   `json:"target_contract_address"`      // Contract to call
 	TargetFunction            string   `json:"target_function"`              // Function to invoke
 	ABI                       string   `json:"abi"`                          // Contract ABI (JSON)
-	ArgType                   int      `json:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
+	ArgType                   ArgType  `json:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
 	Arguments                 []string `json:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
-	DynamicArgumentsScriptURL string   `json:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-
-	// Agent job fields (TDI 8) - nullable for traditional jobs (TDI 3, 4)
-	AgentScriptURL      string `json:"agent_script_url"`      // IPFS URL of the agent script
-	AgentScriptLanguage string `json:"agent_script_language"` // Script language: 'ts', 'go', 'python', 'javascript'
-	AgentScriptHash     string `json:"agent_script_hash"`     // keccak256(scriptCode) for verification
-	AgentTargetChainID  int    `json:"agent_target_chain_id"` // Default chain ID (script can override)
-	MaxExecutionTime    int    `json:"max_execution_time"`    // Script timeout in seconds (default 60)
-	ChallengePeriod     int64  `json:"challenge_period"`      // Challenge period in seconds (default 21600 = 6 hours)
+	ExecutionScriptURL        string   `json:"execution_script_url"`         // IPFS URL of the agent script
+	ExecutionScriptLanguage   ScriptLanguage   `json:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash       string   `json:"execution_script_hash"`        // keccak256(scriptCode) for verification
+	MaxExecutionTime          int      `json:"max_execution_time"`           // Script timeout in seconds (default 60)
+	ChallengePeriod           int64    `json:"challenge_period"`             // Challenge period in seconds (default 21600 = 6 hours)
 
 	// Common status fields
 	IsActive       bool      `json:"is_active"`        // Job is active (true on creation, false when expiration time is reached)
@@ -138,33 +131,30 @@ type EventJobDataDTO struct {
 // Mirrors ConditionJobDataEntity but uses json tags for API serialization.
 type ConditionJobDataDTO struct {
 	JobID            string `json:"job_id"`             // Unique job identifier (varint in CQL, string in Go)
-	TaskDefinitionID int    `json:"task_definition_id"` // Task type (5, 6, or 9)
+	TaskDefinitionID TaskDefinitionID    `json:"task_definition_id"` // Task type (5, 6, or 9)
+	Network          Network `json:"network"`          // Network the job is running on
 	Recurring        bool   `json:"recurring"`          // Trigger on every condition match or once
 
 	// Condition trigger fields (common for all)
 	ConditionType    string  `json:"condition_type"`     // "balance", "state", "oracle"
 	UpperLimit       float64 `json:"upper_limit"`        // Upper threshold (double in CQL)
 	LowerLimit       float64 `json:"lower_limit"`        // Lower threshold (double in CQL)
-	ValueSourceType  string  `json:"value_source_type"`  // "api", "oracle", "websocket"
+	ValueSourceType  ValueSourceType  `json:"value_source_type"`  // "api", "oracle", "websocket"
 	ValueSourceURL   string  `json:"value_source_url"`   // API URL or Websocket URL
 	SelectedKeyRoute string  `json:"selected_key_route"` // JSON path for API responses
 
-	// Traditional job fields (TDI 5, 6) - nullable for agent jobs (TDI 9)
+	// Target data fields
 	TargetChainID             string   `json:"target_chain_id"`              // Chain to execute on
 	TargetContractAddress     string   `json:"target_contract_address"`      // Contract to call
 	TargetFunction            string   `json:"target_function"`              // Function to invoke
 	ABI                       string   `json:"abi"`                          // Contract ABI (JSON)
-	ArgType                   int      `json:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
+	ArgType                   ArgType  `json:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
 	Arguments                 []string `json:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
-	DynamicArgumentsScriptURL string   `json:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-
-	// Agent job fields (TDI 9) - nullable for traditional jobs (TDI 5, 6)
-	AgentScriptURL      string `json:"agent_script_url"`      // IPFS URL of the agent script
-	AgentScriptLanguage string `json:"agent_script_language"` // Script language: 'ts', 'go', 'python', 'javascript'
-	AgentScriptHash     string `json:"agent_script_hash"`     // keccak256(scriptCode) for verification
-	AgentTargetChainID  int    `json:"agent_target_chain_id"` // Default chain ID (script can override)
-	MaxExecutionTime    int    `json:"max_execution_time"`    // Script timeout in seconds (default 60)
-	ChallengePeriod     int64  `json:"challenge_period"`      // Challenge period in seconds (default 21600 = 6 hours)
+	ExecutionScriptURL        string   `json:"execution_script_url"`         // IPFS URL of the agent script
+	ExecutionScriptLanguage   ScriptLanguage   `json:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash       string   `json:"execution_script_hash"`        // keccak256(scriptCode) for verification
+	MaxExecutionTime          int      `json:"max_execution_time"`           // Script timeout in seconds (default 60)
+	ChallengePeriod           int64    `json:"challenge_period"`             // Challenge period in seconds (default 21600 = 6 hours)
 
 	// Common status fields
 	IsActive       bool      `json:"is_active"`        // Job is active (true on creation, false when expiration time is reached)
@@ -177,10 +167,10 @@ type ConditionJobDataDTO struct {
 type TaskDataDTO struct {
 	TaskID               int64     `json:"task_id"`                 // Unique task ID (bigint in CQL, auto-increment)
 	TaskNumber           int64     `json:"task_number"`             // Task sequence number on the contract
-	TaskStatus           string    `json:"task_status"`             // "pending", "in-queue", "running", "completed", "failed", "expired", "deleted"
+	TaskStatus           TaskStatus    `json:"task_status"`             // "pending", "in-queue", "running", "completed", "failed", "expired", "deleted"
 	TaskError            string    `json:"task_error"`              // Error message if task failed
 	JobID                string    `json:"job_id"`                  // Reference to job (varint in CQL, string in Go)
-	TaskDefinitionID     int       `json:"task_definition_id"`      // Task definition ID (1-9)
+	TaskDefinitionID     TaskDefinitionID       `json:"task_definition_id"`      // Task definition ID (1-9)
 	CreatedAt            time.Time `json:"created_at"`              // Task creation timestamp
 	ExecutedAt           time.Time `json:"executed_at"`             // Execution timestamp
 	SubmittedAt          time.Time `json:"submitted_at"`            // Submission timestamp
@@ -194,7 +184,7 @@ type TaskDataDTO struct {
 	ProofOfTask          string    `json:"proof_of_task"`           // Cryptographic proof (IPFS CID)
 	IsSuccessful         bool      `json:"is_successful"`           // Execution success
 	IsAccepted           bool      `json:"is_accepted"`             // Consensus accepted
-	IsImua               bool      `json:"is_imua"`                 // IMUA task type
+	Network              Network   `json:"network"`                 // Network the task is running on
 }
 
 // KeeperDataDTO represents the keeper data transfer object.
@@ -204,13 +194,13 @@ type KeeperDataDTO struct {
 	KeeperName        string      `json:"keeper_name"`        // Human-readable keeper name
 	RewardsAddress    string      `json:"rewards_address"`    // Address for reward payouts
 	ConsensusAddress  string      `json:"consensus_address"`  // Consensus layer address
-	OperatorID        int64       `json:"operator_id"`        // Unique operator ID on the contract (int64 in CQL)
+	OperatorID        int         `json:"operator_id"`        // Unique operator ID on the contract (int64 in CQL)
 	VotingPower       string      `json:"voting_power"`       // Voting power (Wei-based stake)
 	Registered        bool        `json:"registered"`         // Registered on-chain
 	RegisteredAt      []time.Time `json:"registered_at"`      // List of registration timestamps (list<timestamp> in CQL)
 	Online            bool        `json:"online"`             // Currently online
 	Version           string      `json:"version"`            // Keeper software version
-	Network           string      `json:"network"`            // Network the keeper is running on
+	Network           Network     `json:"network"`            // Network the keeper is running on
 	ConnectionAddress string      `json:"connection_address"` // Connection address for P2P
 	PeerID            string      `json:"peer_id"`            // Peer ID for P2P
 	Uptime            int64       `json:"uptime"`             // Total uptime (seconds, bigint in CQL)
@@ -266,7 +256,7 @@ type AgentScriptExecutionsDTO struct {
 	ExecutionError  string `json:"execution_error"`  // Error message if failed
 
 	// Verification status
-	VerificationStatus string    `json:"verification_status"` // 'pending', 'verified', 'challenged', 'slashed'
+	VerificationStatus VerificationStatus    `json:"verification_status"` // 'pending', 'verified', 'challenged', 'slashed'
 	ChallengeDeadline  time.Time `json:"challenge_deadline"`  // Deadline for challenges
 	IsChallenged       bool      `json:"is_challenged"`       // Whether execution has been challenged
 	ChallengeCount     int       `json:"challenge_count"`     // Number of challenges raised
@@ -288,7 +278,7 @@ type ExecutionChallengesDTO struct {
 	ChallengeID       string `json:"challenge_id"`       // Unique challenge identifier (UUID, primary key)
 	ExecutionID       string `json:"execution_id"`       // Reference to agent_script_executions
 	ChallengerAddress string `json:"challenger_address"` // Address of the challenger
-	ChallengeReason   string `json:"challenge_reason"`   // 'wrong_output', 'missing_execution', 'invalid_calldata', 'wrong_trigger'
+	ChallengeReason   ChallengeReason `json:"challenge_reason"`   // 'wrong_output', 'missing_execution', 'invalid_calldata', 'wrong_trigger'
 
 	// Challenger's claimed output
 	ChallengerOutputHash     string `json:"challenger_output_hash"`     // Hash of challenger's claimed output
@@ -301,7 +291,7 @@ type ExecutionChallengesDTO struct {
 	BondAmount string `json:"bond_amount"` // Wei-based bond amount
 
 	// Resolution
-	ResolutionStatus string    `json:"resolution_status"` // 'pending', 'approved', 'rejected', 'inconclusive'
+	ResolutionStatus ResolutionStatus    `json:"resolution_status"` // 'pending', 'approved', 'rejected', 'inconclusive'
 	ResolutionTime   time.Time `json:"resolution_time"`   // When challenge was resolved
 	ValidatorCount   int       `json:"validator_count"`   // Number of validators who voted
 	ApproveCount     int       `json:"approve_count"`     // Number of approving votes

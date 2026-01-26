@@ -124,7 +124,7 @@ func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
+	jobIDs, err := h.userRepository.GetUserJobIDs(userAddress)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Warn(c.Request.Context(), "[GetTasksByUserAddress] Failed to retrieve jobs for user", observability.String("user_address", userAddress), observability.Error(err))
@@ -316,13 +316,11 @@ func (h *Handler) getTasksGroupedByJob(jobIDs []string) ([]types.TasksByJobGroup
 
 func (h *Handler) fetchTasksForJob(jobID string) ([]types.TasksByJobIDResponse, error) {
 	trackTasksOp := metrics.TrackDBOperation("read", "task_data")
-	tasksData, err := h.taskRepository.GetTasksByJobID(jobID)
+	tasks, err := h.taskRepository.GetTasksByJobID(jobID)
 	trackTasksOp(err)
 	if err != nil {
 		return nil, err
 	}
-
-	tasks := convertTasksData(tasksData)
 
 	trackChainOp := metrics.TrackDBOperation("read", "job_data")
 	createdChainID, err := h.taskRepository.GetCreatedChainIDByJobID(jobID)
@@ -339,29 +337,4 @@ func (h *Handler) fetchTasksForJob(jobID string) ([]types.TasksByJobIDResponse, 
 	}
 
 	return tasks, nil
-}
-
-func convertTasksData(tasksData []types.GetTasksByJobID) []types.TasksByJobIDResponse {
-	tasks := make([]types.TasksByJobIDResponse, len(tasksData))
-	for i, task := range tasksData {
-		// Convert list to single string (take first if exists)
-		performerAddress := ""
-		if len(task.TaskPerformerAddress) > 0 {
-			performerAddress = task.TaskPerformerAddress[0]
-		}
-		tasks[i] = types.TasksByJobIDResponse{
-			TaskID:                task.TaskID,
-			TaskNumber:            task.TaskNumber,
-			TaskOpXCost:           task.TaskOpXCost,
-			ExecutionTimestamp:    task.ExecutionTimestamp,
-			ExecutionTxHash:       task.ExecutionTxHash,
-			TaskPerformerAddress:  performerAddress,
-			TaskAttesterAddresses: task.TaskAttesterAddress,
-			IsAccepted:            task.IsAccepted,
-			TaskStatus:            task.TaskStatus,
-			TaskError:             task.TaskError,
-			ConvertedArguments:    task.ConvertedArguments,
-		}
-	}
-	return tasks
 }

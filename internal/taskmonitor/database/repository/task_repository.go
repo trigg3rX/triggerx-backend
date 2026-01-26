@@ -87,11 +87,12 @@ func (r *taskRepository) UpdateTaskSubmissionData(ctx context.Context, data type
 		data.TaskNumber,
 		data.IsAccepted,
 		data.TaskSubmissionTxHash,
-		[]string{performerAddress}, // task_performer_address is list<text>
-		attesterAddresses,          // task_attester_address is list<text>
+		[]string{performerAddress},     // task_performer_address is list<text>
+		attesterAddresses,              // task_attester_address is list<text>
 		data.ExecutionTxHash,
-		data.ExecutionTimestamp,
-		data.TaskOpxCost, // Already a string (Wei)
+		data.ExecutedAt,
+		time.Now().UTC(),               // submitted_at = current time (when consensus event received)
+		data.TaskOpxActualCost,         // Already a string (Wei)
 		data.ProofOfTask,
 		convertedArgsStrings,
 		data.TaskID).Exec(); err != nil {
@@ -275,8 +276,8 @@ func (r *taskRepository) UpdateKeeperPointsInDatabase(ctx context.Context, data 
 	}
 
 	// TODO:
-	// Alert if taskOpxCost is greater than taskPredictedOpxCost by a threshold
-	// Use types.IsGreater(data.TaskOpxCost, taskPredictedOpxCostStr) for comparison
+	// Alert if taskOpxActualCost is greater than taskPredictedOpxCost by a threshold
+	// Use types.IsGreater(data.TaskOpxActualCost, taskPredictedOpxCostStr) for comparison
 	_ = taskPredictedOpxCostStr // Keep for future alerting logic
 
 	// Update the Attester Points
@@ -302,8 +303,8 @@ func (r *taskRepository) UpdateKeeperPointsInDatabase(ctx context.Context, data 
 			return fmt.Errorf("keeper not found for operator_id %d", operatorID)
 		}
 		// Calculate new keeper points using string-based math
-		// keeperPoints = keeperPoints + (rewardsBooster * TaskOpxCost)
-		rewardedFee := types.MulByFloat(data.TaskOpxCost, rewardsBooster)
+		// keeperPoints = keeperPoints + (rewardsBooster * TaskOpxActualCost)
+		rewardedFee := types.MulByFloat(data.TaskOpxActualCost, rewardsBooster)
 		keeperPointsStr = types.Add(keeperPointsStr, rewardedFee)
 		noAttestedTasks = noAttestedTasks + 1
 
@@ -339,12 +340,12 @@ func (r *taskRepository) UpdateKeeperPointsInDatabase(ctx context.Context, data 
 	}
 	// Calculate new keeper points using string-based math
 	if data.IsAccepted {
-		// keeperPoints = keeperPoints + (rewardsBooster * TaskOpxCost)
-		rewardedFee := types.MulByFloat(data.TaskOpxCost, rewardsBooster)
+		// keeperPoints = keeperPoints + (rewardsBooster * TaskOpxActualCost)
+		rewardedFee := types.MulByFloat(data.TaskOpxActualCost, rewardsBooster)
 		keeperPointsStr = types.Add(keeperPointsStr, rewardedFee)
 	} else {
-		// keeperPoints = keeperPoints - (rewardsBooster * TaskOpxCost * 0.1)
-		penaltyFee := types.MulByFloat(data.TaskOpxCost, rewardsBooster*0.1)
+		// keeperPoints = keeperPoints - (rewardsBooster * TaskOpxActualCost * 0.1)
+		penaltyFee := types.MulByFloat(data.TaskOpxActualCost, rewardsBooster*0.1)
 		keeperPointsStr = types.Sub(keeperPointsStr, penaltyFee)
 	}
 	noExecutedTasks = noExecutedTasks + 1
@@ -383,7 +384,7 @@ func (r *taskRepository) UpdateKeeperPointsInDatabase(ctx context.Context, data 
 
 	userTasks = userTasks + 1
 	// Calculate new user points using string-based math
-	userPointsStr = types.Add(userPointsStr, data.TaskOpxCost)
+	userPointsStr = types.Add(userPointsStr, data.TaskOpxActualCost)
 	lastUpdatedAt := time.Now().UTC()
 
 	if err := r.db.NewQuery(UpdateUserPoints,
@@ -406,14 +407,14 @@ func (r *taskRepository) UpdateKeeperPointsInDatabase(ctx context.Context, data 
 	}
 
 	// Calculate new job cost actual using string-based math
-	jobCostActualStr = types.Add(jobCostActualStr, data.TaskOpxCost)
+	jobCostActualStr = types.Add(jobCostActualStr, data.TaskOpxActualCost)
 
 	if err := r.db.NewQuery(UpdateJobCostActual, jobCostActualStr, jobID).Exec(); err != nil {
 		r.logger.Error(ctx, "Failed to update job cost actual for job ID", observability.String("job_id", jobID), observability.Error(err))
 		return err
 	}
 
-	r.logger.Info(ctx, "Successfully updated points for user address", observability.String("user_address", userAddress), observability.String("task_opx_cost", data.TaskOpxCost))
+	r.logger.Info(ctx, "Successfully updated points for user address", observability.String("user_address", userAddress), observability.String("task_opx_actual_cost", data.TaskOpxActualCost))
 	return nil
 }
 

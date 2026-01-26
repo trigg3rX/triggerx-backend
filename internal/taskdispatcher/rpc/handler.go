@@ -18,7 +18,7 @@ type TaskDispatcherHandler struct {
 
 // TaskDispatcherInterface defines the interface for task dispatcher operations
 type TaskDispatcherInterface interface {
-	SubmitTaskFromScheduler(ctx context.Context, req *types.SchedulerTaskRequest) (*types.TaskManagerAPIResponse, error)
+	SubmitTaskFromScheduler(ctx context.Context, req *types.SchedulerTaskRequest) (*types.TaskDispatcherRPCResponse, error)
 }
 
 // NewTaskDispatcherHandler creates a new RPC handler
@@ -57,7 +57,7 @@ func (h *TaskDispatcherHandler) GetMethods() []rpcpkg.RPCMethod {
 			Name:         "submit-task",
 			Description:  "Submit a task from schedulers to the dispatcher",
 			RequestType:  &types.SchedulerTaskRequest{},
-			ResponseType: &types.TaskManagerAPIResponse{},
+			ResponseType: &types.TaskDispatcherRPCResponse{},
 			Timeout:      30 * time.Second,
 		},
 	}

@@ -137,14 +137,11 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		ConsensusPubKey:  consensusPubKey,
 		ConsensusAddress: consensusAddress,
 		Version:          c.config.Version,
-		Timestamp:        time.Now().UTC(),
 		Signature:        signature,
 		PeerID:           c.config.PeerID,
-		IsImua:           config.IsImua(),
-		Network:          c.config.Network,
+		OperatorID:       config.GetOperatorID(),
+		Network:          types.Network(c.config.Network),
 	}
-
-	// c.logger.Info(ctx, "Payload", observability.Any("payload", payload))
 
 	// Send health check request
 	response, err := c.sendHealthCheck(ctx, payload)

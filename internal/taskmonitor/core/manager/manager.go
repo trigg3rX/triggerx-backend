@@ -148,7 +148,7 @@ func (tm *TaskManager) Initialize() error {
 // ReportTaskStatus handles task status reports from keepers
 // This is called after the aggregator submission attempt (regardless of success or failure)
 // ProofCID contains all execution data (task data, action data, proof, signatures)
-func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error) {
+func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTaskExecutionStatusRequest) (*types.ReportTaskExecutionStatusResponse, error) {
 	tm.logger.Info(ctx, "Received task status report",
 		observability.Int64("task_id", req.TaskID),
 		observability.String("keeper_address", req.KeeperAddress),
@@ -164,7 +164,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 			tm.logger.Error(ctx, "Failed to update task failure in database",
 				observability.Int64("task_id", req.TaskID),
 				observability.Error(err))
-			return &types.ReportTaskStatusResponse{
+			return &types.ReportTaskExecutionStatusResponse{
 				Success: false,
 				Message: fmt.Sprintf("failed to update task failure: %v", err),
 			}, nil
@@ -181,7 +181,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 			observability.String("execution_tx_hash", req.ExecutionTxHash),
 			observability.String("error", req.Error))
 
-		return &types.ReportTaskStatusResponse{
+		return &types.ReportTaskExecutionStatusResponse{
 			Success: true,
 			Message: "Task failure recorded",
 		}, nil
@@ -193,7 +193,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 		tm.logger.Error(ctx, "Failed to update task success in database",
 			observability.Int64("task_id", req.TaskID),
 			observability.Error(err))
-		return &types.ReportTaskStatusResponse{
+		return &types.ReportTaskExecutionStatusResponse{
 			Success: false,
 			Message: fmt.Sprintf("failed to update task success: %v", err),
 		}, nil
@@ -214,7 +214,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 		observability.String("execution_tx_hash", req.ExecutionTxHash),
 		observability.String("proof_cid", req.ProofCID))
 
-	return &types.ReportTaskStatusResponse{
+	return &types.ReportTaskExecutionStatusResponse{
 		Success: true,
 		Message: "Task status updated, pending on-chain confirmation",
 	}, nil
@@ -222,7 +222,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 
 // ReportConsensusEvent handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
 // The request now contains IPFS data (with trace context) directly from eventmonitor
-func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.ReportConsensusEventRequest) (*types.ReportConsensusEventResponse, error) {
+func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.ReportTaskConsensusStatusRequest) (*types.ReportTaskConsensusStatusResponse, error) {
 	// Extract task ID from IPFS data (ActionData has single task ID)
 	taskID := int64(0)
 	if req.IPFSData != nil && req.IPFSData.ActionData != nil {
@@ -230,7 +230,7 @@ func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.Repo
 	}
 
 	tm.logger.Info(ctx, "Received consensus event report from eventmonitor",
-		observability.String("tx_hash", req.TxHash),
+		observability.String("tx_hash", req.TaskSubmissionTxHash),
 		observability.Bool("is_accepted", req.IsAccepted),
 		observability.Int64("task_id", taskID))
 
@@ -243,7 +243,7 @@ func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.Repo
 	ctx, span := tm.tracer.Start(ctx, "task.consensus.process",
 		observability.WithSpanKind(trace.SpanKindServer),
 		observability.WithAttributes(
-			attribute.String("tx.hash", req.TxHash),
+			attribute.String("tx.hash", req.TaskSubmissionTxHash),
 			attribute.Bool("is.accepted", req.IsAccepted),
 			attribute.Int64("task.id", taskID),
 		),
@@ -253,17 +253,17 @@ func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.Repo
 	// Create a task handler instance to process the event
 	taskHandler := tm.createTaskEventHandler()
 	// Process the consensus event with IPFS data
-	if err := taskHandler.ProcessConsensusEventFromIPFS(ctx, req.TxHash, req.IsAccepted, req.IPFSData, req.IPFSCID); err != nil {
+	if err := taskHandler.ProcessConsensusEventFromIPFS(ctx, req.TaskSubmissionTxHash, req.IsAccepted, req.IPFSData, req.IPFSCID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to process consensus event")
-		return &types.ReportConsensusEventResponse{
+		return &types.ReportTaskConsensusStatusResponse{
 			Success: false,
 			Message: err.Error(),
 		}, nil
 	}
 
 	span.SetStatus(codes.Ok, "consensus event processed")
-	return &types.ReportConsensusEventResponse{
+	return &types.ReportTaskConsensusStatusResponse{
 		Success: true,
 		Message: "Consensus event processed",
 	}, nil

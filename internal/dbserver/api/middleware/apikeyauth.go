@@ -5,11 +5,22 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
+
+type apiKeyResponseWriter struct {
+	gin.ResponseWriter
+	statusCode int
+}
+
+func (rw *apiKeyResponseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
 
 type ApiKeyAuth struct {
 	db          *database.Connection
@@ -48,8 +59,6 @@ func (a *ApiKeyAuth) GinMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		go a.updateLastUsed(apiKeyHeader)
-
 		if a.rateLimiter != nil {
 			if err := a.rateLimiter.ApplyGinRateLimit(c, apiKey); err != nil {
 				a.logger.Warn(c.Request.Context(), "Rate limit applied", observability.Error(err))
@@ -58,12 +67,25 @@ func (a *ApiKeyAuth) GinMiddleware() gin.HandlerFunc {
 					"message": "You have exceeded the rate limit",
 				})
 				c.Abort()
+				// Track as failure
+				go a.updateApiKeyUsage(apiKeyHeader, false)
 				return
 			}
 		}
 
+		// Wrap the response writer to track status code
+		rw := &apiKeyResponseWriter{
+			ResponseWriter: c.Writer,
+			statusCode:     http.StatusOK,
+		}
+		c.Writer = rw
+
 		c.Set("apiKey", apiKey)
 		c.Next()
+
+		// Determine success based on status code (2xx = success, others = failure)
+		isSuccess := rw.statusCode >= 200 && rw.statusCode < 300
+		go a.updateApiKeyUsage(apiKeyHeader, isSuccess)
 	}
 }
 
@@ -106,8 +128,6 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		go a.updateLastUsed(apiKeyHeader)
-
 		if a.rateLimiter != nil {
 			if err := a.rateLimiter.ApplyGinRateLimit(c, apiKey); err != nil {
 				a.logger.Warn(c.Request.Context(), "Rate limit applied", observability.Error(err))
@@ -116,12 +136,25 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 					"message": "You have exceeded the rate limit",
 				})
 				c.Abort()
+				// Track as failure
+				go a.updateApiKeyUsage(apiKeyHeader, false)
 				return
 			}
 		}
 
+		// Wrap the response writer to track status code
+		rw := &apiKeyResponseWriter{
+			ResponseWriter: c.Writer,
+			statusCode:     http.StatusOK,
+		}
+		c.Writer = rw
+
 		c.Set("apiKey", apiKey)
 		c.Next()
+
+		// Determine success based on status code (2xx = success, others = failure)
+		isSuccess := rw.statusCode >= 200 && rw.statusCode < 300
+		go a.updateApiKeyUsage(apiKeyHeader, isSuccess)
 	}
 }
 
@@ -148,13 +181,42 @@ func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKeyDa
 	return &apiKey, nil
 }
 
-func (a *ApiKeyAuth) updateLastUsed(key string) {
-	query := `UPDATE triggerx.apikeys SET last_used = ? WHERE key = ?`
+func (a *ApiKeyAuth) updateApiKeyUsage(key string, isSuccess bool) {
+	// Get current counters
+	var successCount int64
+	var failedCount int64
+	err := a.db.Session().Query(
+		`SELECT success_count, failed_count FROM triggerx.apikeys WHERE key = ?`,
+		key,
+	).Scan(&successCount, &failedCount)
+	
+	if err != nil {
+		if err == gocql.ErrNotFound {
+			// API key not found, skip update
+			return
+		}
+		a.logger.Error(context.Background(), "Failed to get API key counters", observability.Error(err))
+		return
+	}
 
-	if err := a.db.Session().Query(query, time.Now().UTC(), key).Exec(); err != nil {
-		a.logger.Error(context.Background(), "Failed to update last used timestamp", observability.Error(err))
+	// Increment appropriate counter
+	if isSuccess {
+		successCount++
+	} else {
+		failedCount++
+	}
+
+	// Update with new counters and timestamp
+	err = a.db.Session().Query(
+		`UPDATE triggerx.apikeys SET last_used = ?, success_count = ?, failed_count = ? WHERE key = ?`,
+		time.Now().UTC(), successCount, failedCount, key,
+	).Exec()
+	
+	if err != nil {
+		a.logger.Error(context.Background(), "Failed to update API key usage", observability.Error(err))
 	}
 }
+
 
 func (a *ApiKeyAuth) isKeeperApiKey(key string) (bool, error) {
 	query := `SELECT isKeeper FROM triggerx.apikeys WHERE key = ? ALLOW FILTERING`
@@ -175,7 +237,7 @@ func (a *ApiKeyAuth) GetApiKey(ctx context.Context, key string) (*types.ApiKeyDa
 	return a.getApiKey(ctx, key)
 }
 
-// UpdateLastUsed updates the last used timestamp for an API key (public wrapper for updateLastUsed)
-func (a *ApiKeyAuth) UpdateLastUsed(key string) {
-	a.updateLastUsed(key)
+// UpdateApiKeyUsage updates the API key usage (public wrapper for updateApiKeyUsage)
+func (a *ApiKeyAuth) UpdateApiKeyUsage(key string, isSuccess bool) {
+	a.updateApiKeyUsage(key, true)
 }

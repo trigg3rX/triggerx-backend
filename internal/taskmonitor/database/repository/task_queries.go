@@ -69,6 +69,7 @@ const (
             task_attester_address = ?, 
             execution_tx_hash = ?,
             executed_at = ?,
+            submitted_at = ?,
             task_opx_actual_cost = ?,
             proof_of_task = ?,
             converted_arguments = ?

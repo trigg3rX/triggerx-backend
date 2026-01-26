@@ -136,7 +136,6 @@ type JobDataEntity struct {
     ChainStatus       int       `cql:"chain_status"`        // 0=None, 1=Chain Head, 2=Chain Block
     SafeAddress       string    `cql:"safe_address"`        // Safe address
     Timezone          string    `cql:"timezone"`            // User's timezone (e.g., "America/New_York")
-    IsImua            bool      `cql:"is_imua"`             // Special IMUA job type
     JobType           string    `cql:"job_type"`            // "frontend", "sdk", "template", "contract"
     TimeFrame         int64     `cql:"time_frame"`          // Job validity duration (seconds)
     Recurring         bool      `cql:"recurring"`           // Recurring job or one-time
@@ -176,6 +175,7 @@ Represents `time_job_data` table for time-based scheduled jobs. Supports both tr
 type TimeJobDataEntity struct {
     JobID                     string    `cql:"job_id"`                      // Unique job identifier (varint in CQL, string in Go)
     TaskDefinitionID          int       `cql:"task_definition_id"`          // Task type (1, 2, or 7)
+    Network                   string    `cql:"network"`                     // Network the job is running on
     ScheduleType              string    `cql:"schedule_type"`               // "cron", "interval", "specific"
     TimeInterval              int64     `cql:"time_interval"`               // Interval in seconds (for interval type)
     CronExpression            string    `cql:"cron_expression"`             // Cron expression (for cron type)
@@ -183,20 +183,18 @@ type TimeJobDataEntity struct {
     Timezone                  string    `cql:"timezone"`                    // Timezone selected by user
     NextExecutionTimestamp    time.Time `cql:"next_execution_timestamp"`    // Calculated next run time
 
-    // Traditional job fields (TDI 1, 2) - nullable for agent jobs (TDI 7)
+    // Target Data Fields
     TargetChainID             string    `cql:"target_chain_id"`             // Chain to execute on
+    // Nullable for TDI 7
     TargetContractAddress     string    `cql:"target_contract_address"`     // Contract to call
     TargetFunction            string    `cql:"target_function"`             // Function to invoke
     ABI                       string    `cql:"abi"`                         // Contract ABI (JSON)
     ArgType                   int       `cql:"arg_type"`                    // 0=None, 1=Static, 2=Dynamic
     Arguments                 []string  `cql:"arguments"`                   // Static arguments (if ArgType=1, list<text> in CQL)
-    DynamicArgumentsScriptURL string    `cql:"dynamic_arguments_script_url"`// IPFS CID for dynamic arg script
-
-    // Agent job fields (TDI 7) - nullable for traditional jobs (TDI 1, 2)
-    AgentScriptURL            string    `cql:"agent_script_url"`            // IPFS URL of the agent script
-    AgentScriptLanguage       string    `cql:"agent_script_language"`       // Script language: 'ts', 'go', 'python', 'javascript'
-    AgentScriptHash           string    `cql:"agent_script_hash"`           // keccak256(scriptCode) for verification
-    AgentTargetChainID        int       `cql:"agent_target_chain_id"`       // Default chain ID (script can override)
+    // Nullable for TDI 1
+    ExecutionScriptURL        string    `cql:"execution_script_url"`        // IPFS URL of the execution script
+    ExecutionScriptLanguage   string    `cql:"execution_script_language"`   // Script language: 'ts', 'go', 'python', 'javascript'
+    ExecutionScriptHash       string    `cql:"execution_script_hash"`       // keccak256(scriptCode) for verification
     MaxExecutionTime          int       `cql:"max_execution_time"`          // Script timeout in seconds (default 60)
     ChallengePeriod           int64     `cql:"challenge_period"`            // Challenge period in seconds (default 21600 = 6 hours)
 
@@ -238,20 +236,18 @@ type EventJobDataEntity struct {
     EventFilterParaName        string    `cql:"event_filter_para_name"`       // Indexed parameter to filter (e.g., "to")
     EventFilterValue           string    `cql:"event_filter_value"`           // Filter value (e.g., specific address)
 
-    // Traditional job fields (TDI 3, 4) - nullable for agent jobs (TDI 8)
+    // Target data fields
     TargetChainID              string    `cql:"target_chain_id"`              // Chain to execute on
+    // Nullable for TDI 8
     TargetContractAddress      string    `cql:"target_contract_address"`      // Contract to call
     TargetFunction             string    `cql:"target_function"`              // Function to invoke
     ABI                        string    `cql:"abi"`                          // Contract ABI (JSON)
     ArgType                    int       `cql:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
     Arguments                  []string  `cql:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
-    DynamicArgumentsScriptURL  string    `cql:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-
-    // Agent job fields (TDI 8) - nullable for traditional jobs (TDI 3, 4)
-    AgentScriptURL             string    `cql:"agent_script_url"`             // IPFS URL of the agent script
-    AgentScriptLanguage        string    `cql:"agent_script_language"`        // Script language: 'ts', 'go', 'python', 'javascript'
-    AgentScriptHash            string    `cql:"agent_script_hash"`            // keccak256(scriptCode) for verification
-    AgentTargetChainID         int       `cql:"agent_target_chain_id"`        // Default chain ID (script can override)
+	// Nullable for TDI 1
+	ExecutionScriptURL        string   `cql:"execution_script_url"`         // IPFS CID for script
+	ExecutionScriptLanguage   string   `cql:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash       string   `cql:"execution_script_hash"`        // keccak256(scriptCode) for verification
     MaxExecutionTime           int       `cql:"max_execution_time"`           // Script timeout in seconds (default 60)
     ChallengePeriod            int64     `cql:"challenge_period"`             // Challenge period in seconds (default 21600 = 6 hours)
 
@@ -295,20 +291,18 @@ type ConditionJobDataEntity struct {
     ValueSourceURL            string    `cql:"value_source_url"`            // API URL or Websocket URL
     SelectedKeyRoute          string    `cql:"selected_key_route"`          // JSON path for API responses
 
-    // Traditional job fields (TDI 5, 6) - nullable for agent jobs (TDI 9)
+    // Target data fields
     TargetChainID             string    `cql:"target_chain_id"`             // Chain to execute on
+    // Nullable for TDI 9
     TargetContractAddress     string    `cql:"target_contract_address"`     // Contract to call
     TargetFunction            string    `cql:"target_function"`             // Function to invoke
     ABI                       string    `cql:"abi"`                         // Contract ABI (JSON)
     ArgType                   int       `cql:"arg_type"`                    // 0=None, 1=Static, 2=Dynamic
     Arguments                 []string  `cql:"arguments"`                   // Static arguments (if ArgType=1, list<text> in CQL)
-    DynamicArgumentsScriptURL string    `cql:"dynamic_arguments_script_url"`// IPFS CID for dynamic arg script
-
-    // Agent job fields (TDI 9) - nullable for traditional jobs (TDI 5, 6)
-    AgentScriptURL            string    `cql:"agent_script_url"`            // IPFS URL of the agent script
-    AgentScriptLanguage       string    `cql:"agent_script_language"`       // Script language: 'ts', 'go', 'python', 'javascript'
-    AgentScriptHash           string    `cql:"agent_script_hash"`           // keccak256(scriptCode) for verification
-    AgentTargetChainID        int       `cql:"agent_target_chain_id"`       // Default chain ID (script can override)
+	// Nullable for TDI 1
+	ExecutionScriptURL        string   `cql:"execution_script_url"`         // IPFS CID for script
+	ExecutionScriptLanguage   string   `cql:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash       string   `cql:"execution_script_hash"`        // keccak256(scriptCode) for verification
     MaxExecutionTime          int       `cql:"max_execution_time"`          // Script timeout in seconds (default 60)
     ChallengePeriod           int64     `cql:"challenge_period"`            // Challenge period in seconds (default 21600 = 6 hours)
 
@@ -359,7 +353,7 @@ type TaskDataEntity struct {
     ProofOfTask          string    `cql:"proof_of_task"`          // Cryptographic proof (IPFS CID)
     IsSuccessful         bool      `cql:"is_successful"`          // Execution success
     IsAccepted           bool      `cql:"is_accepted"`            // Consensus accepted
-    IsImua               bool      `cql:"is_imua"`                // IMUA task type
+    Network              string    `cql:"network"`                 // Network the task is running on (mainnet, sepolia, imua)
 }
 ```
 
@@ -373,8 +367,12 @@ type TaskDataEntity struct {
 
 - `JobID`: References the parent job (varint in CQL, string in Go to support values exceeding int64 limits)
 - `TaskDefinitionID`: Can be 1-9, indicating both traditional (1-6) and agent (7-9) task types
-- `TaskStatus`: Can be "pending", "in-queue", "running", "completed", "failed", "expired", "deleted" (as documented in entity comment). The constants file defines: "created", "dispatched", "executed", "completed", "failed" for task lifecycle management.
+- `TaskStatus`: Lifecycle states: "created" (task created by scheduler), "dispatched" (sent to keeper), "executed" (executed by keeper, pending validation), "pending_confirmation" (waiting for on-chain consensus), "completed" (validated on-chain), "failed" (execution or consensus failed)
+- `TaskOpxPredictedCost`: Set at task creation from job's `job_cost_prediction` field
+- `TaskOpxActualCost`: Set at consensus from IPFS data (`TotalFee` field)
+- `SubmittedAt`: Set when consensus event is received (timestamp of on-chain submission)
 - `ConvertedArguments`, `TaskPerformerAddress`, `TaskAttesterAddress`: Lists of text in CQL, converted to []string in Go
+- `Network`: Network identifier (mainnet, sepolia, or imua) for the task execution
 
 ### 9. KeeperDataEntity
 
@@ -732,7 +730,134 @@ type ErrorResponse struct {
 
 Used for gRPC communication between internal services.
 
-**Location**: `pkg/types/rpc_*.go`
+**Location**: `pkg/types/rpc_*.go` and `pkg/types/taskmonitor_rpc_types.go`
+
+### TaskMonitor RPC Types
+
+#### ReportTaskExecutionStatusRequest
+
+Represents a request to report task execution status from a keeper. Called after the aggregator submission attempt (regardless of success or failure).
+
+```go
+type ReportTaskExecutionStatusRequest struct {
+    TaskID              int64  `json:"task_id" validate:"required"`        // Task identifier
+    KeeperAddress       string `json:"keeper_address" validate:"required"` // Keeper address
+    ExecutionSuccessful bool   `json:"execution_successful"`               // Whether the task execution itself succeeded
+    AggregatorSubmitted bool   `json:"aggregator_submitted"`               // Whether the aggregator submission succeeded
+    Error               string `json:"error,omitempty"`                    // Error message if any step failed
+    ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`        // Transaction hash from on-chain execution
+    ProofCID            string `json:"proof_cid,omitempty"`                // IPFS CID of the proof data
+    Signature           string `json:"signature" validate:"required"`      // Keeper's signature for authentication
+}
+```
+
+**Usage**: Keeper reports execution status to taskmonitor after attempting to execute and submit to aggregator.
+
+#### ReportTaskConsensusStatusRequest
+
+Represents a request to report a consensus event (TaskSubmitted or TaskRejected). Called by eventmonitor when it detects on-chain consensus events.
+
+```go
+type ReportTaskConsensusStatusRequest struct {
+    TaskNumber           int64     `json:"task_number" validate:"required"`            // Task number from on-chain event
+    TaskSubmissionTxHash string    `json:"task_submission_tx_hash" validate:"required"` // Task submission transaction hash
+    IsAccepted           bool      `json:"is_accepted"`                                 // true for TaskSubmitted, false for TaskRejected
+    PerformerAddress     string    `json:"performer_address" validate:"required"`       // Performer address from on-chain event
+    AttesterIds          []int64   `json:"attester_ids"`                                // Attester operator IDs from on-chain event
+    IPFSData             *IPFSData `json:"ipfs_data" validate:"required"`               // Full IPFS data including trace context
+    IPFSCID              string    `json:"ipfs_cid" validate:"required"`                // IPFS CID/hash for the data
+}
+```
+
+**Usage**: EventMonitor fetches IPFS data (which contains trace context) and sends it along with minimal event data to taskmonitor.
+
+#### TaskSubmissionData
+
+Represents aggregated data for updating `task_data` table after consensus. This is an internal type used by taskmonitor to pass data to the database layer.
+
+```go
+type TaskSubmissionData struct {
+    // Task identification
+    TaskID           int64 `json:"task_id"`            // Task identifier (from IPFSData.ActionData)
+    TaskDefinitionID int   `json:"task_definition_id"` // Task definition ID (1-9, from IPFSData.TaskData)
+
+    // Consensus data (from on-chain event)
+    TaskNumber           int64   `json:"task_number"`             // Task sequence number on the contract
+    IsAccepted           bool    `json:"is_accepted"`             // true for TaskSubmitted, false for TaskRejected
+    TaskSubmissionTxHash string  `json:"task_submission_tx_hash"` // Task submission transaction hash
+    AttesterIds          []int64 `json:"attester_ids"`            // Attester operator IDs (converted to addresses in repository)
+
+    // Execution data (from IPFSData.ActionData)
+    ExecutionTxHash    string        `json:"execution_tx_hash"`     // Transaction hash from on-chain execution
+    ExecutedAt         time.Time     `json:"executed_at"`           // Execution timestamp
+    TaskOpxActualCost  string        `json:"task_opx_actual_cost"`  // Actual cost in Wei (from TotalFee)
+    ConvertedArguments []interface{} `json:"converted_arguments"`   // Arguments used in execution
+
+    // Proof data (from IPFSData.ProofData)
+    ProofOfTask string `json:"proof_of_task"` // Proof of task (IPFS hash of proof data)
+
+    // Performer data (from IPFSData.PerformerSignature)
+    PerformerAddress string `json:"performer_address"` // Performer's consensus address (converted to keeper address in repository)
+}
+```
+
+**Usage**: Internal type used by taskmonitor to aggregate data from IPFSData and consensus events before updating the database. Combines execution data and consensus data for the final DB update.
+
+### Task Stream Types
+
+#### TaskStreamData
+
+Represents task information for Redis-managed task streams. Used for tracking task lifecycle in Redis streams.
+
+**Location**: `pkg/types/task_stream_types.go`
+
+```go
+type TaskStreamData struct {
+    // Task identification
+    JobID            string  `json:"job_id"`             // Job identifier
+    TaskDefinitionID int     `json:"task_definition_id"` // Task definition ID (1-9)
+    Network          Network `json:"network"`            // Network: mainnet, sepolia, or imua
+
+    // Core task data from schedulers - sent to keeper for execution
+    SendTaskDataToKeeper SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
+
+    // Lifecycle timestamps
+    CreatedAt    time.Time  `json:"created_at"`              // Task creation timestamp
+    DispatchedAt *time.Time `json:"dispatched_at,omitempty"` // When task was dispatched to performer
+    ExecutedAt   *time.Time `json:"executed_at,omitempty"`   // When task was executed by performer
+    ValidatedAt  *time.Time `json:"validated_at,omitempty"`  // When task was validated on-chain
+    CompletedAt  *time.Time `json:"completed_at,omitempty"`  // When task processing completed
+
+    // Retry tracking
+    RetryCount    int        `json:"retry_count"`               // Number of retry attempts
+    LastAttemptAt *time.Time `json:"last_attempt_at,omitempty"` // Last retry attempt timestamp
+
+    // Rebroadcast tracking (for timeout handling)
+    RebroadcastCount  int        `json:"rebroadcast_count,omitempty"`   // Number of rebroadcast attempts
+    LastRebroadcastAt *time.Time `json:"last_rebroadcast_at,omitempty"` // Last rebroadcast attempt time
+
+    // Error tracking
+    LastError string `json:"last_error,omitempty"` // Last error message if any
+}
+```
+
+**Stream Names**:
+
+- `task:dispatched` - Tasks dispatched to performer (pending execution)
+- `task:executed` - Tasks executed, pending validation (waiting for on-chain confirmation)
+- `task:validated` - Tasks validated on-chain (completed)
+- `task:completed` - Completed tasks
+- `task:failed` - Failed tasks (managed by retry rules)
+- `task:retry` - Retry tasks (managed by retry rules)
+
+**Usage**: Shared across taskmonitor and taskdispatcher services for managing task lifecycle in Redis streams. Tasks move through streams as they progress: dispatched → executed → validated → completed.
+
+**Field Notes**:
+
+- `SendTaskDataToKeeper`: Contains all data needed to dispatch task to keeper (task IDs, performer data, target data, trigger data, signatures)
+- Lifecycle timestamps track when task transitions occur
+- Retry and rebroadcast tracking used for timeout and failure handling
+- `LastError` stores error messages for debugging and retry logic
 
 ---
 

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -10,8 +11,8 @@ import (
 
 type JobRepository interface {
 	CreateNewJob(job *types.JobDataEntity) error
-	UpdateJobFromUserInDB(jobID string, job *types.UpdateJobDataFromUserRequest) error
-	UpdateJobStatus(jobID string, status string) error
+	UpdateJobFromUser(jobID string, job *types.UpdateJobDataFromUserRequest) error
+	UpdateJobStatus(jobID string, status types.JobStatus) error
 	GetJobByID(jobID string) (*types.JobDataDTO, error)
 	GetTaskDefinitionIDByJobID(jobID string) (int, error)
 	GetJobsByUserAddressAndChainID(userAddress string, createdChainID string) ([]types.JobDataDTO, error)
@@ -31,15 +32,15 @@ func NewJobRepository(db *database.Connection) JobRepository {
 
 func (r *jobRepository) CreateNewJob(job *types.JobDataEntity) error {
 	err := r.db.Session().Query(CreateJobDataQuery,
-		job.JobID, job.JobTitle, job.TaskDefinitionID, job.CreatedChainID, job.UserAddress,
-		job.LinkJobID, job.ChainStatus, job.SafeAddress, job.Timezone, job.IsImua,
+		job.JobID, job.JobTitle, job.TaskDefinitionID, job.CreatedChainID, strings.ToLower(job.UserAddress),
+		job.LinkJobID, job.ChainStatus, strings.ToLower(job.SafeAddress), job.Timezone,
 		job.JobType, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction,
 		job.CreatedAt, job.UpdatedAt).Exec()
 
 	return err
 }
 
-func (r *jobRepository) UpdateJobFromUserInDB(jobID string, job *types.UpdateJobDataFromUserRequest) error {
+func (r *jobRepository) UpdateJobFromUser(jobID string, job *types.UpdateJobDataFromUserRequest) error {
 	err := r.db.Session().Query(UpdateJobDataFromUserQuery,
 		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), jobID).Exec()
 	if err != nil {
@@ -48,9 +49,9 @@ func (r *jobRepository) UpdateJobFromUserInDB(jobID string, job *types.UpdateJob
 	return nil
 }
 
-func (r *jobRepository) UpdateJobStatus(jobID string, status string) error {
+func (r *jobRepository) UpdateJobStatus(jobID string, status types.JobStatus) error {
 	err := r.db.Session().Query(UpdateJobDataStatusQuery,
-		status, time.Now(), jobID).Exec()
+		string(status), time.Now(), jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update job status")
 	}
@@ -62,7 +63,7 @@ func (r *jobRepository) GetJobByID(jobID string) (*types.JobDataDTO, error) {
 	err := r.db.Session().Query(GetJobDataByJobIDQuery, jobID).Scan(
 		&entity.JobID, &entity.JobTitle, &entity.TaskDefinitionID, &entity.CreatedChainID,
 		&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
-		&entity.Timezone, &entity.IsImua, &entity.JobType, &entity.TimeFrame,
+		&entity.Timezone, &entity.JobType, &entity.TimeFrame,
 		&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
 		&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt)
 
@@ -85,7 +86,7 @@ func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID string) (int, error) {
 
 func (r *jobRepository) GetJobsByUserAddressAndChainID(userAddress string, createdChainID string) ([]types.JobDataDTO, error) {
 	session := r.db.Session()
-	iter := session.Query(GetJobsByUserAddressAndChainIDQuery, userAddress, createdChainID).Iter()
+	iter := session.Query(GetJobsByUserAddressAndChainIDQuery, strings.ToLower(userAddress), createdChainID).Iter()
 
 	var jobs []types.JobDataDTO
 	for {
@@ -93,7 +94,7 @@ func (r *jobRepository) GetJobsByUserAddressAndChainID(userAddress string, creat
 		if !iter.Scan(
 			&entity.JobID, &entity.JobTitle, &entity.TaskDefinitionID, &entity.CreatedChainID,
 			&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
-			&entity.Timezone, &entity.IsImua, &entity.JobType, &entity.TimeFrame,
+			&entity.Timezone, &entity.JobType, &entity.TimeFrame,
 			&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
 			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt,
 		) {
@@ -111,7 +112,7 @@ func (r *jobRepository) GetJobsByUserAddressAndChainID(userAddress string, creat
 
 func (r *jobRepository) GetJobsBySafeAddress(safeAddress string) ([]types.JobDataDTO, error) {
 	session := r.db.Session()
-	iter := session.Query(GetJobsBySafeAddressQuery, safeAddress).Iter()
+	iter := session.Query(GetJobsBySafeAddressQuery, strings.ToLower(safeAddress)).Iter()
 
 	var jobs []types.JobDataDTO
 	for {
@@ -119,7 +120,7 @@ func (r *jobRepository) GetJobsBySafeAddress(safeAddress string) ([]types.JobDat
 		if !iter.Scan(
 			&entity.JobID, &entity.JobTitle, &entity.TaskDefinitionID, &entity.CreatedChainID,
 			&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
-			&entity.Timezone, &entity.IsImua, &entity.JobType, &entity.TimeFrame,
+			&entity.Timezone, &entity.JobType, &entity.TimeFrame,
 			&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
 			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt,
 		) {

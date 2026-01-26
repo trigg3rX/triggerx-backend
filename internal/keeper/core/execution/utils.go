@@ -20,9 +20,9 @@ import (
 
 // isAgentJob checks if the given task definition ID is an agent job (TDI 7, 8, or 9)
 func isAgentJob(taskDefinitionID int) bool {
-	return taskDefinitionID == types.TaskDefTimeBasedAgent ||
-		taskDefinitionID == types.TaskDefEventBasedAgent ||
-		taskDefinitionID == types.TaskDefConditionBasedAgent
+	return taskDefinitionID == 7 ||
+		taskDefinitionID == 8 ||
+		taskDefinitionID == 9
 }
 
 func (e *TaskExecutor) getContractMethodAndABI(ctx context.Context, methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {

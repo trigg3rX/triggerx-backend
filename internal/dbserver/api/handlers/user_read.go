@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) GetUserDataByAddress(c *gin.Context) {
@@ -21,7 +22,7 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	userData, err := h.userRepository.GetUserDataByAddress(userAddress)
+	userData, err := h.userRepository.GetUserData(userAddress)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Warn(c.Request.Context(), "[GetUserDataByAddress] Failed to retrieve user", observability.String("user_address", userAddress), observability.Error(err))
@@ -43,18 +44,18 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	var keeperPoints string
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	userPoints, err := h.userRepository.GetUserPointsByAddress(walletAddress)
+	userPoints, err := h.userRepository.GetUserPoints(walletAddress)
 	trackDBOp(err)
 	if err != nil {
 		userPoints = "0"
 	}
 
-	// keeperPoints, err := h.userRepository.GetKeeperPointsByAddress(walletAddress)
-	// if err != nil {
-	// 	keeperPoints = "0"
-	// }
+	keeperPoints, err = h.keeperRepository.GetKeeperPoints(walletAddress)
+	if err != nil {
+		keeperPoints = "0"
+	}
 
-	totalPoints := userPoints + keeperPoints
+	totalPoints := types.Add(userPoints, keeperPoints)
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_points": totalPoints,

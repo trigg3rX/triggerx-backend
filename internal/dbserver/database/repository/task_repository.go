@@ -3,7 +3,6 @@ package repository
 import (
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 
@@ -13,9 +12,8 @@ import (
 
 type TaskRepository interface {
 	GetTaskDataByID(taskID int64) (*types.TaskDataDTO, error)
-	GetTasksByJobID(jobID string) ([]types.GetTasksByJobID, error)
+	GetTasksByJobID(jobID string) ([]types.TasksByJobIDResponse, error)
 	GetRecentTasks(limit int) ([]types.RecentTaskResponse, error)
-	GetTaskFee(taskID int64) (string, error)
 	GetCreatedChainIDByJobID(jobID string) (string, error)
 }
 
@@ -46,7 +44,7 @@ func (r *taskRepository) GetTaskDataByID(taskID int64) (*types.TaskDataDTO, erro
 		&entity.ExecutedAt, &entity.SubmittedAt, &entity.TaskOpxPredictedCost,
 		&entity.TaskOpxActualCost, &entity.ExecutionTxHash, &entity.SubmissionTxHash,
 		&entity.ConvertedArguments, &entity.TaskPerformerAddress, &entity.TaskAttesterAddress,
-		&entity.ProofOfTask, &entity.IsSuccessful, &entity.IsAccepted, &entity.IsImua)
+		&entity.ProofOfTask, &entity.IsSuccessful, &entity.IsAccepted, &entity.Network)
 	if err != nil {
 		return nil, fmt.Errorf("error getting task data by ID: %w", err)
 	}
@@ -55,43 +53,29 @@ func (r *taskRepository) GetTaskDataByID(taskID int64) (*types.TaskDataDTO, erro
 	return dto, nil
 }
 
-func (r *taskRepository) GetTasksByJobID(jobID string) ([]types.GetTasksByJobID, error) {
+func (r *taskRepository) GetTasksByJobID(jobID string) ([]types.TasksByJobIDResponse, error) {
 	iter := r.db.Session().Query(GetTasksByJobIDQuery, jobID).Iter()
-	var tasks []types.GetTasksByJobID
-	var task types.GetTasksByJobID
-	var entity types.TaskDataEntity
+	var tasks []types.TasksByJobIDResponse
+	var task types.TasksByJobIDResponse
 
 	for iter.Scan(
-		&entity.TaskID, &entity.TaskNumber, &entity.TaskStatus, &entity.TaskError,
-		&entity.TaskDefinitionID, &entity.CreatedAt, &entity.ExecutedAt, &entity.SubmittedAt,
-		&entity.TaskOpxPredictedCost, &entity.TaskOpxActualCost, &entity.ExecutionTxHash,
-		&entity.SubmissionTxHash, &entity.ConvertedArguments, &entity.TaskPerformerAddress,
-		&entity.TaskAttesterAddress, &entity.IsSuccessful, &entity.IsAccepted) {
-
-		// Convert entity to response type
-		task.TaskID = entity.TaskID
-		task.TaskNumber = entity.TaskNumber
-		// Convert TaskOpxActualCost from string to float64 for response
-		if costFloat, err := strconv.ParseFloat(entity.TaskOpxActualCost, 64); err == nil {
-			task.TaskOpXCost = costFloat
-		} else {
-			task.TaskOpXCost = 0
+		&task.TaskID, &task.TaskNumber, &task.TaskStatus, &task.TaskError,
+		&task.CreatedAt, &task.ExecutedAt, &task.SubmittedAt,
+		&task.TaskOpxPredictedCost, &task.TaskOpxActualCost, &task.ExecutionTxHash,
+		&task.ConvertedArguments, &task.TaskPerformerAddress,
+		&task.TaskAttesterAddress, &task.IsSuccessful, &task.IsAccepted) {
+		// Get chain ID and generate TxURL if execution tx hash exists
+		if task.ExecutionTxHash != "" {
+			createdChainID, err := r.GetCreatedChainIDByJobID(jobID)
+			if err == nil {
+				task.TxURL = getExplorerBaseURL(createdChainID) + task.ExecutionTxHash
+			}
 		}
-		task.ExecutionTimestamp = entity.ExecutedAt
-		task.ExecutionTxHash = entity.ExecutionTxHash
-		// TaskPerformerAddress is []string in GetTasksByJobID
-		task.TaskPerformerAddress = entity.TaskPerformerAddress
-		// TaskAttesterAddress (singular) is []string in GetTasksByJobID
-		task.TaskAttesterAddress = entity.TaskAttesterAddress
-		task.IsAccepted = entity.IsAccepted
-		task.TaskStatus = entity.TaskStatus
-		task.TaskError = entity.TaskError
-		task.ConvertedArguments = entity.ConvertedArguments
 		tasks = append(tasks, task)
 	}
 
 	if err := iter.Close(); err != nil {
-		return []types.GetTasksByJobID{}, errors.New("error getting tasks by job ID: " + err.Error())
+		return []types.TasksByJobIDResponse{}, errors.New("error getting tasks by job ID: " + err.Error())
 	}
 
 	return tasks, nil
@@ -103,43 +87,23 @@ func (r *taskRepository) GetRecentTasks(limit int) ([]types.RecentTaskResponse, 
 
 	for {
 		var task types.RecentTaskResponse
-		var entity types.TaskDataEntity
+		var performerAddress []string
 
 		if !iter.Scan(
-			&entity.TaskID, &entity.TaskNumber, &entity.JobID, &entity.TaskDefinitionID,
-			&entity.CreatedAt, &entity.TaskOpxActualCost, &entity.ExecutedAt,
-			&entity.ExecutionTxHash, &entity.TaskPerformerAddress, &entity.TaskAttesterAddress,
-			&entity.TaskStatus, &entity.TaskError, &entity.IsImua,
+			&task.TaskID, &task.TaskNumber, &task.JobID, &task.TaskDefinitionID,
+			&task.CreatedAt, &task.TaskOpXCost, &task.ExecutionTimestamp,
+			&task.ExecutionTxHash, &performerAddress, &task.TaskAttesterAddresses,
+			&task.TaskStatus, &task.TaskError, &task.Network,
 		) {
 			break
 		}
-
-		// Convert entity to response type
-		task.TaskID = entity.TaskID
-		task.TaskNumber = entity.TaskNumber
-		task.JobID = entity.JobID
-		task.TaskDefinitionID = entity.TaskDefinitionID
-		task.CreatedAt = entity.CreatedAt
-		// Convert TaskOpxActualCost from string to float64
-		if costFloat, err := strconv.ParseFloat(entity.TaskOpxActualCost, 64); err == nil {
-			task.TaskOpXCost = costFloat
-		} else {
-			task.TaskOpXCost = 0
-		}
-		task.ExecutionTimestamp = entity.ExecutedAt
-		task.ExecutionTxHash = entity.ExecutionTxHash
 		// Convert list to single string (take first if exists)
-		if len(entity.TaskPerformerAddress) > 0 {
-			task.TaskPerformerAddress = entity.TaskPerformerAddress[0]
+		if len(performerAddress) > 0 {
+			task.TaskPerformerAddress = performerAddress[0]
 		}
-		task.TaskAttesterAddresses = entity.TaskAttesterAddress
-		task.TaskStatus = entity.TaskStatus
-		task.TaskError = entity.TaskError
-		task.IsImua = entity.IsImua
-
 		// Get chain ID and generate TxURL if execution tx hash exists
 		if task.ExecutionTxHash != "" {
-			createdChainID, err := r.GetCreatedChainIDByJobID(entity.JobID)
+			createdChainID, err := r.GetCreatedChainIDByJobID(task.JobID)
 			if err == nil {
 				task.TxURL = getExplorerBaseURL(createdChainID) + task.ExecutionTxHash
 			}
@@ -153,15 +117,6 @@ func (r *taskRepository) GetRecentTasks(limit int) ([]types.RecentTaskResponse, 
 	}
 
 	return tasks, nil
-}
-
-func (r *taskRepository) GetTaskFee(taskID int64) (string, error) {
-	var fee string
-	err := r.db.Session().Query(GetTaskFeeQuery, taskID).Scan(&fee)
-	if err != nil {
-		return "0", fmt.Errorf("error getting task fee: %w", err)
-	}
-	return fee, nil
 }
 
 func (r *taskRepository) GetCreatedChainIDByJobID(jobID string) (string, error) {

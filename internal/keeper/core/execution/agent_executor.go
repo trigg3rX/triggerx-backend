@@ -32,8 +32,8 @@ func (e *TaskExecutor) ExecuteAgentScript(
 ) (*types.AgentScriptOutput, map[string]string, *dockertypes.ExecutionResult, error) {
 	// Execute script in Docker (Phase 1: no env var injection)
 	// For agent jobs (TDI 7, 8, 9), use agent fields
-	scriptURL := targetData.AgentScriptURL
-	scriptLanguage := targetData.AgentScriptLanguage
+	scriptURL := targetData.ExecutionScriptURL
+	scriptLanguage := targetData.ExecutionScriptLanguage
 	if scriptLanguage == "" {
 		scriptLanguage = string(dockertypes.LanguageTS) // Default
 	}

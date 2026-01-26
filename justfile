@@ -29,6 +29,9 @@ db-setup:
 db-stop:
     docker compose -f docker/docker-compose.yaml --profile scylla down
 
+db-cleanup:
+    docker compose -f docker/docker-compose.yaml --profile scylla down -v
+
 # Open CQL shell
 db-shell:
     docker exec -it triggerx-scylla cqlsh

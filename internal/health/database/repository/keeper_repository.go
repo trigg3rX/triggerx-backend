@@ -205,9 +205,9 @@ func (r *keeperRepository) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 
 	err = r.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
-		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ?, network = ? 
+		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ?, network = ?, connection_address = ?
 		WHERE keeper_address = ?`,
-		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, network, keeperHealth.KeeperAddress).Exec()
+		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, time.Now().UTC(), network, keeperHealth.ConnectionAddress, keeperHealth.KeeperAddress).Exec()
 	updateActiveSpan.End()
 	metrics.RecordDBOperationDuration(updateActiveCtx, "update", time.Since(updateActiveStart))
 	if err != nil {
@@ -356,7 +356,8 @@ func (r *keeperRepository) GetVerifiedKeepers(ctx context.Context) ([]types.Keep
 		WHERE registered = true 
 		ALLOW FILTERING`).Iter()
 
-	var keeperName, keeperAddress, consensusAddress, operatorID, version, peerID, network string
+	var keeperName, keeperAddress, consensusAddress, version, peerID, network string
+	var operatorID int
 	var lastCheckedIn time.Time
 
 	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn, &network) {
@@ -368,7 +369,7 @@ func (r *keeperRepository) GetVerifiedKeepers(ctx context.Context) ([]types.Keep
 			Version:          version,
 			PeerID:           peerID,
 			LastCheckedIn:    lastCheckedIn,
-			Network:          network,
+			Network:          types.Network(network),
 		})
 	}
 

@@ -34,8 +34,8 @@ func NewClient(serviceURL string, logger observability.Logger, tracer observabil
 }
 
 // SubmitTask submits a task to the task dispatcher via gRPC
-func (c *Client) SubmitTask(ctx context.Context, request *types.SchedulerTaskRequest) (*types.TaskManagerAPIResponse, error) {
-	var response types.TaskManagerAPIResponse
+func (c *Client) SubmitTask(ctx context.Context, request *types.SchedulerTaskRequest) (*types.TaskDispatcherRPCResponse, error) {
+	var response types.TaskDispatcherRPCResponse
 	if err := c.client.Call(ctx, "submit-task", request, &response); err != nil {
 		return nil, fmt.Errorf("failed to submit task: %w", err)
 	}

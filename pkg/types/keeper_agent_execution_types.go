@@ -2,6 +2,58 @@ package types
 
 import "time"
 
+// AgentScriptOutput is the expected output format from user scripts
+// Used by: keeper/core/execution/agent_executor.go
+type AgentScriptOutput struct {
+	ShouldExecute  bool                      `json:"shouldExecute"`
+	TargetContract string                    `json:"targetContract,omitempty"`
+	Calldata       string                    `json:"calldata,omitempty"`
+	Metadata       AgentScriptOutputMetadata `json:"metadata"`
+	StorageUpdates map[string]string         `json:"storageUpdates,omitempty"` // Phase 1: Storage updates from script
+}
+
+// AgentScriptOutputMetadata contains execution information
+type AgentScriptOutputMetadata struct {
+	Timestamp     int64              `json:"timestamp"`
+	Reason        string             `json:"reason"`
+	GasEstimate   uint64             `json:"gasEstimate,omitempty"`
+	APICalls      []APICallInfo      `json:"apiCalls,omitempty"`
+	ContractCalls []ContractCallInfo `json:"contractCalls,omitempty"`
+}
+
+// APICallInfo records non-deterministic API calls
+type APICallInfo struct {
+	URL         string      `json:"url"`
+	BlockNumber uint64      `json:"blockNumber,omitempty"` // Block at time of call
+	Response    interface{} `json:"response"`
+	StatusCode  int         `json:"statusCode"`
+	Timestamp   int64       `json:"timestamp"`
+}
+
+// ContractCallInfo records deterministic contract/oracle calls
+type ContractCallInfo struct {
+	Contract    string      `json:"contract"`
+	Function    string      `json:"function"`
+	BlockNumber uint64      `json:"blockNumber"` // CRITICAL: for re-execution
+	Response    interface{} `json:"response"`
+	ChainID     string      `json:"chainId"`
+}
+
+// ExecutionProof represents cryptographic proof of script execution
+// Used by: keeper/core/execution/agent_executor.go
+type ExecutionProof struct {
+	ExecutionID      string `json:"execution_id"`
+	JobID            string `json:"job_id"`
+	Timestamp        int64  `json:"timestamp"`
+	ScriptHash       string `json:"script_hash"`
+	InputHash        string `json:"input_hash"`
+	OutputHash       string `json:"output_hash"`
+	Signature        string `json:"signature"`
+	PerformerAddress string `json:"performer_address"`
+}
+
+// DEVNOTE: Below structs are not beign used anywhere yet, but are being kept for future reference
+
 // AgentScriptExecution tracks each execution of an agent script job
 type AgentScriptExecution struct {
 	ExecutionID      string    `json:"execution_id" db:"execution_id"`
@@ -50,77 +102,6 @@ type ExecutionMetadata struct {
 	GasEstimate   uint64             `json:"gasEstimate,omitempty"`
 	APICalls      []APICallInfo      `json:"apiCalls,omitempty"`
 	ContractCalls []ContractCallInfo `json:"contractCalls,omitempty"`
-}
-
-// APICallInfo records non-deterministic API calls
-type APICallInfo struct {
-	URL         string      `json:"url"`
-	BlockNumber uint64      `json:"blockNumber,omitempty"` // Block at time of call
-	Response    interface{} `json:"response"`
-	StatusCode  int         `json:"statusCode"`
-	Timestamp   int64       `json:"timestamp"`
-}
-
-// ContractCallInfo records deterministic contract/oracle calls
-type ContractCallInfo struct {
-	Contract    string      `json:"contract"`
-	Function    string      `json:"function"`
-	BlockNumber uint64      `json:"blockNumber"` // CRITICAL: for re-execution
-	Response    interface{} `json:"response"`
-	ChainID     string      `json:"chainId"`
-}
-
-// ScriptStorage stores persistent key-value pairs for scripts
-type ScriptStorage struct {
-	JobID        string    `json:"job_id" db:"job_id"`
-	StorageKey   string    `json:"storage_key" db:"storage_key"`
-	StorageValue string    `json:"storage_value" db:"storage_value"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
-}
-
-// AgentScriptOutput is the expected output format from user scripts
-type AgentScriptOutput struct {
-	ShouldExecute  bool                      `json:"shouldExecute"`
-	TargetContract string                    `json:"targetContract,omitempty"`
-	Calldata       string                    `json:"calldata,omitempty"`
-	Metadata       AgentScriptOutputMetadata `json:"metadata"`
-	StorageUpdates map[string]string         `json:"storageUpdates,omitempty"` // Phase 1: Storage updates from script
-}
-
-// AgentScriptOutputMetadata contains execution information
-type AgentScriptOutputMetadata struct {
-	Timestamp     int64              `json:"timestamp"`
-	Reason        string             `json:"reason"`
-	GasEstimate   uint64             `json:"gasEstimate,omitempty"`
-	APICalls      []APICallInfo      `json:"apiCalls,omitempty"`
-	ContractCalls []ContractCallInfo `json:"contractCalls,omitempty"`
-}
-
-// ExecutionProof represents cryptographic proof of script execution
-type ExecutionProof struct {
-	ExecutionID      string `json:"execution_id"`
-	JobID            string `json:"job_id"`
-	Timestamp        int64  `json:"timestamp"`
-	ScriptHash       string `json:"script_hash"`
-	InputHash        string `json:"input_hash"`
-	OutputHash       string `json:"output_hash"`
-	Signature        string `json:"signature"`
-	PerformerAddress string `json:"performer_address"`
-}
-
-// ScheduleAgentTaskData is passed from scheduler to task dispatcher
-type ScheduleAgentTaskData struct {
-	TaskID           int64     `json:"task_id"`
-	TaskDefinitionID int       `json:"task_definition_id"`
-	JobID            string    `json:"job_id"`
-	AgentScriptUrl   string    `json:"agent_script_url"`
-	ScriptLanguage   string    `json:"script_language"`
-	ScriptHash       string    `json:"script_hash"`
-	ScheduledTime    time.Time `json:"scheduled_time"`
-	TimeInterval     int64     `json:"time_interval"`
-	ChallengePeriod  int64     `json:"challenge_period"`
-	LastExecutedAt   time.Time `json:"last_executed_at"`
-	ExpirationTime   time.Time `json:"expiration_time"`
 }
 
 // ExecutionChallenge represents a challenge to an execution

@@ -29,28 +29,34 @@ const (
 )
 
 // TaskStreamData represents task information for Redis-managed task streams
-// Used by both taskmonitor and taskdispatcher services
+// Used for tracking task lifecycle in Redis streams
+// Shared across: taskmonitor, taskdispatcher
 type TaskStreamData struct {
-	JobID            string        `json:"job_id"`             // Job identifier (string to match standard across codebase)
-	TaskDefinitionID int           `json:"task_definition_id"` // Task definition ID
-	CreatedAt        time.Time     `json:"created_at"`         // Task creation timestamp
-	Network          KeeperNetwork `json:"network"`            // Network: mainnet, sepolia, or imua
+	// Task identification
+	JobID            string  `json:"job_id"`             // Job identifier
+	TaskDefinitionID int     `json:"task_definition_id"` // Task definition ID (1-9)
+	Network          Network `json:"network"`            // Network: mainnet, sepolia, or imua
 
-	// Execution tracking
+	// Core task data from schedulers - sent to keeper for execution
+	SendTaskDataToKeeper SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
+
+	// Lifecycle timestamps
+	CreatedAt    time.Time  `json:"created_at"`              // Task creation timestamp
+	DispatchedAt *time.Time `json:"dispatched_at,omitempty"` // When task was dispatched to performer
+	ExecutedAt   *time.Time `json:"executed_at,omitempty"`   // When task was executed by performer
+	ValidatedAt  *time.Time `json:"validated_at,omitempty"`  // When task was validated on-chain
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`  // When task processing completed
+
+	// Retry tracking
 	RetryCount    int        `json:"retry_count"`               // Number of retry attempts
 	LastAttemptAt *time.Time `json:"last_attempt_at,omitempty"` // Last retry attempt timestamp
 
-	// Core task data from schedulers
-	SendTaskDataToKeeper SendTaskDataToKeeper `json:"send_task_data_to_keeper"` // Task data to send to keeper
-
-	// Processing status (Redis internal use)
-	DispatchedAt      *time.Time `json:"dispatched_at,omitempty"`       // When task was dispatched
-	ExecutedAt        *time.Time `json:"executed_at,omitempty"`         // When task was executed and sent to aggregator
-	ValidatedAt       *time.Time `json:"validated_at,omitempty"`        // When task was validated on-chain
-	CompletedAt       *time.Time `json:"completed_at,omitempty"`        // When task was completed
+	// Rebroadcast tracking (for timeout handling)
 	RebroadcastCount  int        `json:"rebroadcast_count,omitempty"`   // Number of rebroadcast attempts
 	LastRebroadcastAt *time.Time `json:"last_rebroadcast_at,omitempty"` // Last rebroadcast attempt time
-	LastError         string     `json:"last_error,omitempty"`          // Last error message if any
+
+	// Error tracking
+	LastError string `json:"last_error,omitempty"` // Last error message if any
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling to handle backward compatibility
@@ -89,6 +95,7 @@ func (t *TaskStreamData) UnmarshalJSON(data []byte) error {
 
 // TaskStatusUpdate represents status updates from performers
 // Used for communication between keepers and taskmonitor
+// Shared across: keeper, taskmonitor
 type TaskStatusUpdate struct {
 	TaskID      int64     `json:"task_id"`         // Task identifier
 	JobID       int64     `json:"job_id"`          // Job identifier
@@ -97,22 +104,4 @@ type TaskStatusUpdate struct {
 	UpdatedAt   time.Time `json:"updated_at"`      // Update timestamp
 	Error       string    `json:"error,omitempty"` // Error message if status is failed
 	Data        []byte    `json:"data,omitempty"`  // Additional data
-}
-
-// TaskSubmissionData represents task submission data for consensus events
-// Used by taskmonitor for tracking task submissions
-type TaskSubmissionData struct {
-	TaskID               int64         `json:"task_id"`                 // Task identifier
-	TaskNumber           int64         `json:"task_number"`             // Task number
-	TaskDefinitionID     int           `json:"task_definition_id"`      // Task definition ID
-	IsAccepted           bool          `json:"is_accepted"`             // Whether task was accepted
-	TaskSubmissionTxHash string        `json:"task_submission_tx_hash"` // Transaction hash of task submission
-	PerformerAddress     string        `json:"performer_address"`       // Performer address
-	AttesterIds          []int64       `json:"attester_ids"`            // Attester IDs
-	ExecutionTxHash      string        `json:"execution_tx_hash"`       // Execution transaction hash
-	ExecutionTimestamp   time.Time     `json:"execution_timestamp"`     // Execution timestamp
-	TaskOpxCost          string        `json:"task_opx_cost"`           // Task OPX cost in Wei (as string)
-	ProofOfTask          string        `json:"proof_of_task"`           // Proof of task
-	Data                 string        `json:"data"`                    // Task data
-	ConvertedArguments   []interface{} `json:"converted_arguments"`     // Converted arguments
 }

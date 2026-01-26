@@ -51,128 +51,80 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 		return
 	}
 
-	// Fetch script storage for agent jobs (TDI 7)
-	for i := range tasks {
-		if tasks[i].TaskDefinitionID == types.TaskDefTimeBasedAgent {
-			if s.scriptStorageRepository != nil {
-				storage, err := s.scriptStorageRepository.GetStorageByJobID(tasks[i].TaskTargetData.JobID)
-				if err != nil {
-					s.logger.Warn(ctx, "Failed to get storage for agent job",
-						observability.String("job_id", tasks[i].TaskTargetData.JobID),
-						observability.Error(err))
-					tasks[i].TaskTargetData.ScriptStorage = make(map[string]string) // Continue with empty storage
-				} else {
-					tasks[i].TaskTargetData.ScriptStorage = storage
-				}
-			} else {
-				tasks[i].TaskTargetData.ScriptStorage = make(map[string]string)
-			}
-		}
-	}
-
-	// Filter out expired jobs BEFORE creating task records
-	// This prevents creating tasks for jobs that have already expired
-	// When ExpirationTime is reached, set is_active to false
-	currentTime := time.Now()
-	var validTasks []types.ScheduleTimeTaskData
-	expiredCount := 0
-
-	for _, task := range tasks {
-		if task.ExpirationTime.Before(currentTime) || task.ExpirationTime.Equal(currentTime) {
-			// Mark job as inactive synchronously when expiration time is reached
-			if err := s.timeJobRepository.UpdateTimeJobStatus(task.TaskTargetData.JobID, false); err != nil {
-				s.logger.Warn(ctx, "Failed to mark expired job as inactive",
-					observability.String("job_id", task.TaskTargetData.JobID),
-					observability.Error(err))
-			} else {
-				s.logger.Info(ctx, "Time job marked as inactive due to expiration",
-					observability.String("job_id", task.TaskTargetData.JobID),
-					observability.Time("expiration_time", task.ExpirationTime))
-			}
-
-			expiredCount++
-			metrics.TrackTaskExpired()
-			continue
-		}
-		validTasks = append(validTasks, task)
-	}
-
-	// Use only valid (non-expired) tasks
-	tasks = validTasks
-
-	// Create task data for each task and add task IDs to jobs
-	for i := range tasks {
-		taskID, err := s.taskRepository.CreateTaskDataInDB(ctx, &types.CreateTaskDataRequest{
-			JobID:            tasks[i].TaskTargetData.JobID,
-			TaskDefinitionID: tasks[i].TaskDefinitionID,
-			IsImua:           tasks[i].IsImua,
-		})
-		if err != nil {
-			s.logger.Error(ctx, "Error creating task data", observability.Error(err))
-			continue
-		}
-
-		err = s.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID, taskID)
-		if err != nil {
-			s.logger.Error(ctx, "Error adding task ID to job", observability.Error(err))
-			continue
-		}
-
-		tasks[i].TaskID = taskID
-	}
-
 	pollSpan.SetAttributes(
 		attribute.Int("poll.tasks_found", len(tasks)),
-		attribute.Int("poll.expired_count", expiredCount),
 	)
 	pollSpan.AddEvent("poll.completed", observability.WithEventAttributes(
 		attribute.Int("task_count", len(tasks)),
 	))
 
-	if len(tasks) == 0 {
+	if len(tasks[0].TaskID) == 0 && len(tasks[1].TaskID) == 0 && len(tasks[2].TaskID) == 0 {
 		return
 	}
 
-	s.logger.Debug(ctx, "Found tasks to process", observability.Int("task_count", len(tasks)))
-	metrics.UpdateTasksCreated(float64(len(tasks)))
+	s.logger.Debug(ctx, "Found tasks to process", observability.Int("task_count", (len(tasks[0].TaskID) + len(tasks[1].TaskID) + len(tasks[2].TaskID))))
+	metrics.UpdateTasksCreated(float64(len(tasks[0].TaskID) + len(tasks[1].TaskID) + len(tasks[2].TaskID)))
 	metrics.UpdateTaskBatchSize(float64(s.taskBatchSize))
 
-	// Separate tasks based on is_imua flag
-	var imuaTasks []types.ScheduleTimeTaskData
-	var nonImuaTasks []types.ScheduleTimeTaskData
+	// Process mainnet tasks in batches
+	if len(tasks[0].TaskID) > 0 {
+		s.logger.Debug(ctx, "Processing mainnet tasks in batches", observability.Int("task_count", len(tasks[0].TaskID)))
+		for i := 0; i < len(tasks[0].TaskID); i += s.taskBatchSize {
+			end := i + s.taskBatchSize
+			if end > len(tasks[0].TaskID) {
+				end = len(tasks[0].TaskID)
+			}
 
-	for _, task := range tasks {
-		if task.IsImua {
-			imuaTasks = append(imuaTasks, task)
-		} else {
-			nonImuaTasks = append(nonImuaTasks, task)
+			batch := types.SendTaskDataToKeeper{
+				TaskID:           tasks[0].TaskID[i:end],
+				TargetData:       tasks[0].TargetData[i:end],
+				TriggerData:      tasks[0].TriggerData[i:end],
+				SchedulerID:      s.schedulerID,
+				ManagerSignature: "",
+				Network:          types.NetworkMainnet,
+			}
+			s.processBatch(ctx, batch)
 		}
 	}
 
-	// Process non-imua tasks in batches
-	if len(nonImuaTasks) > 0 {
-		s.logger.Debug(ctx, "Processing non-imua tasks in batches", observability.Int("task_count", len(nonImuaTasks)))
-		for i := 0; i < len(nonImuaTasks); i += s.taskBatchSize {
+	// Process sepolia tasks in batches
+	if len(tasks) > 0 {
+		s.logger.Debug(ctx, "Processing sepolia tasks in batches", observability.Int("task_count", len(tasks[1].TaskID)))
+		for i := 0; i < len(tasks[1].TaskID); i += s.taskBatchSize {
 			end := i + s.taskBatchSize
-			if end > len(nonImuaTasks) {
-				end = len(nonImuaTasks)
+			if end > len(tasks[1].TaskID) {
+				end = len(tasks[1].TaskID)
 			}
 
-			batch := nonImuaTasks[i:end]
+			batch := types.SendTaskDataToKeeper{
+				TaskID:           tasks[1].TaskID[i:end],
+				TargetData:       tasks[1].TargetData[i:end],
+				TriggerData:      tasks[1].TriggerData[i:end],
+				SchedulerID:      s.schedulerID,
+				ManagerSignature: "",
+				Network:          types.NetworkSepolia,
+			}
 			s.processBatch(ctx, batch)
 		}
 	}
 
 	// Process imua tasks in separate batches
-	if len(imuaTasks) > 0 {
-		s.logger.Debug(ctx, "Processing imua tasks in separate batches", observability.Int("task_count", len(imuaTasks)))
-		for i := 0; i < len(imuaTasks); i += s.taskBatchSize {
+	if len(tasks[2].TaskID) > 0 {
+		s.logger.Debug(ctx, "Processing imua tasks in separate batches", observability.Int("task_count", len(tasks[2].TaskID)))
+		for i := 0; i < len(tasks[2].TaskID); i += s.taskBatchSize {
 			end := i + s.taskBatchSize
-			if end > len(imuaTasks) {
-				end = len(imuaTasks)
+			if end > len(tasks[2].TaskID) {
+				end = len(tasks[2].TaskID)
 			}
 
-			batch := imuaTasks[i:end]
+			batch := types.SendTaskDataToKeeper{
+				TaskID:           tasks[2].TaskID[i:end],
+				TargetData:       tasks[2].TargetData[i:end],
+				TriggerData:      tasks[2].TriggerData[i:end],
+				SchedulerID:      s.schedulerID,
+				ManagerSignature: "",
+				Network:          types.NetworkImua,
+			}
 			s.processBatch(ctx, batch)
 		}
 	}

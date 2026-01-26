@@ -57,23 +57,23 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 	if len(jobDataList) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No jobs found for this safe address",
-			"jobs":    []types.JobResponseAPI{},
+			"jobs":    []types.GetJobDataResponse{},
 		})
 		return
 	}
 
-	var jobs []types.JobResponse
+	var jobs []types.GetJobDataResponse
 	var hasErrors bool
 
 	for _, jobData := range jobDataList {
-		jobResponse := types.JobResponse{JobData: jobData}
+		jobResponse := types.GetJobDataResponse{JobData: jobData}
 
 		// Check task_definition_id to determine job type
 		switch jobData.TaskDefinitionID {
 		case 1, 2, 7:
 			// Time-based job (TDI 1, 2) or Agent job (TDI 7)
 			trackDBOp = metrics.TrackDBOperation("read", "time_job")
-			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobData.JobID)
+			timeJobData, err := h.specificJobRepository.GetTimeJobByJobID(jobData.JobID)
 			trackDBOp(err)
 			if err != nil {
 				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting time job data for jobID", observability.String("job_id", jobData.JobID), observability.Error(err))
@@ -85,7 +85,7 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 		case 3, 4, 8:
 			// Event-based job (TDI 3, 4) or Agent job (TDI 8)
 			trackDBOp = metrics.TrackDBOperation("read", "event_job")
-			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobData.JobID)
+			eventJobData, err := h.specificJobRepository.GetEventJobByJobID(jobData.JobID)
 			trackDBOp(err)
 			if err != nil {
 				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting event job data for jobID", observability.String("job_id", jobData.JobID), observability.Error(err))
@@ -97,7 +97,7 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 		case 5, 6, 9:
 			// Condition-based job (TDI 5, 6) or Agent job (TDI 9)
 			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
-			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobData.JobID)
+			conditionJobData, err := h.specificJobRepository.GetConditionJobByJobID(jobData.JobID)
 			trackDBOp(err)
 			if err != nil {
 				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting condition job data for jobID", observability.String("job_id", jobData.JobID), observability.Error(err))
@@ -107,7 +107,7 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 			jobResponse.ConditionJobData = conditionJobData
 
 		default:
-			h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Unknown task definition ID for jobID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.String("job_id", jobData.JobID))
+			h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Unknown task definition ID for jobID", observability.Int("task_definition_id", int(jobData.TaskDefinitionID)), observability.String("job_id", jobData.JobID))
 			hasErrors = true
 			continue
 		}
@@ -115,16 +115,11 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 		jobs = append(jobs, jobResponse)
 	}
 
-	var jobsAPI []types.JobResponseAPI
-	for _, job := range jobs {
-		jobsAPI = append(jobsAPI, types.ConvertJobResponseToAPI(job))
-	}
-
 	// If we have both jobs and errors, return a partial success response
 	if len(jobs) > 0 && hasErrors {
 		c.JSON(http.StatusPartialContent, gin.H{
 			"message": "Some jobs were retrieved successfully, but there were errors with others",
-			"jobs":    jobsAPI,
+			"jobs":    jobs,
 		})
 		return
 	}
@@ -140,7 +135,7 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 
 	// If we have only jobs and no errors, return success
 	c.JSON(http.StatusOK, gin.H{
-		"jobs": jobsAPI,
+		"jobs": jobs,
 	})
 	h.logger.Debug(c.Request.Context(), "[GetJobsBySafeAddress] Retrieved jobs", observability.String("safe_address", safeAddress), observability.Int("jobs_count", len(jobs)))
 }

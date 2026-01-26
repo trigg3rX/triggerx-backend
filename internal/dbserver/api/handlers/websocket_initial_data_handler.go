@@ -57,8 +57,9 @@ func (h *InitialDataHandler) handleJobRoomSubscription(ctx context.Context, room
 		snapshotTasks[i] = websocket.JobTaskSnapshotData{
 			TaskID:               task.TaskID,
 			TaskNumber:           task.TaskNumber,
-			TaskOpXCost:          task.TaskOpXCost,
-			ExecutionTimestamp:   task.ExecutionTimestamp,
+			TaskOpxPredictedCost: task.TaskOpxPredictedCost,
+			TaskOpxActualCost:    task.TaskOpxActualCost,
+			ExecutionTimestamp:   task.ExecutedAt,
 			ExecutionTxHash:      task.ExecutionTxHash,
 			TaskPerformerAddress: task.TaskPerformerAddress,
 			TaskAttesterAddress:  task.TaskAttesterAddress,

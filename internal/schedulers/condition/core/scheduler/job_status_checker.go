@@ -13,22 +13,19 @@ import (
 // It ensures expired jobs are marked as inactive in the database and
 // stops any running workers or unregisters event monitoring for those jobs.
 type JobStatusChecker struct {
-	eventJobRepo     repository.EventJobRepository
-	conditionJobRepo repository.ConditionJobRepository
+	jobRepo     repository.JobRepository
 	scheduler        *ConditionBasedScheduler
 	logger           observability.Logger
 }
 
 // NewJobStatusChecker creates a new JobStatusChecker instance
 func NewJobStatusChecker(
-	eventJobRepo repository.EventJobRepository,
-	conditionJobRepo repository.ConditionJobRepository,
+	jobRepo repository.JobRepository,
 	scheduler *ConditionBasedScheduler,
 	logger observability.Logger,
 ) *JobStatusChecker {
 	return &JobStatusChecker{
-		eventJobRepo:     eventJobRepo,
-		conditionJobRepo: conditionJobRepo,
+		jobRepo:     jobRepo,
 		scheduler:        scheduler,
 		logger:           logger,
 	}
@@ -60,9 +57,6 @@ func (c *JobStatusChecker) checkJobStatuses(ctx context.Context) {
 	var wg sync.WaitGroup
 	currentTime := time.Now()
 
-	c.logger.Info(ctx, "Checking for expired jobs",
-		observability.Time("current_time", currentTime))
-
 	// Check event jobs
 	wg.Add(1)
 	go func() {
@@ -85,7 +79,7 @@ func (c *JobStatusChecker) checkJobStatuses(ctx context.Context) {
 // checkEventJobs checks all active event jobs for expiration
 // For expired jobs, it sets is_active=false in DB and unregisters from Event Monitor Service if still registered
 func (c *JobStatusChecker) checkEventJobs(ctx context.Context, currentTime time.Time) {
-	eventJobs, err := c.eventJobRepo.GetActiveEventJobs()
+	eventJobs, err := c.jobRepo.GetActiveEventJobs()
 	if err != nil {
 		c.logger.Error(ctx, "Failed to fetch active event jobs", observability.Error(err))
 		return
@@ -123,7 +117,7 @@ func (c *JobStatusChecker) checkEventJobs(ctx context.Context, currentTime time.
 				}
 
 				// Set is_active=false in database
-				if err := c.eventJobRepo.UpdateEventJobStatus(jobID, false); err != nil {
+				if err := c.jobRepo.UpdateEventJobStatus(jobID, false); err != nil {
 					c.logger.Error(ctx, "Failed to update event job status in database",
 						observability.String("job_id", jobID),
 						observability.Error(err))
@@ -144,16 +138,13 @@ func (c *JobStatusChecker) checkEventJobs(ctx context.Context, currentTime time.
 		c.logger.Info(ctx, "Event job status check completed",
 			observability.Int("expired_count", expiredCount),
 			observability.Int("total_checked", len(eventJobs)))
-	} else {
-		c.logger.Debug(ctx, "Event job status check completed, no expired jobs",
-			observability.Int("total_checked", len(eventJobs)))
 	}
 }
 
 // checkConditionJobs checks all active condition jobs for expiration
 // For expired jobs, it sets is_active=false in DB and stops the worker if still running
 func (c *JobStatusChecker) checkConditionJobs(ctx context.Context, currentTime time.Time) {
-	conditionJobs, err := c.conditionJobRepo.GetActiveConditionJobs()
+	conditionJobs, err := c.jobRepo.GetActiveConditionJobs()
 	if err != nil {
 		c.logger.Error(ctx, "Failed to fetch active condition jobs", observability.Error(err))
 		return
@@ -191,7 +182,7 @@ func (c *JobStatusChecker) checkConditionJobs(ctx context.Context, currentTime t
 				}
 
 				// Set is_active=false in database
-				if err := c.conditionJobRepo.UpdateConditionJobStatus(jobID, false); err != nil {
+				if err := c.jobRepo.UpdateConditionJobStatus(jobID, false); err != nil {
 					c.logger.Error(ctx, "Failed to update condition job status in database",
 						observability.String("job_id", jobID),
 						observability.Error(err))
@@ -211,9 +202,6 @@ func (c *JobStatusChecker) checkConditionJobs(ctx context.Context, currentTime t
 	if expiredCount > 0 {
 		c.logger.Info(ctx, "Condition job status check completed",
 			observability.Int("expired_count", expiredCount),
-			observability.Int("total_checked", len(conditionJobs)))
-	} else {
-		c.logger.Debug(ctx, "Condition job status check completed, no expired jobs",
 			observability.Int("total_checked", len(conditionJobs)))
 	}
 }

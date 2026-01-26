@@ -28,8 +28,8 @@ func NewPublisher(hub *websocket.Hub, logger observability.Logger) *Publisher {
 }
 
 // PublishTaskCreated publishes a task created event
-func (p *Publisher) PublishTaskCreated(ctx context.Context, taskID int64, jobID string, taskDefinitionID int64, isImua bool, userID string) {
-	event := NewTaskCreatedEvent(taskID, jobID, taskDefinitionID, isImua, userID)
+func (p *Publisher) PublishTaskCreated(ctx context.Context, taskID int64, jobID string, taskDefinitionID int64, network string, userID string) {
+	event := NewTaskCreatedEvent(taskID, jobID, taskDefinitionID, network, userID)
 
 	taskEventData := &websocket.TaskEventData{
 		TaskID:    taskID,

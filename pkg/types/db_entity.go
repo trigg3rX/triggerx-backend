@@ -49,7 +49,6 @@ type JobDataEntity struct {
 	ChainStatus       int       `cql:"chain_status"`        // 0=None, 1=Chain Head, 2=Chain Block
 	SafeAddress       string    `cql:"safe_address"`        // Safe address
 	Timezone          string    `cql:"timezone"`            // User's timezone (e.g., "America/New_York")
-	IsImua            bool      `cql:"is_imua"`             // Special IMUA job type
 	JobType           string    `cql:"job_type"`            // "frontend", "sdk", "template", "contract"
 	TimeFrame         int64     `cql:"time_frame"`          // Job validity duration (seconds)
 	Recurring         bool      `cql:"recurring"`           // Recurring job or one-time
@@ -68,6 +67,7 @@ type JobDataEntity struct {
 type TimeJobDataEntity struct {
 	JobID                  string    `cql:"job_id"`                   // Unique job identifier (varint in CQL, string in Go)
 	TaskDefinitionID       int       `cql:"task_definition_id"`       // Task type (1, 2, or 7)
+	Network                string    `cql:"network"`                  // Network the job is running on
 	ScheduleType           string    `cql:"schedule_type"`            // "cron", "interval", "specific"
 	TimeInterval           int64     `cql:"time_interval"`            // Interval in seconds (for interval type)
 	CronExpression         string    `cql:"cron_expression"`          // Cron expression (for cron type)
@@ -75,20 +75,18 @@ type TimeJobDataEntity struct {
 	Timezone               string    `cql:"timezone"`                 // Timezone selected by user
 	NextExecutionTimestamp time.Time `cql:"next_execution_timestamp"` // Calculated next run time
 
-	// Traditional job fields (TDI 1, 2) - nullable for agent jobs (TDI 7)
+	// Target data fields
 	TargetChainID             string   `cql:"target_chain_id"`              // Chain to execute on
+	// Nullable for TDI 7
 	TargetContractAddress     string   `cql:"target_contract_address"`      // Contract to call
 	TargetFunction            string   `cql:"target_function"`              // Function to invoke
 	ABI                       string   `cql:"abi"`                          // Contract ABI (JSON)
 	ArgType                   int      `cql:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
 	Arguments                 []string `cql:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
-	DynamicArgumentsScriptURL string   `cql:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-
-	// Agent job fields (TDI 7) - nullable for traditional jobs (TDI 1, 2)
-	AgentScriptURL      string `cql:"agent_script_url"`      // IPFS URL of the agent script
-	AgentScriptLanguage string `cql:"agent_script_language"` // Script language: 'ts', 'go', 'python', 'javascript'
-	AgentScriptHash     string `cql:"agent_script_hash"`     // keccak256(scriptCode) for verification
-	AgentTargetChainID  int    `cql:"agent_target_chain_id"` // Default chain ID (script can override)
+	// Nullable for TDI 1
+	ExecutionScriptURL      string   `cql:"execution_script_url"`         // IPFS CID for script
+	ExecutionScriptLanguage string   `cql:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash     string   `cql:"execution_script_hash"`        // keccak256(scriptCode) for verification
 	MaxExecutionTime    int    `cql:"max_execution_time"`    // Script timeout in seconds (default 60)
 	ChallengePeriod     int64  `cql:"challenge_period"`      // Challenge period in seconds (default 21600 = 6 hours)
 
@@ -104,6 +102,7 @@ type TimeJobDataEntity struct {
 type EventJobDataEntity struct {
 	JobID            string `cql:"job_id"`             // Unique job identifier (varint in CQL, string in Go)
 	TaskDefinitionID int    `cql:"task_definition_id"` // Task type (3, 4, or 8)
+	Network          string `cql:"network"`          // Network the job is running on
 	Recurring        bool   `cql:"recurring"`          // Trigger on every event in time frame or once
 
 	// Event trigger fields (common for all)
@@ -113,20 +112,18 @@ type EventJobDataEntity struct {
 	EventFilterParaName    string `cql:"event_filter_para_name"`   // Indexed parameter to filter (e.g., "to")
 	EventFilterValue       string `cql:"event_filter_value"`       // Filter value (e.g., specific address)
 
-	// Traditional job fields (TDI 3, 4) - nullable for agent jobs (TDI 8)
+	// Target data fields
 	TargetChainID             string   `cql:"target_chain_id"`              // Chain to execute on
+	// Nullable for TDI 8
 	TargetContractAddress     string   `cql:"target_contract_address"`      // Contract to call
 	TargetFunction            string   `cql:"target_function"`              // Function to invoke
 	ABI                       string   `cql:"abi"`                          // Contract ABI (JSON)
 	ArgType                   int      `cql:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
 	Arguments                 []string `cql:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
-	DynamicArgumentsScriptURL string   `cql:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-
-	// Agent job fields (TDI 8) - nullable for traditional jobs (TDI 3, 4)
-	AgentScriptURL      string `cql:"agent_script_url"`      // IPFS URL of the agent script
-	AgentScriptLanguage string `cql:"agent_script_language"` // Script language: 'ts', 'go', 'python', 'javascript'
-	AgentScriptHash     string `cql:"agent_script_hash"`     // keccak256(scriptCode) for verification
-	AgentTargetChainID  int    `cql:"agent_target_chain_id"` // Default chain ID (script can override)
+	// Nullable for TDI 1
+	ExecutionScriptURL      string   `cql:"execution_script_url"`         // IPFS CID for script
+	ExecutionScriptLanguage string   `cql:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash     string   `cql:"execution_script_hash"`        // keccak256(scriptCode) for verification
 	MaxExecutionTime    int    `cql:"max_execution_time"`    // Script timeout in seconds (default 60)
 	ChallengePeriod     int64  `cql:"challenge_period"`      // Challenge period in seconds (default 21600 = 6 hours)
 
@@ -142,6 +139,7 @@ type EventJobDataEntity struct {
 type ConditionJobDataEntity struct {
 	JobID            string `cql:"job_id"`             // Unique job identifier (varint in CQL, string in Go)
 	TaskDefinitionID int    `cql:"task_definition_id"` // Task type (5, 6, or 9)
+	Network          string `cql:"network"`          // Network the job is running on
 	Recurring        bool   `cql:"recurring"`          // Trigger on every condition match or once
 
 	// Condition trigger fields (common for all)
@@ -152,20 +150,18 @@ type ConditionJobDataEntity struct {
 	ValueSourceURL   string  `cql:"value_source_url"`   // API URL or Websocket URL
 	SelectedKeyRoute string  `cql:"selected_key_route"` // JSON path for API responses
 
-	// Traditional job fields (TDI 5, 6) - nullable for agent jobs (TDI 9)
+	// Target data fields
 	TargetChainID             string   `cql:"target_chain_id"`              // Chain to execute on
+	// Nullable for TDI 9
 	TargetContractAddress     string   `cql:"target_contract_address"`      // Contract to call
 	TargetFunction            string   `cql:"target_function"`              // Function to invoke
 	ABI                       string   `cql:"abi"`                          // Contract ABI (JSON)
 	ArgType                   int      `cql:"arg_type"`                     // 0=None, 1=Static, 2=Dynamic
 	Arguments                 []string `cql:"arguments"`                    // Static arguments (if ArgType=1, list<text> in CQL)
-	DynamicArgumentsScriptURL string   `cql:"dynamic_arguments_script_url"` // IPFS CID for dynamic arg script
-
-	// Agent job fields (TDI 9) - nullable for traditional jobs (TDI 5, 6)
-	AgentScriptURL      string `cql:"agent_script_url"`      // IPFS URL of the agent script
-	AgentScriptLanguage string `cql:"agent_script_language"` // Script language: 'ts', 'go', 'python', 'javascript'
-	AgentScriptHash     string `cql:"agent_script_hash"`     // keccak256(scriptCode) for verification
-	AgentTargetChainID  int    `cql:"agent_target_chain_id"` // Default chain ID (script can override)
+	// Nullable for TDI 1
+	ExecutionScriptURL      string   `cql:"execution_script_url"`         // IPFS CID for script
+	ExecutionScriptLanguage string   `cql:"execution_script_language"`    // Script language: 'ts', 'go', 'python', 'javascript'
+	ExecutionScriptHash     string   `cql:"execution_script_hash"`        // keccak256(scriptCode) for verification
 	MaxExecutionTime    int    `cql:"max_execution_time"`    // Script timeout in seconds (default 60)
 	ChallengePeriod     int64  `cql:"challenge_period"`      // Challenge period in seconds (default 21600 = 6 hours)
 
@@ -180,7 +176,7 @@ type ConditionJobDataEntity struct {
 type TaskDataEntity struct {
 	TaskID               int64     `cql:"task_id"`                 // Unique task ID (bigint in CQL, auto-increment)
 	TaskNumber           int64     `cql:"task_number"`             // Task sequence number on the contract
-	TaskStatus           string    `cql:"task_status"`             // "pending", "in-queue", "running", "completed", "failed", "expired", "deleted"
+	TaskStatus           string    `cql:"task_status"`             // "created", "dispatched", "executed", "completed" , "failed"
 	TaskError            string    `cql:"task_error"`              // Error message if task failed
 	JobID                string    `cql:"job_id"`                  // Reference to job (varint in CQL, string in Go)
 	TaskDefinitionID     int       `cql:"task_definition_id"`      // Task definition ID (1-9)
@@ -197,7 +193,7 @@ type TaskDataEntity struct {
 	ProofOfTask          string    `cql:"proof_of_task"`           // Cryptographic proof (IPFS CID)
 	IsSuccessful         bool      `cql:"is_successful"`           // Execution success
 	IsAccepted           bool      `cql:"is_accepted"`             // Consensus accepted
-	IsImua               bool      `cql:"is_imua"`                 // IMUA task type
+	Network              string    `cql:"network"`                 // Network the task is running on
 }
 
 // KeeperDataEntity represents the keeper_data table for Keeper node registry.
@@ -207,7 +203,7 @@ type KeeperDataEntity struct {
 	KeeperName        string      `cql:"keeper_name"`        // Human-readable keeper name
 	RewardsAddress    string      `cql:"rewards_address"`    // Address for reward payouts
 	ConsensusAddress  string      `cql:"consensus_address"`  // Consensus layer address
-	OperatorID        int64       `cql:"operator_id"`        // Unique operator ID on the contract (int64 in CQL)
+	OperatorID        int         `cql:"operator_id"`        // Unique operator ID on the contract (int64 in CQL)
 	VotingPower       string      `cql:"voting_power"`       // Voting power (Wei-based stake)
 	Registered        bool        `cql:"registered"`         // Registered on-chain
 	RegisteredAt      []time.Time `cql:"registered_at"`      // List of registration timestamps (list<timestamp> in CQL)

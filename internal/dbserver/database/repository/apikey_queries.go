@@ -3,51 +3,42 @@ package repository
 // Create Queries
 const (
 	CreateApiKeyQuery = `
-			INSERT INTO triggerx.apikeys (key, owner, is_active, rate_limit, success_count, failed_count, last_used, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO triggerx.apikeys (
+			key, owner, is_active, rate_limit, success_count, failed_count, last_used, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
 // Update Queries
 const (
 	UpdateApiKeyQuery = `
-			UPDATE triggerx.apikeys 
-			SET is_active = ?, rate_limit = ? 
-			WHERE key = ?`
+		UPDATE triggerx.apikeys 
+		SET is_active = ?, rate_limit = ? 
+		WHERE key = ?`
 
 	UpdateApiKeyLastUsedQuery = `
-			UPDATE triggerx.apikeys 
-			SET last_used = ?, success_count = ?, failed_count = ? 
-			WHERE key = ?`
+		UPDATE triggerx.apikeys 
+		SET last_used = ?, success_count = ?, failed_count = ? 
+		WHERE key = ?`
 
 	// Delete Queries
 	DeleteApiKeyQuery = `
-	DELETE FROM triggerx.apikeys WHERE key = ?`
+		DELETE FROM triggerx.apikeys WHERE key = ?`
 )
 
 // Read Queries
 const (
 	GetApiKeyDataByOwnerQuery = `
-			SELECT key, owner, is_active, rate_limit, success_count, failed_count, last_used, created_at 
-			FROM triggerx.apikeys 
-			WHERE owner = ? ALLOW FILTERING`
+		SELECT key, owner, is_active, rate_limit, success_count, failed_count, last_used, created_at 
+		FROM triggerx.apikeys 
+		WHERE owner = ? ALLOW FILTERING`
 
 	GetApiKeyDataByApiKeyQuery = `
-			SELECT key, owner, is_active, rate_limit, success_count, failed_count, last_used, created_at 
-			FROM triggerx.apikeys 
-			WHERE key = ? ALLOW FILTERING`
+		SELECT key, owner, is_active, rate_limit, success_count, failed_count, last_used, created_at 
+		FROM triggerx.apikeys 
+		WHERE key = ?`
 
-	GetApiKeyCallCountQuery = `
-			SELECT success_count, failed_count 
-			FROM triggerx.apikeys 
-			WHERE key = ? ALLOW FILTERING`
-
-	GetApiKeyByOwnerQuery = `
-			SELECT key
-			FROM triggerx.apikeys 
-			WHERE owner = ? ALLOW FILTERING`
-
-	GetApiOwnerByApiKeyQuery = `
-			SELECT owner
-			FROM triggerx.apikeys 
-			WHERE key = ? ALLOW FILTERING`
+	GetApiKeyUseCounterQuery = `
+		SELECT success_count, failed_count
+		FROM triggerx.apikeys 
+		WHERE key = ?`
 )

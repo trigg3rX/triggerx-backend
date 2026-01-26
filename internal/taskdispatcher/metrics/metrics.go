@@ -313,7 +313,7 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 }
 
 // TrackKeeperDispatch tracks a task dispatch to keeper
-func TrackKeeperDispatch(ctx context.Context, success bool, network types.KeeperNetwork, duration time.Duration) {
+func TrackKeeperDispatch(ctx context.Context, success bool, network types.Network, duration time.Duration) {
 	status := "success"
 	if !success {
 		status = "error"

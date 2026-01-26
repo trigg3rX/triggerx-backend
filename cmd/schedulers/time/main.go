@@ -62,8 +62,6 @@ func main() {
 
 	// Initialize repositories
 	timeJobRepo := repository.NewTimeJobRepository(dbConn)
-	scriptStorageRepo := repository.NewScriptStorageRepository(dbConn)
-	taskRepo := repository.NewTaskRepository(dbConn)
 	logger.Info(ctx, "[3/7] Dependency: Repositories Initialised")
 
 	// Initialize Redis client (optional, for polling state recovery)
@@ -92,7 +90,7 @@ func main() {
 	logger.Info(ctx, "[5/7] Dependency: Task Dispatcher Client Initialised")
 
 	// Initialize time-based scheduler (includes both traditional TDI 1,2 and agent TDI 7 jobs)
-	timeScheduler, err := scheduler.NewTimeBasedScheduler(logger, tracer, obsMetrics, timeJobRepo, scriptStorageRepo, taskRepo, taskDispatcherClient)
+	timeScheduler, err := scheduler.NewTimeBasedScheduler(logger, tracer, obsMetrics, timeJobRepo, taskDispatcherClient)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize time-based scheduler", observability.Error(err))
 	}

@@ -25,8 +25,6 @@ type TimeBasedScheduler struct {
 	logger                  observability.Logger
 	tracer                  observability.Tracer
 	timeJobRepository       repository.TimeJobRepository
-	taskRepository          repository.TaskRepository
-	scriptStorageRepository repository.ScriptStorageRepository
 	taskDispatcherClient    *taskdispatcher.Client // RPC client for task dispatcher
 	metrics                 *metrics.Collector
 	schedulerID             string
@@ -55,8 +53,6 @@ func NewTimeBasedScheduler(
 	tracer observability.Tracer,
 	obsMetrics observability.Metrics,
 	timeJobRepo repository.TimeJobRepository,
-	scriptStorageRepo repository.ScriptStorageRepository,
-	taskRepo repository.TaskRepository,
 	taskDispatcherClient *taskdispatcher.Client,
 ) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,8 +63,6 @@ func NewTimeBasedScheduler(
 		logger:                  logger,
 		tracer:                  tracer,
 		timeJobRepository:       timeJobRepo,
-		taskRepository:          taskRepo,
-		scriptStorageRepository: scriptStorageRepo,
 		taskDispatcherClient:    taskDispatcherClient,
 		metrics:                 metrics.NewCollector(obsMetrics),
 		schedulerID:             config.GetSchedulerID(),

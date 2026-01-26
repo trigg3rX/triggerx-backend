@@ -47,7 +47,7 @@ func NewTaskDispatcher(
 // SubmitTaskFromScheduler is the core business method used by the RPC handler.
 // It receives the scheduler request, optionally enqueues to Redis (skipped for now),
 // and forwards the data to the aggregator using the same approach as send_task.go.
-func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types.SchedulerTaskRequest) (*types.TaskManagerAPIResponse, error) {
+func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types.SchedulerTaskRequest) (*types.TaskDispatcherRPCResponse, error) {
 	// Trace context is automatically extracted by gRPC interceptor
 	ctx, span := d.tracer.Start(ctx, "task.dispatch",
 		observability.WithSpanKind(trace.SpanKindServer),
@@ -137,7 +137,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	d.logger.Info(ctx, "Task forwarded to performer", observability.Int64("task_id", req.SendTaskDataToKeeper.TaskID[0]))
 
 	span.SetStatus(codes.Ok, "task dispatched successfully")
-	return &types.TaskManagerAPIResponse{
+	return &types.TaskDispatcherRPCResponse{
 		Success:   true,
 		TaskID:    []int64{req.SendTaskDataToKeeper.TaskID[0]},
 		Message:   "Task submitted successfully",

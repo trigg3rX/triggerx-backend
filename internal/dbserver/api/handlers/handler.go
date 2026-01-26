@@ -27,9 +27,7 @@ type Handler struct {
 	config                   NotificationConfig
 	dockerExecutor           dockerexecutor.DockerExecutorAPI
 	jobRepository            repository.JobRepository
-	timeJobRepository        repository.TimeJobRepository
-	eventJobRepository       repository.EventJobRepository
-	conditionJobRepository   repository.ConditionJobRepository
+	specificJobRepository    repository.SpecificJobRepository
 	taskRepository           repository.TaskRepository
 	userRepository           repository.UserRepository
 	keeperRepository         repository.KeeperRepository
@@ -53,9 +51,7 @@ func NewHandler(db *database.Connection, logger observability.Logger, tracer obs
 		config:                   config,
 		dockerExecutor:           dockerExecutor,
 		jobRepository:            repository.NewJobRepository(db),
-		timeJobRepository:        repository.NewTimeJobRepository(db),
-		eventJobRepository:       repository.NewEventJobRepository(db),
-		conditionJobRepository:   repository.NewConditionJobRepository(db),
+		specificJobRepository:    repository.NewSpecificJobRepository(db),
 		taskRepository:           repository.NewTaskRepository(db),
 		userRepository:           repository.NewUserRepository(db),
 		keeperRepository:         repository.NewKeeperRepository(db),

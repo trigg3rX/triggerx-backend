@@ -33,6 +33,7 @@ type ConditionBasedScheduler struct {
 	chainClients         map[string]*nodeclient.NodeClient // chainID -> client
 	HTTPClient           *httppkg.HTTPClient
 	taskRepository       repository.TaskRepository
+	jobRepository   repository.JobRepository
 	taskDispatcherClient *taskdispatcher.Client // RPC client for task dispatcher
 	eventMonitorClient   *eventmonitor.Client   // Event Monitor Service gRPC client
 	metrics              *metrics.Collector
@@ -49,8 +50,7 @@ func NewConditionBasedScheduler(
 	tracer observability.Tracer,
 	obsMetrics observability.Metrics,
 	taskRepo repository.TaskRepository,
-	eventJobRepo repository.EventJobRepository,
-	conditionJobRepo repository.ConditionJobRepository,
+	jobRepo repository.JobRepository,
 	taskDispatcherClient *taskdispatcher.Client,
 	eventMonitorClient *eventmonitor.Client,
 ) (*ConditionBasedScheduler, error) {
@@ -78,6 +78,7 @@ func NewConditionBasedScheduler(
 		chainClients:         make(map[string]*nodeclient.NodeClient),
 		HTTPClient:           httpClient,
 		taskRepository:       taskRepo,
+		jobRepository:   jobRepo,
 		taskDispatcherClient: taskDispatcherClient,
 		eventMonitorClient:   eventMonitorClient,
 		metrics:              metrics.NewCollector(obsMetrics),
@@ -91,7 +92,7 @@ func NewConditionBasedScheduler(
 	scheduler.metrics.Start()
 
 	// Initialize job status checker with scheduler reference for stopping workers/unregistering events
-	scheduler.jobStatusChecker = NewJobStatusChecker(eventJobRepo, conditionJobRepo, scheduler, logger)
+	scheduler.jobStatusChecker = NewJobStatusChecker(jobRepo, scheduler, logger)
 
 	scheduler.logger.Info(ctx, "Condition-based scheduler initialized",
 		observability.Int("max_workers", scheduler.maxWorkers),
