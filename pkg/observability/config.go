@@ -18,7 +18,7 @@ var (
 type ServiceName string
 
 const (
-	// AggregatorService         ServiceName = "aggregator"
+	AggregatorService         ServiceName = "aggregator"
 	ServerService             ServiceName = "api-server"
 	HealthService             ServiceName = "health"
 	TimeSchedulerService      ServiceName = "time-scheduler"
