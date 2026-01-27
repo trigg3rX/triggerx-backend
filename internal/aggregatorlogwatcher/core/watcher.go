@@ -207,15 +207,18 @@ func (w *LogWatcher) processLogEntry(entry *LogEntry) {
 	approvedPattern := regexp.MustCompile(`has been approved and submitted.*on chain (\d+).*tx: (0x[a-fA-F0-9]+)`)
 
 	var chainID, txHash string
+	var isRejected bool
 	var found bool
 
 	if matches := rejectedPattern.FindStringSubmatch(entry.Message); len(matches) == 3 {
 		chainID = matches[1]
 		txHash = matches[2]
+		isRejected = true
 		found = true
 	} else if matches := approvedPattern.FindStringSubmatch(entry.Message); len(matches) == 3 {
 		chainID = matches[1]
 		txHash = matches[2]
+		isRejected = false
 		found = true
 	}
 
@@ -240,12 +243,12 @@ func (w *LogWatcher) processLogEntry(entry *LogEntry) {
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
-		w.processTransaction(txHash, chainID)
+		w.processTransaction(txHash, chainID, isRejected)
 	}()
 }
 
 // processTransaction sends transaction to eventmonitor for processing
-func (w *LogWatcher) processTransaction(txHash, chainID string) {
+func (w *LogWatcher) processTransaction(txHash, chainID string, isRejected bool) {
 	ctx, span := w.tracer.Start(w.ctx, "aggregator.log.transaction.processed",
 		observability.WithAttributes(
 			attribute.String("tx.hash", txHash),
@@ -256,11 +259,13 @@ func (w *LogWatcher) processTransaction(txHash, chainID string) {
 
 	w.logger.Info(ctx, "Processing transaction from aggregator log",
 		observability.String("tx_hash", txHash),
-		observability.String("chain_id", chainID))
+		observability.String("chain_id", chainID),
+		observability.Bool("is_rejected", isRejected))
 
 	req := &types.ProcessTransactionRequest{
-		TxHash:  txHash,
-		ChainID: chainID,
+		TxHash:     txHash,
+		ChainID:    chainID,
+		IsRejected: isRejected,
 	}
 
 	resp, err := w.eventMonitorClient.ProcessTransaction(ctx, req)

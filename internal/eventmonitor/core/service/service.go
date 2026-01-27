@@ -121,10 +121,10 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 
 // Start starts the service
 func (s *Service) Start() error {
-	// Start permanent poller for Base networks
-	if err := s.permanentPoller.Start(); err != nil {
-		return fmt.Errorf("failed to start permanent poller: %w", err)
-	}
+	// Start permanent poller for Base networks (logwatcher gRPC call is being used instead)
+	// if err := s.permanentPoller.Start(); err != nil {
+	// 	return fmt.Errorf("failed to start permanent poller: %w", err)
+	// }
 
 	// Start monitoring registry changes
 	go s.monitorRegistry()
@@ -139,10 +139,10 @@ func (s *Service) Stop() {
 	// Cancel context
 	s.cancel()
 
-	// Stop permanent poller
-	if s.permanentPoller != nil {
-		s.permanentPoller.Stop()
-	}
+	// Stop permanent poller (logwatcher gRPC call is being used instead)
+	// if s.permanentPoller != nil {
+	// 	s.permanentPoller.Stop()
+	// }
 
 	// Stop all workers
 	s.mu.Lock()
@@ -226,6 +226,11 @@ func (s *Service) Unregister(requestID string) error {
 // GetRegistryManager returns the registry manager
 func (s *Service) GetRegistryManager() *registry.RegistryManager {
 	return s.registryManager
+}
+
+// ProcessTransaction processes a transaction and extracts TaskSubmitted/TaskRejected events
+func (s *Service) ProcessTransaction(ctx context.Context, txHash, chainID string, isRejected bool) (string, error) {
+	return s.permanentPoller.ProcessTransaction(ctx, txHash, chainID, isRejected)
 }
 
 // startWorker starts a worker for a registry entry

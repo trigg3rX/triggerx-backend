@@ -175,7 +175,7 @@ func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 	methods := handler.GetMethods()
 
 	assert.Len(t, methods, 1)
-	assert.Equal(t, "report-task-status", methods[0].Name)
+	assert.Equal(t, "report-task-consensus-status", methods[0].Name)
 	assert.NotNil(t, methods[0].RequestType)
 	assert.NotNil(t, methods[0].ResponseType)
 }

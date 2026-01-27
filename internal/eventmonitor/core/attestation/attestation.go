@@ -1,11 +1,13 @@
 package attestation
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+
 	// Contract bindings
 	contractAttestationCenter "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
 )
@@ -186,8 +189,9 @@ func (p *PermanentPoller) startChainPoller(chainID, chainName, contractAddr stri
 		observability.String("contract_address", contractAddr),
 		observability.Uint64("start_block", lastBlock))
 
-	// Poll every minute
-	ticker := time.NewTicker(1 * time.Minute)
+	// Poll at configured interval
+	pollInterval := config.GetPollInterval()
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -297,13 +301,18 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 		return fmt.Errorf("failed to convert log: %w", err)
 	}
 
-	// Parse event data to get the IPFS CID from the data field
+	// Parse event data to get the IPFS CID from proofOfTask
 	parsedData, err := p.parseEventData(event, lg)
 	if err != nil {
 		return fmt.Errorf("failed to parse event data: %w", err)
 	}
 
-	// Extract IPFS CID from the data field
+	// Log parsed data for debugging
+	p.logger.Debug(p.ctx, "Parsed event data",
+		observability.String("tx_hash", lg.TxHash.Hex()),
+		observability.Any("parsed_data_keys", getMapKeys(parsedData)))
+
+	// Extract IPFS CID from proofOfTask
 	ipfsCID, err := p.extractIPFSCID(parsedData)
 	if err != nil {
 		return fmt.Errorf("failed to extract IPFS CID: %w", err)
@@ -355,7 +364,6 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 
 	// Determine if task was accepted based on event name
 	isAccepted := eventName != "TaskRejected"
-	
 
 	// Send to TaskMonitor via RPC with IPFS data
 	if err := p.taskMonitorClient.ReportTaskConsensusStatus(ctx, types.ReportTaskConsensusStatusRequest{
@@ -386,24 +394,66 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 	return nil
 }
 
-// extractIPFSCID extracts the IPFS CID from the parsed event data
+// extractIPFSCID extracts the IPFS CID from the proofOfTask field (keeper-style decode).
 func (p *PermanentPoller) extractIPFSCID(parsedData map[string]interface{}) (string, error) {
-	// The data field contains the IPFS CID as bytes
-	switch v := parsedData["data"].(type) {
+	v, exists := parsedData["proofOfTask"]
+	if !exists {
+		return "", fmt.Errorf("proofOfTask field not found in parsed event data")
+	}
+	cid, err := p.decodeValueToCID("proofOfTask", v)
+	if err != nil {
+		return "", fmt.Errorf("decode proofOfTask: %w", err)
+	}
+	if cid == "" {
+		return "", fmt.Errorf("proofOfTask decoded to empty CID")
+	}
+	p.logger.Debug(p.ctx, "Using CID from proofOfTask",
+		observability.String("cid", cid))
+	return cid, nil
+}
+
+// decodeValueToCID decodes a value to IPFS CID using keeper-style logic:
+// hex string (0x-prefix) -> hex.DecodeString(s[2:]) -> trim null/space -> CID;
+// []byte -> trim null/space -> CID; plain string -> trim -> CID.
+// Returns ("", nil) when decoded but empty (caller may try next field).
+func (p *PermanentPoller) decodeValueToCID(fieldName string, v interface{}) (string, error) {
+	switch val := v.(type) {
 	case []byte:
-		return string(v), nil
+		trimmed := bytes.TrimRight(val, "\x00")
+		trimmed = bytes.TrimSpace(trimmed)
+		cid := strings.TrimRight(string(trimmed), "\x00")
+		cid = strings.TrimSpace(cid)
+		p.logger.Debug(p.ctx, "Decoded field for CID",
+			observability.String("field", fieldName),
+			observability.String("type", "[]byte"),
+			observability.Int("original_len", len(val)),
+			observability.Int("cid_len", len(cid)))
+		return cid, nil
 	case string:
-		// If it's a hex string, decode it
-		if len(v) > 2 && v[:2] == "0x" {
-			decoded, err := hex.DecodeString(v[2:])
+		if len(val) > 2 && val[:2] == "0x" {
+			decoded, err := hex.DecodeString(val[2:])
 			if err != nil {
-				return "", fmt.Errorf("failed to decode hex data: %w", err)
+				return "", fmt.Errorf("hex decode failed: %w", err)
 			}
-			return string(decoded), nil
+			trimmed := bytes.TrimRight(decoded, "\x00")
+			trimmed = bytes.TrimSpace(trimmed)
+			cid := strings.TrimRight(string(trimmed), "\x00")
+			cid = strings.TrimSpace(cid)
+			p.logger.Debug(p.ctx, "Decoded field for CID",
+				observability.String("field", fieldName),
+				observability.String("type", "hex"),
+				observability.Int("cid_len", len(cid)))
+			return cid, nil
 		}
-		return v, nil
+		cid := strings.TrimSpace(val)
+		cid = strings.TrimRight(cid, "\x00")
+		p.logger.Debug(p.ctx, "Decoded field for CID",
+			observability.String("field", fieldName),
+			observability.String("type", "string"),
+			observability.Int("cid_len", len(cid)))
+		return cid, nil
 	default:
-		return "", fmt.Errorf("data field has unexpected type: %T", v)
+		return "", fmt.Errorf("unexpected type %T", v)
 	}
 }
 
@@ -451,6 +501,269 @@ func (p *PermanentPoller) parseEventData(event abi.Event, lg ethtypes.Log) (map[
 	}
 
 	return parsedData, nil
+}
+
+// getMapKeys returns the keys of a map as a slice (for logging)
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// ProcessTransaction processes a transaction by hash and extracts TaskSubmitted/TaskRejected events.
+// When isRejected is non-nil (from aggregator log), it overrides chain-derived event type so TaskRejected is sent correctly.
+func (p *PermanentPoller) ProcessTransaction(ctx context.Context, txHash, chainID string, isRejected bool) (string, error) {
+	// Get chain name
+	chainName := getChainName(chainID)
+
+	// Get contract address for the chain
+	contractAddr := getContractAddress(chainID)
+	if contractAddr == "" {
+		return "", fmt.Errorf("contract address not configured for chain: %s", chainID)
+	}
+
+	// Create node client for the chain
+	rpcURLs := config.GetChainRPCUrls()
+	rpcURL, exists := rpcURLs[chainID]
+	if !exists {
+		return "", fmt.Errorf("RPC URL not found for chain: %s", chainID)
+	}
+
+	nodeCfg := &nodeclient.Config{
+		APIKey:         "",
+		BaseURL:        rpcURL,
+		RequestTimeout: 30 * time.Second,
+		Logger:         p.logger,
+	}
+
+	client, err := nodeclient.NewNodeClient(nodeCfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to create node client: %w", err)
+	}
+	defer client.Close()
+
+	// Get ABI for AttestationCenter
+	attABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi()
+	if err != nil {
+		return "", fmt.Errorf("failed to load AttestationCenter ABI: %w", err)
+	}
+
+	// Get event signatures
+	taskSubmittedEvent, exists := attABI.Events["TaskSubmitted"]
+	if !exists {
+		return "", fmt.Errorf("TaskSubmitted event not found in ABI")
+	}
+
+	taskRejectedEvent, exists := attABI.Events["TaskRejected"]
+	if !exists {
+		return "", fmt.Errorf("TaskRejected event not found in ABI")
+	}
+
+	// Get transaction receipt
+	receipt, err := client.EthGetTransactionReceipt(ctx, txHash)
+	if err != nil {
+		return "", fmt.Errorf("failed to get transaction receipt: %w", err)
+	}
+	if receipt == nil {
+		return "", fmt.Errorf("transaction receipt not found for hash: %s", txHash)
+	}
+
+	contractAddress := common.HexToAddress(contractAddr)
+	contractAddrLower := strings.ToLower(contractAddress.Hex())
+
+	// Get expected event IDs (normalize to lowercase for comparison)
+	taskSubmittedEventID := strings.ToLower(taskSubmittedEvent.ID.Hex())
+	taskRejectedEventID := strings.ToLower(taskRejectedEvent.ID.Hex())
+
+	// Find TaskSubmitted or TaskRejected events in the receipt logs
+	var eventName string
+	var eventLog nodeclient.Log
+	var event abi.Event
+
+	p.logger.Debug(ctx, "Searching for events in transaction receipt",
+		observability.String("tx_hash", txHash),
+		observability.String("chain_id", chainID),
+		observability.String("contract_address", contractAddr),
+		observability.String("expected_task_submitted_id", taskSubmittedEventID),
+		observability.String("expected_task_rejected_id", taskRejectedEventID),
+		observability.Int("log_count", len(receipt.Logs)))
+
+	for i, log := range receipt.Logs {
+		// Check if log is from the contract address (case-insensitive)
+		logAddrLower := strings.ToLower(log.Address)
+		if logAddrLower != contractAddrLower {
+			p.logger.Debug(ctx, "Log address mismatch",
+				observability.Int("log_index", i),
+				observability.String("log_address", log.Address),
+				observability.String("expected_address", contractAddress.Hex()))
+			continue
+		}
+
+		// Check if log has topics
+		if len(log.Topics) == 0 {
+			p.logger.Debug(ctx, "Log has no topics",
+				observability.Int("log_index", i))
+			continue
+		}
+
+		// Normalize topic to lowercase for comparison
+		topic0Lower := strings.ToLower(log.Topics[0])
+
+		p.logger.Debug(ctx, "Checking log topic",
+			observability.Int("log_index", i),
+			observability.String("topic0", log.Topics[0]),
+			observability.String("topic0_lower", topic0Lower),
+			observability.Any("all_topics", log.Topics))
+
+		// Try to parse the log with TaskSubmitted event first
+		// Convert nodeclient.Log to ethtypes.Log for parsing
+		ethtypesLog, err := convertNodeLogToTypesLog(log)
+		if err != nil {
+			p.logger.Debug(ctx, "Failed to convert log",
+				observability.Int("log_index", i),
+				observability.Error(err))
+			continue
+		}
+
+		// Try TaskSubmitted event - check if topic matches OR try to parse
+		if topic0Lower == taskSubmittedEventID {
+			// Topic matches, verify by trying to parse
+			_, err := p.parseEventData(taskSubmittedEvent, ethtypesLog)
+			if err == nil {
+				eventName = "TaskSubmitted"
+				eventLog = log
+				event = taskSubmittedEvent
+				p.logger.Info(ctx, "Found TaskSubmitted event",
+					observability.String("tx_hash", txHash),
+					observability.Int("log_index", i))
+				break
+			}
+			p.logger.Debug(ctx, "Topic matched but parsing failed for TaskSubmitted",
+				observability.Int("log_index", i),
+				observability.Error(err))
+		}
+
+		// Try TaskRejected event
+		if topic0Lower == taskRejectedEventID {
+			// Topic matches, verify by trying to parse
+			_, err := p.parseEventData(taskRejectedEvent, ethtypesLog)
+			if err == nil {
+				eventName = "TaskRejected"
+				eventLog = log
+				event = taskRejectedEvent
+				p.logger.Info(ctx, "Found TaskRejected event",
+					observability.String("tx_hash", txHash),
+					observability.Int("log_index", i))
+				break
+			}
+			p.logger.Debug(ctx, "Topic matched but parsing failed for TaskRejected",
+				observability.Int("log_index", i),
+				observability.Error(err))
+		}
+
+		// If topic doesn't match, try parsing anyway (in case ABI signature is wrong)
+		// This is a fallback to handle ABI mismatches
+		if eventName == "" {
+			// Try TaskSubmitted
+			_, err := p.parseEventData(taskSubmittedEvent, ethtypesLog)
+			if err == nil {
+				// Check if topic0 matches (even if case differs)
+				actualTopic := strings.ToLower(ethtypesLog.Topics[0].Hex())
+				if actualTopic == topic0Lower {
+					eventName = "TaskSubmitted"
+					eventLog = log
+					event = taskSubmittedEvent
+					p.logger.Info(ctx, "Found TaskSubmitted event (via parsing fallback)",
+						observability.String("tx_hash", txHash),
+						observability.Int("log_index", i),
+						observability.String("actual_topic", actualTopic),
+						observability.String("expected_topic", taskSubmittedEventID))
+					break
+				}
+			}
+
+			// Try TaskRejected
+			_, err = p.parseEventData(taskRejectedEvent, ethtypesLog)
+			if err == nil {
+				actualTopic := strings.ToLower(ethtypesLog.Topics[0].Hex())
+				if actualTopic == topic0Lower {
+					eventName = "TaskRejected"
+					eventLog = log
+					event = taskRejectedEvent
+					p.logger.Info(ctx, "Found TaskRejected event (via parsing fallback)",
+						observability.String("tx_hash", txHash),
+						observability.Int("log_index", i),
+						observability.String("actual_topic", actualTopic),
+						observability.String("expected_topic", taskRejectedEventID))
+					break
+				}
+			}
+		}
+	}
+
+	if eventName == "" {
+		// Log all topics for debugging
+		allTopics := make([]string, 0)
+		for _, log := range receipt.Logs {
+			if strings.ToLower(log.Address) == contractAddrLower && len(log.Topics) > 0 {
+				allTopics = append(allTopics, log.Topics[0])
+			}
+		}
+		topicsStr := strings.Join(allTopics, ", ")
+		p.logger.Error(ctx, "No TaskSubmitted or TaskRejected event found in transaction",
+			observability.String("tx_hash", txHash),
+			observability.String("chain_id", chainID),
+			observability.String("contract_address", contractAddr),
+			observability.String("found_topics", topicsStr),
+			observability.String("expected_task_submitted", taskSubmittedEventID),
+			observability.String("expected_task_rejected", taskRejectedEventID))
+		return "", fmt.Errorf("no TaskSubmitted or TaskRejected event found in transaction: %s", txHash)
+	}
+
+	// Use aggregator-log hint when provided so TaskRejected is sent correctly (chain topic may not distinguish)
+	if isRejected {
+		eventName = "TaskRejected"
+		event = taskRejectedEvent
+	} else {
+		eventName = "TaskSubmitted"
+		event = taskSubmittedEvent
+	}
+	p.logger.Debug(ctx, "Using event type from aggregator log",
+		observability.String("event_name", eventName),
+		observability.Bool("is_rejected", isRejected))
+
+	// Process the log
+	if err := p.processLog(chainID, chainName, event, eventName, eventLog); err != nil {
+		return "", fmt.Errorf("failed to process log: %w", err)
+	}
+
+	return eventName, nil
+}
+
+// getChainName returns the chain name for a given chain ID
+func getChainName(chainID string) string {
+	switch chainID {
+	case "8453":
+		return "Base Mainnet"
+	case "84532":
+		return "Base Sepolia"
+	default:
+		return fmt.Sprintf("Chain %s", chainID)
+	}
+}
+
+// getContractAddress returns the contract address for a given chain ID
+func getContractAddress(chainID string) string {
+	switch chainID {
+	case "8453":
+		return config.GetAttestationCenterAddress()
+	case "84532":
+		return config.GetTestAttestationCenterAddress()
+	default:
+		return ""
+	}
 }
 
 // parseTopicData parses topic data based on the input type

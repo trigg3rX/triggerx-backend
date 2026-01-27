@@ -76,7 +76,7 @@ func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request 
 		}
 		return resp, nil
 
-	case "report-consensus-event":
+	case "report-task-consensus-status":
 		// Convert request to the expected type
 		consensusReq, ok := request.(*types.ReportTaskConsensusStatusRequest)
 		if !ok {
@@ -88,7 +88,7 @@ func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request 
 					return nil, fmt.Errorf("failed to convert request: %w", err)
 				}
 			} else {
-				return nil, fmt.Errorf("invalid request type for report-consensus-event: %T", request)
+				return nil, fmt.Errorf("invalid request type for report-task-consensus-status: %T", request)
 			}
 		}
 
@@ -114,7 +114,7 @@ func (h *TaskMonitorHandler) GetMethods() []rpcpkg.RPCMethod {
 			Timeout:      30 * time.Second,
 		},
 		{
-			Name:         "report-consensus-event",
+			Name:         "report-task-consensus-status",
 			Description:  "Report consensus event from eventmonitor (TaskSubmitted or TaskRejected)",
 			RequestType:  &types.ReportTaskConsensusStatusRequest{},
 			ResponseType: &types.ReportTaskConsensusStatusResponse{},

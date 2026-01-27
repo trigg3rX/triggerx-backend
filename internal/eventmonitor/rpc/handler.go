@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/core/registry"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/core/service"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -55,8 +54,8 @@ func (h *Handler) Handle(ctx context.Context, method string, request interface{}
 		return h.handleRegister(ctx, request)
 	case "unregister":
 		return h.handleUnregister(ctx, request)
-	case "health":
-		return h.handleHealth(ctx, request)
+	case "processTransaction":
+		return h.handleProcessTransaction(ctx, request)
 	default:
 		span.SetStatus(codes.Error, fmt.Sprintf("unknown method: %s", method))
 		return nil, fmt.Errorf("unknown method: %s", method)
@@ -150,14 +149,60 @@ func (h *Handler) handleUnregister(ctx context.Context, request interface{}) (in
 	return response, nil
 }
 
-// handleHealth handles the health RPC method
-func (h *Handler) handleHealth(ctx context.Context, request interface{}) (interface{}, error) {
-	response := types.HealthResponse{
-		Status:          "healthy",
-		Version:         config.GetVersion(),
-		ActiveMonitors:  h.registryManager.GetActiveMonitorCount(),
-		ChainsSupported: h.registryManager.GetChainsSupported(),
+// handleProcessTransaction handles the processTransaction RPC method
+func (h *Handler) handleProcessTransaction(ctx context.Context, request interface{}) (interface{}, error) {
+	// Convert request to ProcessTransactionRequest
+	var req types.ProcessTransactionRequest
+
+	// Handle JSON request - convert map to JSON bytes then unmarshal
+	jsonBytes, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
+	if err := json.Unmarshal(jsonBytes, &req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal process transaction request: %w", err)
+	}
+
+	// Validate request
+	if req.TxHash == "" {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "tx_hash is required",
+		}, nil
+	}
+	if req.ChainID == "" {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "chain_id is required",
+		}, nil
+	}
+
+	// Process transaction via service
+	eventName, err := h.service.ProcessTransaction(ctx, req.TxHash, req.ChainID, req.IsRejected)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to process transaction",
+			observability.Error(err),
+			observability.String("tx_hash", req.TxHash),
+			observability.String("chain_id", req.ChainID))
+		return types.ProcessTransactionResponse{
+			Success:   false,
+			TxHash:    req.TxHash,
+			EventName: "",
+			Message:   err.Error(),
+		}, nil
+	}
+
+	response := types.ProcessTransactionResponse{
+		Success:   true,
+		TxHash:    req.TxHash,
+		EventName: eventName,
+		Message:   fmt.Sprintf("Successfully processed transaction, event: %s", eventName),
+	}
+
+	h.logger.Info(ctx, "Transaction processed successfully",
+		observability.String("tx_hash", req.TxHash),
+		observability.String("chain_id", req.ChainID),
+		observability.String("event_name", eventName))
 
 	return response, nil
 }
@@ -182,11 +227,11 @@ func (h *Handler) GetMethods() []rpcpkg.RPCMethod {
 			Timeout:      30 * time.Second,
 		},
 		{
-			Name:         "health",
-			Description:  "Health check endpoint",
-			RequestType:  map[string]interface{}{},
-			ResponseType: types.HealthResponse{},
-			Timeout:      5 * time.Second,
+			Name:         "processTransaction",
+			Description:  "Process a transaction and extract TaskSubmitted/TaskRejected events",
+			RequestType:  types.ProcessTransactionRequest{},
+			ResponseType: types.ProcessTransactionResponse{},
+			Timeout:      60 * time.Second,
 		},
 	}
 }

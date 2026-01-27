@@ -81,3 +81,22 @@ type HealthResponse struct {
 	ActiveMonitors  int      `json:"active_monitors"`  // Number of active monitors
 	ChainsSupported []string `json:"chains_supported"` // List of supported chains
 }
+
+// ProcessTransactionRequest represents a request to process a transaction and extract events
+// Used by eventmonitor service to process transactions from aggregator logs
+// Owned by: eventmonitor gRPC Server
+type ProcessTransactionRequest struct {
+	TxHash     string `json:"tx_hash" binding:"required"`     // Transaction hash
+	ChainID    string `json:"chain_id" binding:"required"`    // Chain identifier
+	IsRejected bool   `json:"is_rejected" binding:"required"` // true for rejected, false for approved
+}
+
+// ProcessTransactionResponse represents the response for processing a transaction
+// Used by eventmonitor service for transaction processing responses
+// Owned by: eventmonitor gRPC Server
+type ProcessTransactionResponse struct {
+	Success   bool   `json:"success"`    // Whether processing was successful
+	TxHash    string `json:"tx_hash"`    // Transaction hash
+	EventName string `json:"event_name"` // Event name (TaskSubmitted or TaskRejected)
+	Message   string `json:"message"`    // Optional message
+}
