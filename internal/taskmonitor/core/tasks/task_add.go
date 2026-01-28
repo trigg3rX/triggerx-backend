@@ -86,7 +86,7 @@ func (tsm *TaskStreamManager) MarkTaskExecuted(ctx context.Context, taskID int64
 			CreatedAt:  now,
 			ExecutedAt: &now,
 			SendTaskDataToKeeper: types.SendTaskDataToKeeper{
-				TaskID: []int64{taskID},
+				TaskID: taskID,
 			},
 		}
 		messageID = "" // No message to acknowledge
@@ -227,7 +227,7 @@ func (tsm *TaskStreamManager) addTaskToStreamWithMessageID(ctx context.Context, 
 			metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc(ctx)
 		}
 		tsm.logger.Error(ctx, "Failed to add task to stream",
-			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 			observability.String("stream", stream),
 			observability.Duration("duration", duration),
 			observability.Error(err))
@@ -255,7 +255,7 @@ func (tsm *TaskStreamManager) addTaskToStreamWithMessageID(ctx context.Context, 
 	err = tsm.redisClient.AddStreamEntryExpiration(ctx, stream, messageID, entryTTL)
 	if err != nil {
 		tsm.logger.Warn(ctx, "Failed to add stream entry expiration, but task was added to stream",
-			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 			observability.String("stream", stream),
 			observability.String("message_id", messageID),
 			observability.Duration("duration", duration),
@@ -267,7 +267,7 @@ func (tsm *TaskStreamManager) addTaskToStreamWithMessageID(ctx context.Context, 
 		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc(ctx)
 	}
 	tsm.logger.Debug(ctx, "Task added to stream successfully",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.String("stream", stream),
 		observability.String("message_id", messageID),
 		observability.Duration("duration", duration),

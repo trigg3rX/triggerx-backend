@@ -66,8 +66,8 @@ func (v *TaskValidator) validateProofHash(ctx context.Context, ipfsData types.IP
 		ProofData:          &types.ProofData{},
 		PerformerSignature: &types.PerformerSignatureData{},
 	}
-	ipfsDataForValidation.ProofData.TaskID = ipfsData.TaskData.TaskID[0]
-	ipfsDataForValidation.PerformerSignature.TaskID = ipfsData.TaskData.TaskID[0]
+	ipfsDataForValidation.ProofData.TaskID = ipfsData.TaskData.TaskID
+	ipfsDataForValidation.PerformerSignature.TaskID = ipfsData.TaskData.TaskID
 	ipfsDataForValidation.PerformerSignature.PerformerSigningAddress = ipfsData.PerformerSignature.PerformerSigningAddress
 
 	// Regenerate the proof hash

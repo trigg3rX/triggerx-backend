@@ -67,7 +67,7 @@ func createFutureMockCertificate() *x509.Certificate {
 func createSampleIPFSData(taskID int64) types.IPFSData {
 	return types.IPFSData{
 		TaskData: &types.SendTaskDataToKeeper{
-			TaskID: []int64{taskID},
+			TaskID: taskID,
 		},
 		ActionData: &types.PerformerActionData{
 			TaskID:             taskID,
@@ -279,7 +279,7 @@ func TestStringifyIPFSData_ValidData(t *testing.T) {
 func TestStringifyIPFSData_StringConversion(t *testing.T) {
 	ipfsData := types.IPFSData{
 		TaskData: &types.SendTaskDataToKeeper{
-			TaskID: []int64{123},
+			TaskID: 123,
 		},
 		ActionData: &types.PerformerActionData{
 			TaskID:             123,
@@ -369,7 +369,7 @@ func TestStringifyIPFSData_JSONMarshalError(t *testing.T) {
 		// Create IPFS data with problematic nested data
 		ipfsData := types.IPFSData{
 			TaskData: &types.SendTaskDataToKeeper{
-				TaskID: []int64{123},
+				TaskID: 123,
 			},
 			ActionData: &types.PerformerActionData{
 				TaskID:             123,

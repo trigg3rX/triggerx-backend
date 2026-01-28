@@ -122,10 +122,10 @@ type TaskTriggerData struct {
 // SendTaskDataToKeeper represents data to send to keeper for task execution
 // Shared across: schedulers, taskdispatcher, keeper, taskmonitor
 type SendTaskDataToKeeper struct {
-	TaskID           []int64           `json:"task_id"`
+	TaskID           int64           `json:"task_id"`
 	PerformerData    PerformerData     `json:"performer_data"`
-	TargetData       []TaskTargetData  `json:"target_data"`
-	TriggerData      []TaskTriggerData `json:"trigger_data"`
+	TargetData       TaskTargetData  `json:"target_data"`
+	TriggerData      TaskTriggerData `json:"trigger_data"`
 	SchedulerID      string            `json:"scheduler_id"`
 	ManagerSignature string            `json:"manager_signature"`
 	Network          Network           `json:"network"` // Network: mainnet, sepolia, or imua

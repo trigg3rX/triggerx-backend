@@ -181,7 +181,7 @@ func (tim *TaskIndexManager) getTaskByMessageID(ctx context.Context, messageID s
 	}
 
 	tim.tsm.logger.Debug(ctx, "Task retrieved by messageID successfully",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.String("message_id", messageID),
 		observability.String("stream", stream),
 		observability.Duration("duration", duration))

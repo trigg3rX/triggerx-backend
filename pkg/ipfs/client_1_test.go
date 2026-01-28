@@ -409,7 +409,7 @@ func TestFetch_ValidCID_ReturnsIPFSData(t *testing.T) {
 	// Mock IPFS data response
 	ipfsData := types.IPFSData{
 		TaskData: &types.SendTaskDataToKeeper{
-			TaskID: []int64{123},
+			TaskID: 123,
 		},
 	}
 	responseBody, _ := json.Marshal(ipfsData)
@@ -535,7 +535,7 @@ func BenchmarkFetch_SmallData(b *testing.B) {
 		// Create fresh mock response for each iteration
 		ipfsData := types.IPFSData{
 			TaskData: &types.SendTaskDataToKeeper{
-				TaskID: []int64{789},
+				TaskID: 789,
 			},
 		}
 		responseBody, _ := json.Marshal(ipfsData)
@@ -646,7 +646,7 @@ func TestFetch_EdgeCases(t *testing.T) {
 			if !tt.expectError {
 				ipfsData := types.IPFSData{
 					TaskData: &types.SendTaskDataToKeeper{
-						TaskID: []int64{999},
+						TaskID: 999,
 					},
 				}
 				responseBody, _ := json.Marshal(ipfsData)

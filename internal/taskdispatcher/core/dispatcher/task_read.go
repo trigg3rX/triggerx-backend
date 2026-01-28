@@ -44,7 +44,7 @@ func (tsm *TaskStreamManager) GetTaskDataFromStream(ctx context.Context, stream 
 			continue
 		}
 
-		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
+		if task.SendTaskDataToKeeper.TaskID == taskID {
 			metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "success").Inc(ctx)
 			return &task, nil
 		}

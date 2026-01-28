@@ -75,59 +75,59 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, data string, traceID s
 	// Network matching: Check if the task's network matches the keeper's configured network
 	if string(ipfsData.TaskData.Network) != string(config.GetNetwork()) {
 		v.logger.Info(ctx, "Task validation rejected due to network mismatch",
-			observability.Int64("task_id", ipfsData.TaskData.TaskID[0]),
+			observability.Int64("task_id", ipfsData.TaskData.TaskID),
 			observability.String("task_network", string(ipfsData.TaskData.Network)),
 			observability.String("keeper_network", string(config.GetNetwork())),
 			observability.String("trace_id", traceID))
 		return false, fmt.Errorf("network mismatch: task network %s does not match keeper network %s", string(ipfsData.TaskData.Network), string(config.GetNetwork()))
 	}
 
-	v.logger.Info(ctx, "[0/5] Network validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("network", string(ipfsData.TaskData.Network)), observability.String("trace_id", traceID))
+	v.logger.Info(ctx, "[0/5] Network validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("network", string(ipfsData.TaskData.Network)), observability.String("trace_id", traceID))
 
 	// check if the scheduler signature is valid
 	isManagerSignatureTrue, err := v.ValidateManagerSignature(ctx, ipfsData.TaskData, traceID)
 	if !isManagerSignatureTrue {
-		v.logger.Error(ctx, "Manager signature validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
+		v.logger.Error(ctx, "Manager signature validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID), observability.Error(err))
 		return false, err
 	}
-	v.logger.Info(ctx, "[1/5] Scheduler signature validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID))
+	v.logger.Info(ctx, "[1/5] Scheduler signature validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID))
 
-	rpcURL := utils.GetChainRpcUrl(ipfsData.TaskData.TargetData[0].TargetChainID)
+	rpcURL := utils.GetChainRpcUrl(ipfsData.TaskData.TargetData.TargetChainID)
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
-		v.logger.Error(ctx, "Failed to connect to chain", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
+		v.logger.Error(ctx, "Failed to connect to chain", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID), observability.Error(err))
 		return false, err
 	}
 	defer client.Close()
 
 	// check if trigger is valid
-	isTriggerTrue, err := v.ValidateTrigger(ctx, &ipfsData.TaskData.TriggerData[0], traceID)
+	isTriggerTrue, err := v.ValidateTrigger(ctx, &ipfsData.TaskData.TriggerData, traceID)
 	if !isTriggerTrue {
-		v.logger.Error(ctx, "Trigger validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
+		v.logger.Error(ctx, "Trigger validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID), observability.Error(err))
 		return false, err
 	}
 	v.logger.Info(ctx, "[2/5] Trigger validation successful", observability.String("traceID", traceID))
 
 	// check if the action is valid
-	isActionTrue, err := v.ValidateAction(&ipfsData.TaskData.TargetData[0], &ipfsData.TaskData.TriggerData[0], ipfsData.ActionData, client, traceID)
+	isActionTrue, err := v.ValidateAction(&ipfsData.TaskData.TargetData, &ipfsData.TaskData.TriggerData, ipfsData.ActionData, client, traceID)
 	if !isActionTrue {
-		v.logger.Error(ctx, "Action validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
+		v.logger.Error(ctx, "Action validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID), observability.Error(err))
 		return false, err
 	}
-	v.logger.Info(ctx, "[3/5] Action validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID))
+	v.logger.Info(ctx, "[3/5] Action validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID))
 
 	// validate the proof data
 	isProofTrue, err := v.ValidateProof(ctx, ipfsData, traceID)
 	if !isProofTrue {
-		v.logger.Error(ctx, "Proof validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
+		v.logger.Error(ctx, "Proof validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID), observability.Error(err))
 		return false, err
 	}
-	v.logger.Info(ctx, "[4/5] Proof validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID))
+	v.logger.Info(ctx, "[4/5] Proof validation passed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID))
 
 	// check if the performer signature is valid
 	isPerformerSignatureTrue, err := v.ValidatePerformerSignature(ctx, ipfsData, traceID)
 	if !isPerformerSignatureTrue {
-		v.logger.Error(ctx, "Performer signature validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
+		v.logger.Error(ctx, "Performer signature validation failed", observability.Int64("task_id", ipfsData.TaskData.TaskID), observability.String("trace_id", traceID), observability.Error(err))
 		return false, err
 	}
 	v.logger.Info(ctx, "[5/5] Performer signature validation passed", observability.String("traceID", traceID))

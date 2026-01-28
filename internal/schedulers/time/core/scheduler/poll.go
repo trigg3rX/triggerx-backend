@@ -58,74 +58,32 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 		attribute.Int("task_count", len(tasks)),
 	))
 
-	if len(tasks[0].TaskID) == 0 && len(tasks[1].TaskID) == 0 && len(tasks[2].TaskID) == 0 {
+	if len(tasks) == 0 {
 		return
 	}
 
-	s.logger.Debug(ctx, "Found tasks to process", observability.Int("task_count", (len(tasks[0].TaskID) + len(tasks[1].TaskID) + len(tasks[2].TaskID))))
-	metrics.UpdateTasksCreated(float64(len(tasks[0].TaskID) + len(tasks[1].TaskID) + len(tasks[2].TaskID)))
+	s.logger.Debug(ctx, "Found tasks to dispatch", observability.Int("task_count", len(tasks)))
+	metrics.UpdateTasksCreated(float64(len(tasks)))
 	metrics.UpdateTaskBatchSize(float64(s.taskBatchSize))
 
-	// Process mainnet tasks in batches
-	if len(tasks[0].TaskID) > 0 {
-		s.logger.Debug(ctx, "Processing mainnet tasks in batches", observability.Int("task_count", len(tasks[0].TaskID)))
-		for i := 0; i < len(tasks[0].TaskID); i += s.taskBatchSize {
-			end := i + s.taskBatchSize
-			if end > len(tasks[0].TaskID) {
-				end = len(tasks[0].TaskID)
-			}
-
-			batch := types.SendTaskDataToKeeper{
-				TaskID:           tasks[0].TaskID[i:end],
-				TargetData:       tasks[0].TargetData[i:end],
-				TriggerData:      tasks[0].TriggerData[i:end],
-				SchedulerID:      s.schedulerID,
-				ManagerSignature: "",
-				Network:          types.NetworkMainnet,
-			}
-			s.processBatch(ctx, batch)
+	for _, task := range tasks {
+		metrics.TrackTaskByScheduleType(task.TriggerData.TimeScheduleType)
+		task.SchedulerID = s.schedulerID
+		// Create request for task dispatcher
+		request := types.SchedulerTaskRequest{
+			SendTaskDataToKeeper: task,
+			Source:               "time_scheduler",
 		}
-	}
 
-	// Process sepolia tasks in batches
-	if len(tasks) > 0 {
-		s.logger.Debug(ctx, "Processing sepolia tasks in batches", observability.Int("task_count", len(tasks[1].TaskID)))
-		for i := 0; i < len(tasks[1].TaskID); i += s.taskBatchSize {
-			end := i + s.taskBatchSize
-			if end > len(tasks[1].TaskID) {
-				end = len(tasks[1].TaskID)
-			}
+		// Submit batch to task dispatcher
+		success := s.submitTaskToTaskDispatcher(ctx, request)
 
-			batch := types.SendTaskDataToKeeper{
-				TaskID:           tasks[1].TaskID[i:end],
-				TargetData:       tasks[1].TargetData[i:end],
-				TriggerData:      tasks[1].TriggerData[i:end],
-				SchedulerID:      s.schedulerID,
-				ManagerSignature: "",
-				Network:          types.NetworkSepolia,
-			}
-			s.processBatch(ctx, batch)
-		}
-	}
-
-	// Process imua tasks in separate batches
-	if len(tasks[2].TaskID) > 0 {
-		s.logger.Debug(ctx, "Processing imua tasks in separate batches", observability.Int("task_count", len(tasks[2].TaskID)))
-		for i := 0; i < len(tasks[2].TaskID); i += s.taskBatchSize {
-			end := i + s.taskBatchSize
-			if end > len(tasks[2].TaskID) {
-				end = len(tasks[2].TaskID)
-			}
-
-			batch := types.SendTaskDataToKeeper{
-				TaskID:           tasks[2].TaskID[i:end],
-				TargetData:       tasks[2].TargetData[i:end],
-				TriggerData:      tasks[2].TriggerData[i:end],
-				SchedulerID:      s.schedulerID,
-				ManagerSignature: "",
-				Network:          types.NetworkImua,
-			}
-			s.processBatch(ctx, batch)
+		if success {
+			s.logger.Info(ctx, "Task dispatch completed successfully", observability.Int64("task_id", task.TaskID))
+			metrics.UpdateTasksDispatched("success")
+		} else {
+			s.logger.Error(ctx, "Task dispatch failed", observability.Int64("task_id", task.TaskID))
+			metrics.UpdateTasksDispatched("failed")
 		}
 	}
 }

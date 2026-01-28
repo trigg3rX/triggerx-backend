@@ -33,17 +33,13 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 	// Test data
 	req := &types.SchedulerTaskRequest{
 		SendTaskDataToKeeper: types.SendTaskDataToKeeper{
-			TaskID: []int64{123},
-			TargetData: []types.TaskTargetData{
-				{
-					TaskID: 123,
-					JobID:  "", // Empty string will be set by the handler
-				},
+			TaskID: 123,
+			TargetData: types.TaskTargetData{
+				TaskID: 123,
+				JobID:  "",
 			},
-			TriggerData: []types.TaskTriggerData{
-				{
-					TaskID: 123,
-				},
+			TriggerData: types.TaskTriggerData{
+				TaskID: 123,
 			},
 			SchedulerID: "1",
 		},
@@ -52,7 +48,7 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 
 	expectedResp := &types.TaskDispatcherRPCResponse{
 		Success:   true,
-		TaskID:    []int64{123},
+		TaskID:    123,
 		Message:   "Task submitted successfully",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}

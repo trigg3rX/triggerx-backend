@@ -37,12 +37,7 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 	// Expired jobs (expiration_time <= currentTime) will be filtered out and completed in the loop
 	iter := r.db.Session().Query(getTimeJobsByNextExecutionTimestampQuery, lookAheadTime).Iter()
 
-	var eligibleTimeJobs [3]types.SendTaskDataToKeeper
-
-	eligibleTimeJobs[0].Network = types.NetworkMainnet
-	eligibleTimeJobs[1].Network = types.NetworkSepolia
-	eligibleTimeJobs[2].Network = types.NetworkImua
-
+	var eligibleTimeJobs []types.SendTaskDataToKeeper
 	var timeJobData types.TimeJobDataEntity
 
 	for iter.Scan(
@@ -132,25 +127,15 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 			TimeInterval:            timeJobData.TimeInterval,
 		}
 
-		switch timeJobData.Network {
-		case string(types.NetworkMainnet):
-			eligibleTimeJobs[0].TaskID = append(eligibleTimeJobs[0].TaskID, taskID)
-			eligibleTimeJobs[0].TargetData = append(eligibleTimeJobs[0].TargetData, targetData)
-			eligibleTimeJobs[0].TriggerData = append(eligibleTimeJobs[0].TriggerData, triggerData)
-		case string(types.NetworkSepolia):
-			eligibleTimeJobs[1].TaskID = append(eligibleTimeJobs[1].TaskID, taskID)
-			eligibleTimeJobs[1].TargetData = append(eligibleTimeJobs[1].TargetData, targetData)
-			eligibleTimeJobs[1].TriggerData = append(eligibleTimeJobs[1].TriggerData, triggerData)
-		case string(types.NetworkImua):
-			eligibleTimeJobs[2].TaskID = append(eligibleTimeJobs[2].TaskID, taskID)
-			eligibleTimeJobs[2].TargetData = append(eligibleTimeJobs[2].TargetData, targetData)
-			eligibleTimeJobs[2].TriggerData = append(eligibleTimeJobs[2].TriggerData, triggerData)
-		default:
-			return nil, errors.New("invalid network")
-		}
+		eligibleTimeJobs = append(eligibleTimeJobs, types.SendTaskDataToKeeper{
+			TaskID: taskID,
+			TargetData: targetData,
+			TriggerData: triggerData,
+			Network: types.Network(timeJobData.Network),
+		})
 
 	}
-	return eligibleTimeJobs[:], nil
+	return eligibleTimeJobs, nil
 }
 
 // completeTimeJob marks a time job as completed by updating the job_data status

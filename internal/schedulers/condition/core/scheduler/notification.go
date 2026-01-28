@@ -178,9 +178,9 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(ctx contex
 
 	// Create single task data for keeper
 	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID:           []int64{jobData.TaskTargetData.TaskID},
-		TargetData:       []types.TaskTargetData{targetData}, // Single task, not batch
-		TriggerData:      []types.TaskTriggerData{triggerData},
+		TaskID:           jobData.TaskTargetData.TaskID,
+		TargetData:       targetData,
+		TriggerData:      triggerData,
 		SchedulerID:      s.schedulerID,
 		ManagerSignature: "",
 		Network:          jobData.Network,

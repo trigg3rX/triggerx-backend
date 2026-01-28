@@ -13,10 +13,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// submitBatchToTaskDispatcher submits the batch task data to Task Dispatcher via RPC.
+// submitTaskToTaskDispatcher submits the task data to Task Dispatcher via RPC.
 // It implements retry logic with exponential backoff for handling transient failures.
 // Returns true if the submission was successful, false otherwise.
-func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(ctx context.Context, request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
+func (s *TimeBasedScheduler) submitTaskToTaskDispatcher(ctx context.Context, request types.SchedulerTaskRequest) bool {
 	startTime := time.Now()
 
 	// Create retry configuration for task dispatcher calls
@@ -50,7 +50,7 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(ctx context.Context, re
 		if traceID != "" {
 			s.logger.Debug(rpcCtx, "Propagating trace to task dispatcher",
 				observability.String("trace_id", traceID),
-				observability.String("task_ids", taskIDs),
+				observability.Int64("task_id", request.SendTaskDataToKeeper.TaskID),
 			)
 		}
 
@@ -72,18 +72,16 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(ctx context.Context, re
 	success, err := retry.Retry(ctx, operation, retryConfig)
 	if err != nil {
 		duration := time.Since(startTime)
-		s.logger.Error(ctx, "Failed to submit batch to task dispatcher after retries",
-			observability.String("task_ids", taskIDs),
-			observability.Int("task_count", taskCount),
+		s.logger.Error(ctx, "Failed to submit task to task dispatcher after retries",
+			observability.Int64("task_id", request.SendTaskDataToKeeper.TaskID),
 			observability.Error(err),
 			observability.Duration("duration", duration))
 		return false
 	}
 
 	duration := time.Since(startTime)
-	s.logger.Debug(ctx, "Successfully submitted batch to task dispatcher",
-		observability.String("task_ids", taskIDs),
-		observability.Int("task_count", taskCount),
+	s.logger.Debug(ctx, "Successfully submitted task to task dispatcher",
+		observability.Int64("task_id", request.SendTaskDataToKeeper.TaskID),
 		observability.Duration("duration", duration))
 
 	return success

@@ -109,7 +109,7 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 	taskJSON, err := json.Marshal(task)
 	if err != nil {
 		tsm.logger.Error(ctx, "Failed to marshal task data",
-			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 			observability.String("stream", stream),
 			observability.Error(err))
 		return false, fmt.Errorf("failed to marshal task data: %w", err)
@@ -131,7 +131,7 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 			metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc(ctx)
 		}
 		tsm.logger.Error(ctx, "Failed to add task to stream",
-			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 			observability.String("stream", stream),
 			observability.Duration("duration", duration),
 			observability.Error(err))
@@ -140,7 +140,7 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 
 	// Store the task index mapping for efficient lookup
 	if stream == types.StreamTaskDispatched {
-		taskID := task.SendTaskDataToKeeper.TaskID[0]
+		taskID := task.SendTaskDataToKeeper.TaskID
 		err = tsm.redisClient.StoreTaskIndex(ctx, taskID, res)
 		if err != nil {
 			tsm.logger.Warn(ctx, "Failed to store task index, but task was added to stream",
@@ -179,7 +179,7 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 	err = tsm.redisClient.AddStreamEntryExpiration(ctx, stream, res, entryTTL)
 	if err != nil {
 		tsm.logger.Warn(ctx, "Failed to add stream entry expiration, but task was added to stream",
-			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 			observability.String("stream", stream),
 			observability.String("message_id", res),
 			observability.Error(err))
@@ -190,7 +190,7 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc(ctx)
 	}
 	tsm.logger.Debug(ctx, "Task added to stream successfully",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.String("stream", stream),
 		observability.String("stream_id", res),
 		observability.Duration("duration", duration),

@@ -74,7 +74,7 @@ func (c *Client) AddTaskToStream(ctx context.Context, stream string, task *types
 	taskJSON, err := json.Marshal(task)
 	if err != nil {
 		c.logger.Error(ctx, "Failed to marshal task data",
-			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 			observability.String("stream", stream),
 			observability.Error(err))
 		return "", fmt.Errorf("failed to marshal task data: %w", err)
@@ -93,7 +93,7 @@ func (c *Client) AddTaskToStream(ctx context.Context, stream string, task *types
 
 	if err != nil {
 		c.logger.Error(ctx, "Failed to add task to stream",
-			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 			observability.String("stream", stream),
 			observability.Duration("duration", duration),
 			observability.Error(err))
@@ -101,7 +101,7 @@ func (c *Client) AddTaskToStream(ctx context.Context, stream string, task *types
 	}
 
 	c.logger.Debug(ctx, "Task added to stream successfully",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.String("stream", stream),
 		observability.String("message_id", messageID),
 		observability.Duration("duration", duration))
@@ -288,7 +288,7 @@ func (c *Client) GetTaskByMessageID(ctx context.Context, stream, messageID strin
 
 	duration := time.Since(start)
 	c.logger.Debug(ctx, "Task retrieved by messageID successfully",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.String("stream", stream),
 		observability.String("message_id", messageID),
 		observability.Duration("duration", duration))
@@ -321,7 +321,7 @@ func (c *Client) ScanStreamForTask(ctx context.Context, stream string, taskID in
 			continue
 		}
 
-		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
+		if task.SendTaskDataToKeeper.TaskID == taskID {
 			return &task, nil
 		}
 	}

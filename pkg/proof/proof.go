@@ -147,7 +147,7 @@ func GenerateProof(ipfsData types.IPFSData, connState *tls.ConnectionState) (typ
 
 	// Create enhanced proof with additional TLS information
 	proofData := types.ProofData{
-		TaskID:               ipfsData.TaskData.TaskID[0],
+		TaskID:               ipfsData.TaskData.TaskID,
 		ProofOfTask:          proofHashStr,
 		CertificateHash:      certHashStr,
 		CertificateTimestamp: time.Now().UTC(),

@@ -23,7 +23,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	// Prepare payload identical to previous implementation
 	jsonData, err := json.Marshal(task.SendTaskDataToKeeper)
 	if err != nil {
-		tsm.logger.Error(ctx, "Failed to marshal scheduler task data", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
+		tsm.logger.Error(ctx, "Failed to marshal scheduler task data", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID), observability.Error(err))
 		return false, fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
@@ -35,7 +35,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	}
 	requestBodyJSON, err := json.Marshal(requestBody)
 	if err != nil {
-		tsm.logger.Error(ctx, "Failed to marshal request body for performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
+		tsm.logger.Error(ctx, "Failed to marshal request body for performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID), observability.Error(err))
 		return false, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
@@ -53,7 +53,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	}
 
 	tsm.logger.Info(ctx, "Sending task directly to performer",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.String("performer_url", performerURL),
 		observability.String("network", string(task.Network)))
 
@@ -63,7 +63,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 
 	req, err := http.NewRequestWithContext(httpCtx, http.MethodPost, performerURL, bytes.NewBuffer(requestBodyJSON))
 	if err != nil {
-		tsm.logger.Error(ctx, "Failed to create HTTP request for performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
+		tsm.logger.Error(ctx, "Failed to create HTTP request for performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID), observability.Error(err))
 		return false, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -80,7 +80,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 
 	if err != nil {
 		metrics.TrackKeeperDispatch(ctx, false, task.Network, dispatchDuration)
-		tsm.logger.Error(ctx, "Failed to send task to performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
+		tsm.logger.Error(ctx, "Failed to send task to performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID), observability.Error(err))
 		return false, fmt.Errorf("failed to send task to performer: %w", err)
 	}
 	defer func() {
@@ -94,7 +94,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	// Task completion will be reported to TaskMonitor, not back to this caller
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		metrics.TrackKeeperDispatch(ctx, false, task.Network, dispatchDuration)
-		tsm.logger.Error(ctx, "Performer returned error status", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Int("status", resp.StatusCode))
+		tsm.logger.Error(ctx, "Performer returned error status", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID), observability.Int("status", resp.StatusCode))
 		return false, fmt.Errorf("performer returned status %d", resp.StatusCode)
 	}
 
@@ -102,7 +102,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	metrics.TrackKeeperDispatch(ctx, true, task.Network, dispatchDuration)
 
 	tsm.logger.Info(ctx, "Task accepted by performer",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.String("performer_url", performerURL),
 		observability.Int("status_code", resp.StatusCode),
 		observability.Duration("dispatch_duration", dispatchDuration))
@@ -113,7 +113,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	}
 
 	// Update keeper data with task execution
-	err = tsm.taskRepo.UpdateTaskStatusToDispatched(ctx, task.SendTaskDataToKeeper.TaskID[0])
+	err = tsm.taskRepo.UpdateTaskStatusToDispatched(ctx, task.SendTaskDataToKeeper.TaskID)
 	if err != nil {
 		tsm.logger.Error(ctx, "Failed to update task status to dispatched", observability.Error(err))
 		return false, fmt.Errorf("failed to update task status to dispatched: %w", err)

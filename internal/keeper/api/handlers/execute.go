@@ -75,16 +75,7 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 	// Log task info
 	taskIDs := requestData.TaskID
 	h.logger.Info(ctx, "Task execution started", observability.Any("task_ids", taskIDs), observability.String("trace_id", traceID))
-	for _, task := range requestData.TargetData {
-		h.logger.Debug(ctx, fmt.Sprintf("Task ID: %d | Target Chain ID: %s", task.TaskID, task.TargetChainID))
-	}
-
-	// Log the full request data
-	requestDataJSON, err := json.Marshal(requestData)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to marshal request data", observability.Error(err))
-	}
-	h.logger.Info(ctx, "Request data", observability.String("request_data", string(requestDataJSON)))
+	h.logger.Debug(ctx, fmt.Sprintf("Task ID: %d | Target Chain ID: %s", requestData.TaskID, requestData.TargetData.TargetChainID))
 
 	// Return 202 Accepted immediately - task will be processed asynchronously
 	// TaskMonitor will receive the completion status via reportTaskStatus

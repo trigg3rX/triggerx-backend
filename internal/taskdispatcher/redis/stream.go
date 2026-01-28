@@ -186,7 +186,7 @@ func (c *Client) GetTaskFromStream(ctx context.Context, stream string, taskID in
 			continue
 		}
 
-		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
+		if task.SendTaskDataToKeeper.TaskID == taskID {
 			return &task, nil
 		}
 	}

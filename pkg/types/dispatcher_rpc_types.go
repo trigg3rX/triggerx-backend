@@ -11,7 +11,7 @@ type SchedulerTaskRequest struct {
 // Owned by: taskdispatcher RPC server (response from taskdispatcher to schedulers)
 type TaskDispatcherRPCResponse struct {
 	Success   bool    `json:"success"`
-	TaskID    []int64 `json:"task_id"`
+	TaskID    int64   `json:"task_id"`
 	Message   string  `json:"message"`
 	Timestamp string  `json:"timestamp"`
 	Error     string  `json:"error,omitempty"`
