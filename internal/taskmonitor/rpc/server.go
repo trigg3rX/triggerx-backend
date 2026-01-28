@@ -20,7 +20,6 @@ type Server struct {
 // Dependencies contains dependencies for the RPC server
 type Dependencies struct {
 	Monitor  TaskMonitorInterface
-	DBClient DatabaseClientInterface
 }
 
 // NewServer creates a new gRPC server
@@ -41,7 +40,7 @@ func NewServer(logger observability.Logger, tracer observability.Tracer, deps *D
 	rpcSrv.AddInterceptor(rpcserver.LoggingInterceptor(logger))
 	rpcSrv.AddInterceptor(rpctracing.TraceInterceptor(tracer, config.GetServiceName()))
 
-	handler := NewTaskMonitorHandler(logger, deps.Monitor, deps.DBClient)
+	handler := NewTaskMonitorHandler(logger, deps.Monitor)
 	rpcSrv.RegisterHandler("task-monitor", handler)
 
 	return &Server{

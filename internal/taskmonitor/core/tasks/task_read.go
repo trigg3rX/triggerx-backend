@@ -10,24 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (tsm *TaskStreamManager) GetTaskDataFromStream(ctx context.Context, stream string, taskID int64) (*types.TaskStreamData, error) {
-	taskStreamData, _, err := tsm.ReadTasksFromStream(ctx, stream, "task_stream_manager", "task_stream_manager", 1000)
-	if err != nil {
-		tsm.logger.Error(ctx, "Failed to read task stream data",
-			observability.Int64("task_id", taskID),
-			observability.Error(err))
-		return nil, fmt.Errorf("failed to read task stream data: %w", err)
-	}
-
-	for _, task := range taskStreamData {
-		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
-			return &task, nil
-		}
-	}
-
-	return nil, fmt.Errorf("task not found: %d", taskID)
-}
-
 func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, consumerGroup, consumerName string, count int64) ([]types.TaskStreamData, []string, error) {
 	if err := tsm.RegisterConsumerGroup(ctx, stream, consumerGroup); err != nil {
 		return nil, nil, fmt.Errorf("failed to register consumer group: %w", err)

@@ -20,11 +20,6 @@ func NewExpirationManager(tsm *TaskStreamManager) *ExpirationManager {
 	}
 }
 
-// AddTaskTimeout adds a task to the timeout tracking sorted set (for executed tasks)
-func (em *ExpirationManager) AddTaskTimeout(ctx context.Context, taskID int64, timeoutDuration time.Duration) error {
-	return em.AddExecutedTaskTimeout(ctx, taskID, timeoutDuration)
-}
-
 // AddExecutedTaskTimeout adds an executed task to the timeout tracking sorted set
 func (em *ExpirationManager) AddExecutedTaskTimeout(ctx context.Context, taskID int64, timeoutDuration time.Duration) error {
 	start := time.Now()
@@ -53,11 +48,6 @@ func (em *ExpirationManager) AddExecutedTaskTimeout(ctx context.Context, taskID 
 	return nil
 }
 
-// GetExpiredTasks efficiently retrieves all executed tasks that have timed out (pending validation)
-func (em *ExpirationManager) GetExpiredTasks(ctx context.Context) ([]int64, error) {
-	return em.GetExpiredExecutedTasks(ctx)
-}
-
 // GetExpiredExecutedTasks efficiently retrieves all executed tasks that have timed out
 func (em *ExpirationManager) GetExpiredExecutedTasks(ctx context.Context) ([]int64, error) {
 	start := time.Now()
@@ -79,11 +69,6 @@ func (em *ExpirationManager) GetExpiredExecutedTasks(ctx context.Context) ([]int
 		metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_query", "success").Inc(ctx)
 	}
 	return taskIDs, nil
-}
-
-// RemoveTaskTimeout removes a task from the executed timeout tracking sorted set
-func (em *ExpirationManager) RemoveTaskTimeout(ctx context.Context, taskID int64) error {
-	return em.RemoveExecutedTaskTimeout(ctx, taskID)
 }
 
 // RemoveExecutedTaskTimeout removes an executed task from the timeout tracking sorted set

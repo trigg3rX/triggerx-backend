@@ -1,7 +1,6 @@
 package attestation
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -11,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
+	// "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -25,9 +24,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
-
-	// Contract bindings
-	contractAttestationCenter "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
 )
 
 // PermanentPoller polls Base networks (mainnet and sepolia) for AttestationCenter events
@@ -66,232 +62,233 @@ func NewPermanentPoller(ctx context.Context, logger observability.Logger, tracer
 	}, nil
 }
 
+// Using the processTransaction function instead of the startChainPoller function
 // Start starts the permanent poller for Base networks
-func (p *PermanentPoller) Start() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// func (p *PermanentPoller) Start() error {
+// 	p.mu.Lock()
+// 	defer p.mu.Unlock()
 
-	if p.isRunning {
-		return fmt.Errorf("permanent poller is already running")
-	}
+// 	if p.isRunning {
+// 		return fmt.Errorf("permanent poller is already running")
+// 	}
 
-	// Start polling for Base mainnet (8453)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.startChainPoller("8453", "Base Mainnet", config.GetAttestationCenterAddress())
-	}()
+// 	// Start polling for Base mainnet (8453)
+// 	p.wg.Add(1)
+// 	go func() {
+// 		defer p.wg.Done()
+// 		p.startChainPoller("8453", "Base Mainnet", config.GetAttestationCenterAddress())
+// 	}()
 
-	// Start polling for Base sepolia (84532)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.startChainPoller("84532", "Base Sepolia", config.GetTestAttestationCenterAddress())
-	}()
+// 	// Start polling for Base sepolia (84532)
+// 	p.wg.Add(1)
+// 	go func() {
+// 		defer p.wg.Done()
+// 		p.startChainPoller("84532", "Base Sepolia", config.GetTestAttestationCenterAddress())
+// 	}()
 
-	p.isRunning = true
-	p.logger.Info(p.ctx, "Permanent Base network poller started",
-		observability.String("chain_8453", "Base Mainnet"),
-		observability.String("chain_84532", "Base Sepolia"))
+// 	p.isRunning = true
+// 	p.logger.Info(p.ctx, "Permanent Base network poller started",
+// 		observability.String("chain_8453", "Base Mainnet"),
+// 		observability.String("chain_84532", "Base Sepolia"))
 
-	return nil
-}
+// 	return nil
+// }
 
 // Stop stops the permanent poller
-func (p *PermanentPoller) Stop() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// func (p *PermanentPoller) Stop() {
+// 	p.mu.Lock()
+// 	defer p.mu.Unlock()
 
-	if !p.isRunning {
-		return
-	}
+// 	if !p.isRunning {
+// 		return
+// 	}
 
-	p.logger.Info(p.ctx, "Stopping permanent Base network poller")
-	p.cancel()
-	p.wg.Wait()
-	p.isRunning = false
-	p.logger.Info(p.ctx, "Permanent Base network poller stopped")
-}
+// 	p.logger.Info(p.ctx, "Stopping permanent Base network poller")
+// 	p.cancel()
+// 	p.wg.Wait()
+// 	p.isRunning = false
+// 	p.logger.Info(p.ctx, "Permanent Base network poller stopped")
+// }
 
 // startChainPoller starts polling for a specific chain
-func (p *PermanentPoller) startChainPoller(chainID, chainName, contractAddr string) {
-	// Create node client
-	rpcURLs := config.GetChainRPCUrls()
-	rpcURL, exists := rpcURLs[chainID]
-	if !exists {
-		p.logger.Error(p.ctx, "RPC URL not found for chain", observability.String("chain_id", chainID))
-		return
-	}
+// func (p *PermanentPoller) startChainPoller(chainID, chainName, contractAddr string) {
+// 	// Create node client
+// 	rpcURLs := config.GetChainRPCUrls()
+// 	rpcURL, exists := rpcURLs[chainID]
+// 	if !exists {
+// 		p.logger.Error(p.ctx, "RPC URL not found for chain", observability.String("chain_id", chainID))
+// 		return
+// 	}
 
-	nodeCfg := &nodeclient.Config{
-		APIKey:         "",
-		BaseURL:        rpcURL,
-		RequestTimeout: 30 * time.Second,
-		Logger:         p.logger,
-	}
+// 	nodeCfg := &nodeclient.Config{
+// 		APIKey:         "",
+// 		BaseURL:        rpcURL,
+// 		RequestTimeout: 30 * time.Second,
+// 		Logger:         p.logger,
+// 	}
 
-	client, err := nodeclient.NewNodeClient(nodeCfg)
-	if err != nil {
-		p.logger.Error(p.ctx, "Failed to create node client", observability.String("chain_id", chainID), observability.Error(err))
-		return
-	}
-	defer client.Close()
+// 	client, err := nodeclient.NewNodeClient(nodeCfg)
+// 	if err != nil {
+// 		p.logger.Error(p.ctx, "Failed to create node client", observability.String("chain_id", chainID), observability.Error(err))
+// 		return
+// 	}
+// 	defer client.Close()
 
-	// Get ABI for AttestationCenter
-	attABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi()
-	if err != nil {
-		p.logger.Error(p.ctx, "Failed to load AttestationCenter ABI", observability.Error(err))
-		return
-	}
+// 	// Get ABI for AttestationCenter
+// 	attABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi()
+// 	if err != nil {
+// 		p.logger.Error(p.ctx, "Failed to load AttestationCenter ABI", observability.Error(err))
+// 		return
+// 	}
 
-	// Get event signatures
-	taskSubmittedEvent, exists := attABI.Events["TaskSubmitted"]
-	if !exists {
-		p.logger.Error(p.ctx, "TaskSubmitted event not found in ABI")
-		return
-	}
+// 	// Get event signatures
+// 	taskSubmittedEvent, exists := attABI.Events["TaskSubmitted"]
+// 	if !exists {
+// 		p.logger.Error(p.ctx, "TaskSubmitted event not found in ABI")
+// 		return
+// 	}
 
-	taskRejectedEvent, exists := attABI.Events["TaskRejected"]
-	if !exists {
-		p.logger.Error(p.ctx, "TaskRejected event not found in ABI")
-		return
-	}
+// 	taskRejectedEvent, exists := attABI.Events["TaskRejected"]
+// 	if !exists {
+// 		p.logger.Error(p.ctx, "TaskRejected event not found in ABI")
+// 		return
+// 	}
 
-	contractAddress := common.HexToAddress(contractAddr)
+// 	contractAddress := common.HexToAddress(contractAddr)
 
-	// Initialize last block
-	blockNumberHex, err := client.EthBlockNumber(p.ctx)
-	if err != nil {
-		p.logger.Error(p.ctx, "Failed to get current block number", observability.String("chain_id", chainID), observability.Error(err))
-		return
-	}
-	lastBlock, err := hexToUint64(blockNumberHex)
-	if err != nil {
-		p.logger.Error(p.ctx, "Failed to parse block number", observability.String("chain_id", chainID), observability.Error(err))
-		return
-	}
+// 	// Initialize last block
+// 	blockNumberHex, err := client.EthBlockNumber(p.ctx)
+// 	if err != nil {
+// 		p.logger.Error(p.ctx, "Failed to get current block number", observability.String("chain_id", chainID), observability.Error(err))
+// 		return
+// 	}
+// 	lastBlock, err := hexToUint64(blockNumberHex)
+// 	if err != nil {
+// 		p.logger.Error(p.ctx, "Failed to parse block number", observability.String("chain_id", chainID), observability.Error(err))
+// 		return
+// 	}
 
-	// Look back a few blocks on startup
-	lookback := config.GetLookbackBlocks()
-	if lastBlock > lookback {
-		lastBlock = lastBlock - lookback
-	} else {
-		lastBlock = 0
-	}
+// 	// Look back a few blocks on startup
+// 	lookback := config.GetLookbackBlocks()
+// 	if lastBlock > lookback {
+// 		lastBlock = lastBlock - lookback
+// 	} else {
+// 		lastBlock = 0
+// 	}
 
-	p.mu.Lock()
-	p.lastBlocks[chainID] = lastBlock
-	p.mu.Unlock()
+// 	p.mu.Lock()
+// 	p.lastBlocks[chainID] = lastBlock
+// 	p.mu.Unlock()
 
-	p.logger.Info(p.ctx, "Starting poller",
-		observability.String("chain_id", chainID),
-		observability.String("chain_name", chainName),
-		observability.String("contract_address", contractAddr),
-		observability.Uint64("start_block", lastBlock))
+// 	p.logger.Info(p.ctx, "Starting poller",
+// 		observability.String("chain_id", chainID),
+// 		observability.String("chain_name", chainName),
+// 		observability.String("contract_address", contractAddr),
+// 		observability.Uint64("start_block", lastBlock))
 
-	// Poll at configured interval
-	pollInterval := config.GetPollInterval()
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+// 	// Poll at configured interval
+// 	pollInterval := config.GetPollInterval()
+// 	ticker := time.NewTicker(pollInterval)
+// 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case <-ticker.C:
-			// Get current block
-			blockNumberHex, err := client.EthBlockNumber(p.ctx)
-			if err != nil {
-				p.logger.Error(p.ctx, "Failed to get current block number", observability.String("chain_id", chainID), observability.Error(err))
-				continue
-			}
-			currentBlock, err := hexToUint64(blockNumberHex)
-			if err != nil {
-				p.logger.Error(p.ctx, "Failed to parse block number", observability.String("chain_id", chainID), observability.Error(err))
-				continue
-			}
+// 	for {
+// 		select {
+// 		case <-p.ctx.Done():
+// 			return
+// 		case <-ticker.C:
+// 			// Get current block
+// 			blockNumberHex, err := client.EthBlockNumber(p.ctx)
+// 			if err != nil {
+// 				p.logger.Error(p.ctx, "Failed to get current block number", observability.String("chain_id", chainID), observability.Error(err))
+// 				continue
+// 			}
+// 			currentBlock, err := hexToUint64(blockNumberHex)
+// 			if err != nil {
+// 				p.logger.Error(p.ctx, "Failed to parse block number", observability.String("chain_id", chainID), observability.Error(err))
+// 				continue
+// 			}
 
-			p.mu.RLock()
-			fromBlock := p.lastBlocks[chainID]
-			p.mu.RUnlock()
+// 			p.mu.RLock()
+// 			fromBlock := p.lastBlocks[chainID]
+// 			p.mu.RUnlock()
 
-			if currentBlock <= fromBlock {
-				continue
-			}
+// 			if currentBlock <= fromBlock {
+// 				continue
+// 			}
 
-			// Poll for TaskSubmitted events
-			if err := p.pollEvent(client, chainID, chainName, contractAddress, taskSubmittedEvent, "TaskSubmitted", fromBlock+1, currentBlock); err != nil {
-				p.logger.Error(p.ctx, "Failed to poll TaskSubmitted events", observability.String("chain_id", chainID), observability.Error(err))
-			}
+// 			// Poll for TaskSubmitted events
+// 			if err := p.pollEvent(client, chainID, chainName, contractAddress, taskSubmittedEvent, "TaskSubmitted", fromBlock+1, currentBlock); err != nil {
+// 				p.logger.Error(p.ctx, "Failed to poll TaskSubmitted events", observability.String("chain_id", chainID), observability.Error(err))
+// 			}
 
-			// Poll for TaskRejected events
-			if err := p.pollEvent(client, chainID, chainName, contractAddress, taskRejectedEvent, "TaskRejected", fromBlock+1, currentBlock); err != nil {
-				p.logger.Error(p.ctx, "Failed to poll TaskRejected events", observability.String("chain_id", chainID), observability.Error(err))
-			}
+// 			// Poll for TaskRejected events
+// 			if err := p.pollEvent(client, chainID, chainName, contractAddress, taskRejectedEvent, "TaskRejected", fromBlock+1, currentBlock); err != nil {
+// 				p.logger.Error(p.ctx, "Failed to poll TaskRejected events", observability.String("chain_id", chainID), observability.Error(err))
+// 			}
 
-			// Update last block
-			p.mu.Lock()
-			p.lastBlocks[chainID] = currentBlock
-			p.mu.Unlock()
-		}
-	}
-}
+// 			// Update last block
+// 			p.mu.Lock()
+// 			p.lastBlocks[chainID] = currentBlock
+// 			p.mu.Unlock()
+// 		}
+// 	}
+// }
 
 // pollEvent polls for a specific event
-func (p *PermanentPoller) pollEvent(client *nodeclient.NodeClient, chainID, chainName string, contractAddr common.Address, event abi.Event, eventName string, fromBlock, toBlock uint64) error {
-	const maxRange uint64 = 10
+// func (p *PermanentPoller) pollEvent(client *nodeclient.NodeClient, chainID, chainName string, contractAddr common.Address, event abi.Event, eventName string, fromBlock, toBlock uint64) error {
+// 	const maxRange uint64 = 10
 
-	for cur := fromBlock; cur <= toBlock; {
-		chunkEnd := cur + maxRange - 1
-		if chunkEnd > toBlock {
-			chunkEnd = toBlock
-		}
+// 	for cur := fromBlock; cur <= toBlock; {
+// 		chunkEnd := cur + maxRange - 1
+// 		if chunkEnd > toBlock {
+// 			chunkEnd = toBlock
+// 		}
 
-		// Build filter query
-		fq := ethereum.FilterQuery{
-			Addresses: []common.Address{contractAddr},
-			Topics:    [][]common.Hash{{event.ID}},
-			FromBlock: new(big.Int).SetUint64(cur),
-			ToBlock:   new(big.Int).SetUint64(chunkEnd),
-		}
+// 		// Build filter query
+// 		fq := ethereum.FilterQuery{
+// 			Addresses: []common.Address{contractAddr},
+// 			Topics:    [][]common.Hash{{event.ID}},
+// 			FromBlock: new(big.Int).SetUint64(cur),
+// 			ToBlock:   new(big.Int).SetUint64(chunkEnd),
+// 		}
 
-		// Convert to EthGetLogsParams
-		params := convertFilterQueryToEthGetLogsParams(fq, cur, chunkEnd)
+// 		// Convert to EthGetLogsParams
+// 		params := convertFilterQueryToEthGetLogsParams(fq, cur, chunkEnd)
 
-		// Query logs
-		logs, err := client.EthGetLogs(p.ctx, params)
-		if err != nil {
-			if p.ctx.Err() != nil {
-				return nil
-			}
-			p.logger.Error(p.ctx, "EthGetLogs failed",
-				observability.String("chain_id", chainID),
-				observability.String("event_name", eventName),
-				observability.Uint64("from_block", cur),
-				observability.Uint64("to_block", chunkEnd),
-				observability.String("contract_address", contractAddr.Hex()),
-				observability.String("event_id", event.ID.Hex()),
-				observability.Error(err))
-			cur = chunkEnd + 1
-			continue
-		}
+// 		// Query logs
+// 		logs, err := client.EthGetLogs(p.ctx, params)
+// 		if err != nil {
+// 			if p.ctx.Err() != nil {
+// 				return nil
+// 			}
+// 			p.logger.Error(p.ctx, "EthGetLogs failed",
+// 				observability.String("chain_id", chainID),
+// 				observability.String("event_name", eventName),
+// 				observability.Uint64("from_block", cur),
+// 				observability.Uint64("to_block", chunkEnd),
+// 				observability.String("contract_address", contractAddr.Hex()),
+// 				observability.String("event_id", event.ID.Hex()),
+// 				observability.Error(err))
+// 			cur = chunkEnd + 1
+// 			continue
+// 		}
 
-		// Process logs
-		for _, nodeLog := range logs {
-			if err := p.processLog(chainID, chainName, event, eventName, nodeLog); err != nil {
-				p.logger.Error(p.ctx, "Failed to process log",
-					observability.String("chain_id", chainID),
-					observability.String("event_name", eventName),
-					observability.String("tx_hash", nodeLog.TransactionHash),
-					observability.Error(err))
-			}
-		}
+// 		// Process logs
+// 		for _, nodeLog := range logs {
+// 			if err := p.processLog(chainID, chainName, event, eventName, nodeLog); err != nil {
+// 				p.logger.Error(p.ctx, "Failed to process log",
+// 					observability.String("chain_id", chainID),
+// 					observability.String("event_name", eventName),
+// 					observability.String("tx_hash", nodeLog.TransactionHash),
+// 					observability.Error(err))
+// 			}
+// 		}
 
-		cur = chunkEnd + 1
-	}
+// 		cur = chunkEnd + 1
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // processLog processes a log and sends it to TaskMonitor
 func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event, eventName string, nodeLog nodeclient.Log) error {
@@ -312,7 +309,7 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 		observability.String("tx_hash", lg.TxHash.Hex()),
 		observability.Any("parsed_data_keys", getMapKeys(parsedData)))
 
-	// Extract IPFS CID from proofOfTask
+	// Extract IPFS CID from data field (same field used when broadcasting to aggregator)
 	ipfsCID, err := p.extractIPFSCID(parsedData)
 	if err != nil {
 		return fmt.Errorf("failed to extract IPFS CID: %w", err)
@@ -365,15 +362,114 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 	// Determine if task was accepted based on event name
 	isAccepted := eventName != "TaskRejected"
 
-	// Send to TaskMonitor via RPC with IPFS data
+	// Extract taskNumber from parsed event data
+	taskNumber := int64(0)
+	if taskNumberVal, exists := parsedData["taskNumber"]; exists {
+		switch v := taskNumberVal.(type) {
+		case uint32:
+			taskNumber = int64(v)
+		case *big.Int:
+			taskNumber = v.Int64()
+		case big.Int:
+			taskNumber = v.Int64()
+		case uint64:
+			taskNumber = int64(v)
+		case uint:
+			taskNumber = int64(v)
+		case int64:
+			taskNumber = v
+		case int32:
+			taskNumber = int64(v)
+		case int:
+			taskNumber = int64(v)
+		default:
+			p.logger.Warn(p.ctx, "Failed to parse taskNumber, using 0",
+				observability.String("tx_hash", lg.TxHash.Hex()),
+				observability.Any("task_number_type", fmt.Sprintf("%T", v)),
+				observability.Any("task_number_value", v))
+		}
+	} else {
+		p.logger.Warn(p.ctx, "taskNumber not found in parsed event data, using 0",
+			observability.String("tx_hash", lg.TxHash.Hex()),
+			observability.Any("parsed_data_keys", getMapKeys(parsedData)))
+	}
+
+	// Extract attesterIds from parsed event data
+	attesterIds := []int64{}
+	if attesterIdsVal, exists := parsedData["attestersIds"]; exists {
+		switch v := attesterIdsVal.(type) {
+		case []*big.Int:
+			attesterIds = make([]int64, len(v))
+			for i, id := range v {
+				attesterIds[i] = id.Int64()
+			}
+		case []big.Int:
+			attesterIds = make([]int64, len(v))
+			for i, id := range v {
+				attesterIds[i] = id.Int64()
+			}
+		case []uint64:
+			attesterIds = make([]int64, len(v))
+			for i, id := range v {
+				attesterIds[i] = int64(id)
+			}
+		case []uint32:
+			attesterIds = make([]int64, len(v))
+			for i, id := range v {
+				attesterIds[i] = int64(id)
+			}
+		case []int64:
+			attesterIds = v
+		case []int:
+			attesterIds = make([]int64, len(v))
+			for i, id := range v {
+				attesterIds[i] = int64(id)
+			}
+		case []interface{}:
+			attesterIds = make([]int64, 0, len(v))
+			for _, idVal := range v {
+				switch id := idVal.(type) {
+				case *big.Int:
+					attesterIds = append(attesterIds, id.Int64())
+				case big.Int:
+					attesterIds = append(attesterIds, id.Int64())
+				case uint64:
+					attesterIds = append(attesterIds, int64(id))
+				case uint32:
+					attesterIds = append(attesterIds, int64(id))
+				case int64:
+					attesterIds = append(attesterIds, id)
+				case int:
+					attesterIds = append(attesterIds, int64(id))
+				default:
+					p.logger.Warn(p.ctx, "Failed to parse attester ID, skipping",
+						observability.String("tx_hash", lg.TxHash.Hex()),
+						observability.Any("attester_id_type", fmt.Sprintf("%T", id)),
+						observability.Any("attester_id_value", id))
+				}
+			}
+		default:
+			p.logger.Warn(p.ctx, "Failed to parse attesterIds, using empty slice",
+				observability.String("tx_hash", lg.TxHash.Hex()),
+				observability.Any("attester_ids_type", fmt.Sprintf("%T", v)),
+				observability.Any("attester_ids_value", v))
+		}
+	} else {
+		p.logger.Debug(p.ctx, "attestersIds not found in parsed event data, using empty slice",
+			observability.String("tx_hash", lg.TxHash.Hex()),
+			observability.Any("parsed_data_keys", getMapKeys(parsedData)))
+	}
+
+	// Send to TaskMonitor via RPC with event data and IPFS CID
 	if err := p.taskMonitorClient.ReportTaskConsensusStatus(ctx, types.ReportTaskConsensusStatusRequest{
-		TaskNumber:           int64(lg.BlockNumber),
+		TaskID:               ipfsData.ActionData.TaskID,
+		Network:              string(ipfsData.TaskData.Network),
+		TaskNumber:           taskNumber,
+		TaskOpxActualCost:    ipfsData.ActionData.TotalFee,
 		TaskSubmissionTxHash: lg.TxHash.Hex(),
 		IsAccepted:           isAccepted,
-		PerformerAddress:     lg.Address.Hex(),
-		AttesterIds:          []int64{},
-		IPFSData:             &ipfsData,
-		IPFSCID:              ipfsCID,
+		AttesterIds:          attesterIds,
+		IPFSDataCID:          ipfsCID,
 	}); err != nil {
 		span.RecordError(err, observability.WithErrorAttributes(
 			attribute.String("error.type", "rpc_call_failed"),
@@ -394,64 +490,57 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 	return nil
 }
 
-// extractIPFSCID extracts the IPFS CID from the proofOfTask field (keeper-style decode).
+// extractIPFSCID extracts the IPFS CID from the data field (same field used when broadcasting to aggregator).
+// The CID is stored in the Data field as bytes when broadcasting (executor.go:385: Data: []byte(cid))
 func (p *PermanentPoller) extractIPFSCID(parsedData map[string]interface{}) (string, error) {
-	v, exists := parsedData["proofOfTask"]
+	v, exists := parsedData["data"]
 	if !exists {
-		return "", fmt.Errorf("proofOfTask field not found in parsed event data")
+		return "", fmt.Errorf("data field not found in parsed event data")
 	}
-	cid, err := p.decodeValueToCID("proofOfTask", v)
+	cid, err := p.decodeValueToCID("data", v)
 	if err != nil {
-		return "", fmt.Errorf("decode proofOfTask: %w", err)
+		return "", fmt.Errorf("decode data: %w", err)
 	}
 	if cid == "" {
-		return "", fmt.Errorf("proofOfTask decoded to empty CID")
+		return "", fmt.Errorf("data decoded to empty CID")
 	}
-	p.logger.Debug(p.ctx, "Using CID from proofOfTask",
+	p.logger.Debug(p.ctx, "Using CID from data field",
 		observability.String("cid", cid))
 	return cid, nil
 }
 
-// decodeValueToCID decodes a value to IPFS CID using keeper-style logic:
-// hex string (0x-prefix) -> hex.DecodeString(s[2:]) -> trim null/space -> CID;
-// []byte -> trim null/space -> CID; plain string -> trim -> CID.
-// Returns ("", nil) when decoded but empty (caller may try next field).
+// decodeValueToCID decodes a value to IPFS CID using keeper-style logic (copied from keeper validation):
+// hex string (0x-prefix) -> hex.DecodeString(s[2:]) -> string -> CID;
+// []byte -> string -> CID; plain string -> CID.
 func (p *PermanentPoller) decodeValueToCID(fieldName string, v interface{}) (string, error) {
 	switch val := v.(type) {
 	case []byte:
-		trimmed := bytes.TrimRight(val, "\x00")
-		trimmed = bytes.TrimSpace(trimmed)
-		cid := strings.TrimRight(string(trimmed), "\x00")
-		cid = strings.TrimSpace(cid)
+		cid := string(val)
 		p.logger.Debug(p.ctx, "Decoded field for CID",
 			observability.String("field", fieldName),
 			observability.String("type", "[]byte"),
-			observability.Int("original_len", len(val)),
 			observability.Int("cid_len", len(cid)))
 		return cid, nil
 	case string:
 		if len(val) > 2 && val[:2] == "0x" {
-			decoded, err := hex.DecodeString(val[2:])
+			// Decode hex string (remove "0x" prefix before decoding) - same as keeper validation
+			dataBytes, err := hex.DecodeString(val[2:])
 			if err != nil {
 				return "", fmt.Errorf("hex decode failed: %w", err)
 			}
-			trimmed := bytes.TrimRight(decoded, "\x00")
-			trimmed = bytes.TrimSpace(trimmed)
-			cid := strings.TrimRight(string(trimmed), "\x00")
-			cid = strings.TrimSpace(cid)
+			cid := string(dataBytes)
 			p.logger.Debug(p.ctx, "Decoded field for CID",
 				observability.String("field", fieldName),
 				observability.String("type", "hex"),
 				observability.Int("cid_len", len(cid)))
 			return cid, nil
 		}
-		cid := strings.TrimSpace(val)
-		cid = strings.TrimRight(cid, "\x00")
+		// Plain string - use as-is (same as keeper validation)
 		p.logger.Debug(p.ctx, "Decoded field for CID",
 			observability.String("field", fieldName),
 			observability.String("type", "string"),
-			observability.Int("cid_len", len(cid)))
-		return cid, nil
+			observability.Int("cid_len", len(val)))
+		return val, nil
 	default:
 		return "", fmt.Errorf("unexpected type %T", v)
 	}
@@ -544,22 +633,14 @@ func (p *PermanentPoller) ProcessTransaction(ctx context.Context, txHash, chainI
 	}
 	defer client.Close()
 
-	// Get ABI for AttestationCenter
-	attABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi()
-	if err != nil {
-		return "", fmt.Errorf("failed to load AttestationCenter ABI: %w", err)
-	}
-
-	// Get event signatures
-	taskSubmittedEvent, exists := attABI.Events["TaskSubmitted"]
-	if !exists {
-		return "", fmt.Errorf("TaskSubmitted event not found in ABI")
-	}
-
-	taskRejectedEvent, exists := attABI.Events["TaskRejected"]
-	if !exists {
-		return "", fmt.Errorf("TaskRejected event not found in ABI")
-	}
+	// Use hardcoded ABI events
+	taskSubmittedEvent := TaskSubmittedEvent
+	taskRejectedEvent := TaskRejectedEvent
+	
+	p.logger.Debug(ctx, "TaskSubmitted event found in ABI",
+		observability.String("ABI", taskSubmittedEvent.Sig))
+	p.logger.Debug(ctx, "TaskRejected event found in ABI",
+		observability.String("ABI", taskRejectedEvent.Sig))
 
 	// Get transaction receipt
 	receipt, err := client.EthGetTransactionReceipt(ctx, txHash)
@@ -581,14 +662,6 @@ func (p *PermanentPoller) ProcessTransaction(ctx context.Context, txHash, chainI
 	var eventName string
 	var eventLog nodeclient.Log
 	var event abi.Event
-
-	p.logger.Debug(ctx, "Searching for events in transaction receipt",
-		observability.String("tx_hash", txHash),
-		observability.String("chain_id", chainID),
-		observability.String("contract_address", contractAddr),
-		observability.String("expected_task_submitted_id", taskSubmittedEventID),
-		observability.String("expected_task_rejected_id", taskRejectedEventID),
-		observability.Int("log_count", len(receipt.Logs)))
 
 	for i, log := range receipt.Logs {
 		// Check if log is from the contract address (case-insensitive)
@@ -798,54 +871,54 @@ func hexToUint64(hexStr string) (uint64, error) {
 	return strconv.ParseUint(hexStr, 16, 64)
 }
 
-func convertFilterQueryToEthGetLogsParams(fq ethereum.FilterQuery, fromBlock, toBlock uint64) nodeclient.EthGetLogsParams {
-	fromHex := uint64ToHex(fromBlock)
-	toHex := uint64ToHex(toBlock)
-	fromBlockNum := nodeclient.BlockNumber(fromHex)
-	toBlockNum := nodeclient.BlockNumber(toHex)
+// func convertFilterQueryToEthGetLogsParams(fq ethereum.FilterQuery, fromBlock, toBlock uint64) nodeclient.EthGetLogsParams {
+// 	fromHex := uint64ToHex(fromBlock)
+// 	toHex := uint64ToHex(toBlock)
+// 	fromBlockNum := nodeclient.BlockNumber(fromHex)
+// 	toBlockNum := nodeclient.BlockNumber(toHex)
 
-	params := nodeclient.EthGetLogsParams{
-		FromBlock: &fromBlockNum,
-		ToBlock:   &toBlockNum,
-	}
+// 	params := nodeclient.EthGetLogsParams{
+// 		FromBlock: &fromBlockNum,
+// 		ToBlock:   &toBlockNum,
+// 	}
 
-	if len(fq.Addresses) > 0 {
-		if len(fq.Addresses) == 1 {
-			params.Address = fq.Addresses[0].Hex()
-		} else {
-			addrs := make([]string, len(fq.Addresses))
-			for i, addr := range fq.Addresses {
-				addrs[i] = addr.Hex()
-			}
-			params.Address = addrs
-		}
-	}
+// 	if len(fq.Addresses) > 0 {
+// 		if len(fq.Addresses) == 1 {
+// 			params.Address = fq.Addresses[0].Hex()
+// 		} else {
+// 			addrs := make([]string, len(fq.Addresses))
+// 			for i, addr := range fq.Addresses {
+// 				addrs[i] = addr.Hex()
+// 			}
+// 			params.Address = addrs
+// 		}
+// 	}
 
-	if len(fq.Topics) > 0 {
-		topics := make([]interface{}, len(fq.Topics))
-		for i, topicGroup := range fq.Topics {
-			if len(topicGroup) == 0 {
-				continue
-			}
-			if len(topicGroup) == 1 {
-				topics[i] = topicGroup[0].Hex()
-			} else {
-				topicStrs := make([]string, len(topicGroup))
-				for j, topic := range topicGroup {
-					topicStrs[j] = topic.Hex()
-				}
-				topics[i] = topicStrs
-			}
-		}
-		params.Topics = topics
-	}
+// 	if len(fq.Topics) > 0 {
+// 		topics := make([]interface{}, len(fq.Topics))
+// 		for i, topicGroup := range fq.Topics {
+// 			if len(topicGroup) == 0 {
+// 				continue
+// 			}
+// 			if len(topicGroup) == 1 {
+// 				topics[i] = topicGroup[0].Hex()
+// 			} else {
+// 				topicStrs := make([]string, len(topicGroup))
+// 				for j, topic := range topicGroup {
+// 					topicStrs[j] = topic.Hex()
+// 				}
+// 				topics[i] = topicStrs
+// 			}
+// 		}
+// 		params.Topics = topics
+// 	}
 
-	return params
-}
+// 	return params
+// }
 
-func uint64ToHex(val uint64) string {
-	return fmt.Sprintf("0x%x", val)
-}
+// func uint64ToHex(val uint64) string {
+// 	return fmt.Sprintf("0x%x", val)
+// }
 
 func convertNodeLogToTypesLog(nodeLog nodeclient.Log) (ethtypes.Log, error) {
 	blockNumber, err := hexToUint64(nodeLog.BlockNumber)

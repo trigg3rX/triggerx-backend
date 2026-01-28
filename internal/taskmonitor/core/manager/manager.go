@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/core/events"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/core/tasks"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/database/repository"
@@ -37,13 +36,14 @@ type TaskManager struct {
 	startTime           time.Time
 	taskRepo            repository.TaskRepository
 	ipfsClient          ipfs.IPFSClient
+	notifier          notify.Notifier
 	rpcServer           interface {
 		Stop(ctx context.Context) error
 	}
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(ctx context.Context, logger observability.Logger, tracer observability.Tracer) (*TaskManager, error) {
+func NewTaskManager(ctx context.Context, logger observability.Logger, tracer observability.Tracer, notifier notify.Notifier) (*TaskManager, error) {
 	logger.Info(ctx, "Initializing TaskManager...")
 
 	// Create context for managing background workers
@@ -108,6 +108,7 @@ func NewTaskManager(ctx context.Context, logger observability.Logger, tracer obs
 		startTime:           time.Now(),
 		taskRepo:            taskRepo,
 		ipfsClient:          ipfsClient,
+		notifier:            notifier,
 	}
 
 	logger.Info(ctx, "TaskManager initialized successfully",
@@ -145,59 +146,57 @@ func (tm *TaskManager) Initialize() error {
 	return nil
 }
 
-// ReportTaskStatus handles task status reports from keepers
+// ReportTaskExecutionStatus handles task execution status reports from keepers
 // This is called after the aggregator submission attempt (regardless of success or failure)
-// ProofCID contains all execution data (task data, action data, proof, signatures)
-func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTaskExecutionStatusRequest) (*types.ReportTaskExecutionStatusResponse, error) {
+// IPFSDataCID contains all execution data (task data, action data, proof, signatures)
+func (tm *TaskManager) ReportTaskExecutionStatus(ctx context.Context, req *types.ReportTaskExecutionStatusRequest) (*types.ReportTaskExecutionStatusResponse, error) {
 	tm.logger.Info(ctx, "Received task status report",
 		observability.Int64("task_id", req.TaskID),
 		observability.String("keeper_address", req.KeeperAddress),
 		observability.Bool("execution_successful", req.ExecutionSuccessful),
 		observability.Bool("aggregator_submitted", req.AggregatorSubmitted),
-		observability.String("execution_tx_hash", req.ExecutionTxHash),
-		observability.String("proof_cid", req.ProofCID),
 		observability.String("error", req.Error))
 
-	// Case 1: Task failed (execution failed or aggregator submission failed)
-	if !req.ExecutionSuccessful || !req.AggregatorSubmitted {
-		if err := tm.taskRepo.UpdateTaskAggregatorFailed(ctx, req.TaskID, req.Error, req.ExecutionTxHash, req.ProofCID); err != nil {
-			tm.logger.Error(ctx, "Failed to update task failure in database",
-				observability.Int64("task_id", req.TaskID),
+	ctx, span := tm.tracer.Start(ctx, "task.execution.process",
+		observability.WithSpanKind(trace.SpanKindServer),
+		observability.WithAttributes(
+			attribute.Int64("task.id", req.TaskID),
+			attribute.String("keeper.address", req.KeeperAddress),
+			attribute.Bool("execution.successful", req.ExecutionSuccessful),
+			attribute.Bool("aggregator.submitted", req.AggregatorSubmitted),
+		),
+	)
+	defer span.End()
+
+	var ipfsData *types.IPFSData
+	var err error
+	if req.IPFSDataCID != "" {
+		ipfsData, err = tm.fetchIPFSData(ctx, req.IPFSDataCID)
+		if err != nil {
+			tm.logger.Debug(ctx, "Failed to fetch IPFS data",
+				observability.String("ipfs_cid", req.IPFSDataCID),
 				observability.Error(err))
-			return &types.ReportTaskExecutionStatusResponse{
-				Success: false,
-				Message: fmt.Sprintf("failed to update task failure: %v", err),
-			}, nil
 		}
-
-		// Move task to failed stream
-		_ = tm.taskStreamManager.MarkTaskFailed(ctx, req.TaskID, req.Error)
-
-		tm.logger.Info(ctx, "Task failure recorded",
-			observability.Int64("task_id", req.TaskID),
-			observability.String("keeper_address", req.KeeperAddress),
-			observability.Bool("execution_successful", req.ExecutionSuccessful),
-			observability.Bool("aggregator_submitted", req.AggregatorSubmitted),
-			observability.String("execution_tx_hash", req.ExecutionTxHash),
-			observability.String("error", req.Error))
-
-		return &types.ReportTaskExecutionStatusResponse{
-			Success: true,
-			Message: "Task failure recorded",
-		}, nil
+	} else {
+		ipfsData = nil
 	}
 
-	// Case 2: Task succeeded (both execution and aggregator submission succeeded)
-	// Update task status to pending confirmation (waiting for on-chain event)
-	if err := tm.taskRepo.UpdateTaskAggregatorSubmitted(ctx, req.TaskID, req.ExecutionTxHash, req.ProofCID); err != nil {
-		tm.logger.Error(ctx, "Failed to update task success in database",
+	if err := tm.taskRepo.UpdateTaskExecutionData(ctx, req, ipfsData); err != nil {
+		tm.logger.Error(ctx, "Failed to update task execution data in database",
 			observability.Int64("task_id", req.TaskID),
 			observability.Error(err))
 		return &types.ReportTaskExecutionStatusResponse{
 			Success: false,
-			Message: fmt.Sprintf("failed to update task success: %v", err),
+			Message: fmt.Sprintf("failed to update task execution data: %v", err),
 		}, nil
 	}
+
+	span.SetStatus(codes.Ok, "execution event processed")
+	tm.logger.Info(ctx, "Execution event processed successfully",
+		observability.Int64("task_id", req.TaskID),
+		observability.String("tx_hash", req.ExecutionTxHash),
+		observability.Bool("execution_successful", req.ExecutionSuccessful))
+
 
 	// Mark task as executed and add to executed stream with timeout
 	// Timeout: 15 minutes for validation (from TasksExecutedTTL constant)
@@ -212,7 +211,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 		observability.Int64("task_id", req.TaskID),
 		observability.String("keeper_address", req.KeeperAddress),
 		observability.String("execution_tx_hash", req.ExecutionTxHash),
-		observability.String("proof_cid", req.ProofCID))
+		observability.String("ipfs_data_cid", req.IPFSDataCID))
 
 	return &types.ReportTaskExecutionStatusResponse{
 		Success: true,
@@ -220,24 +219,14 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 	}, nil
 }
 
-// ReportConsensusEvent handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
+// ReportTaskConsensusStatus handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
 // The request now contains IPFS data (with trace context) directly from eventmonitor
-func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.ReportTaskConsensusStatusRequest) (*types.ReportTaskConsensusStatusResponse, error) {
-	// Extract task ID from IPFS data (ActionData has single task ID)
-	taskID := int64(0)
-	if req.IPFSData != nil && req.IPFSData.ActionData != nil {
-		taskID = req.IPFSData.ActionData.TaskID
-	}
-
+func (tm *TaskManager) ReportTaskConsensusStatus(ctx context.Context, req *types.ReportTaskConsensusStatusRequest) (*types.ReportTaskConsensusStatusResponse, error) {
 	tm.logger.Info(ctx, "Received consensus event report from eventmonitor",
 		observability.String("tx_hash", req.TaskSubmissionTxHash),
 		observability.Bool("is_accepted", req.IsAccepted),
-		observability.Int64("task_id", taskID))
-
-	// Continue the trace from IPFS data if available
-	if req.IPFSData != nil && req.IPFSData.TraceID != "" {
-		ctx = observability.ContinueTrace(ctx, req.IPFSData.TraceID, req.IPFSData.SpanID)
-	}
+		observability.Int64("task_id", req.TaskID),
+		observability.Int64("task_number", req.TaskNumber))
 
 	// Create span for consensus event processing
 	ctx, span := tm.tracer.Start(ctx, "task.consensus.process",
@@ -245,21 +234,74 @@ func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.Repo
 		observability.WithAttributes(
 			attribute.String("tx.hash", req.TaskSubmissionTxHash),
 			attribute.Bool("is.accepted", req.IsAccepted),
-			attribute.Int64("task.id", taskID),
+			attribute.Int64("task.id", req.TaskID),
+			attribute.Int64("task.number", req.TaskNumber),
 		),
 	)
 	defer span.End()
 
-	// Create a task handler instance to process the event
-	taskHandler := tm.createTaskEventHandler()
-	// Process the consensus event with IPFS data
-	if err := taskHandler.ProcessConsensusEventFromIPFS(ctx, req.TaskSubmissionTxHash, req.IsAccepted, req.IPFSData, req.IPFSCID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to process consensus event")
-		return &types.ReportTaskConsensusStatusResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+	// Move task from dispatched to completed stream
+	streamHandled := true
+	if err := tm.taskStreamManager.MoveTaskToCompleted(ctx, req.TaskID); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "stream_move_failed"),
+		))
+		tm.logger.Error(ctx, "Failed to move task to validated stream", observability.Error(err))
+		streamHandled = false
+		// Stream move failure is critical - task should be in validated stream
+		// But continue to attempt DB update anyway
+	}
+
+	// Update task submission data in database
+	if err := tm.taskRepo.UpdateTaskSubmissionData(ctx, req); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "database_update_failed"),
+		))
+		tm.logger.Error(ctx, "Failed to update task submission data in database", observability.Error(err))
+		// Don't return error - task is already validated in stream
+		// DB update can be retried later if needed, but task should not be rebroadcasted
+	} else {
+		span.SetStatus(codes.Ok, "task validated and database updated")
+
+		// Schedule IPFS file deletion after 6 hours delay
+		// This happens after data is downloaded, DB is updated, and stream is handled
+		// Only schedule deletion if both stream handling and DB update succeeded
+		if streamHandled && req.IPFSDataCID != "" {
+			tm.scheduleIPFSDeletion(req.IPFSDataCID, req.TaskID)
+		} else if !streamHandled {
+			tm.logger.Warn(ctx, "Skipping IPFS deletion scheduling - stream handling failed",
+				observability.String("ipfs_cid", req.IPFSDataCID),
+				observability.Int64("task_id", req.TaskID))
+		}
+	}
+
+	span.AddEvent("task.data.updated", observability.WithEventAttributes(
+		attribute.String("database.table", "tasks"),
+	))
+
+	// Notify user about task completion/rejection
+	if tm.notifier != nil {
+		email, err := tm.taskRepo.GetUserEmailByTaskID(ctx, req.TaskID)
+		if err != nil {
+			tm.logger.Warn(ctx, "Could not fetch user email for task", observability.Int64("task_id", req.TaskID), observability.Error(err))
+		} else if email != "" {
+			payload := notify.TaskStatusPayload{
+				TaskID:          req.TaskID,
+				JobID:           0,
+				Status:          "completed",
+				IsAccepted:      req.IsAccepted,
+				SubmissionTx:    req.TaskSubmissionTxHash,
+				// ExecutionTxHash: req.ExecutionTxHash,
+				ProofOfTask:     req.IPFSDataCID,
+				// OccurredAt:      req.ExecutedAt,
+			}
+			if !req.IsAccepted {
+				payload.Status = "failed"
+			}
+			if err := tm.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
+				tm.logger.Warn(ctx, "Failed to notify user", observability.String("email", email), observability.Int64("task_id", req.TaskID), observability.Error(err))
+			}
+		}
 	}
 
 	span.SetStatus(codes.Ok, "consensus event processed")
@@ -267,14 +309,6 @@ func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *types.Repo
 		Success: true,
 		Message: "Consensus event processed",
 	}, nil
-}
-
-// createTaskEventHandler creates a TaskEventHandler instance for processing events
-func (tm *TaskManager) createTaskEventHandler() *events.TaskEventHandler {
-	// Create notifier similar to how it's done in the event listener
-	notifier := notify.NewCompositeNotifier(tm.logger, notify.NewWebhookNotifier(tm.logger), notify.NewSMTPNotifier(tm.logger))
-
-	return events.NewTaskEventHandler(tm.logger, tm.tracer, tm.taskRepo, tm.ipfsClient, tm.taskStreamManager, notifier)
 }
 
 // SetRPCServer sets the RPC server for graceful shutdown
@@ -349,46 +383,45 @@ func (tm *TaskManager) updateMetrics() {
 	}
 }
 
-// GetTaskStreamManager returns the task stream manager
-func (tm *TaskManager) GetTaskStreamManager() *tasks.TaskStreamManager {
-	return tm.taskStreamManager
-}
-
-// GetTaskRepository returns the task repository
-func (tm *TaskManager) GetTaskRepository() repository.TaskRepository {
-	return tm.taskRepo
-}
-
-// HealthCheck performs a comprehensive health check
-func (tm *TaskManager) HealthCheck() map[string]interface{} {
-	tm.logger.Debug(tm.ctx, "Performing TaskManager health check")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	healthStatus := map[string]interface{}{
-		"timestamp":      time.Now(),
-		"uptime_seconds": time.Since(tm.startTime).Seconds(),
-		"start_time":     tm.startTime.Format(time.RFC3339),
+// FetchIPFSData fetches IPFS data using the provided CID
+func (tm *TaskManager) fetchIPFSData(ctx context.Context, ipfsCID string) (*types.IPFSData, error) {
+	ipfsData, err := tm.ipfsClient.Fetch(ctx, ipfsCID)
+	if err != nil {
+		tm.logger.Error(ctx, "Failed to fetch IPFS data",
+			observability.String("ipfs_cid", ipfsCID),
+			observability.Error(err))
+		return nil, fmt.Errorf("failed to fetch IPFS data: %w", err)
 	}
+	return &ipfsData, nil
+}
 
-	// Check Redis connection
-	if tm.redisClient != nil {
-		redisHealth := tm.redisClient.GetHealthStatus(ctx)
-		healthStatus["redis_connection"] = map[string]interface{}{
-			"connected":    redisHealth.Connected,
-			"last_ping":    redisHealth.LastPing,
-			"ping_latency": redisHealth.PingLatency,
-			"errors":       redisHealth.Errors,
+// scheduleIPFSDeletion schedules IPFS file deletion after a 6-hour delay
+// This is called after data is downloaded, DB is updated, and stream is handled
+// Uses a detached context so deletion proceeds even if the request context is cancelled
+func (tm *TaskManager) scheduleIPFSDeletion(ipfsCID string, taskID int64) {
+	const deletionDelay = 6 * time.Hour
+
+	// Start a goroutine to handle delayed deletion
+	go func() {
+		// Use a background context that is detached from the request context
+		// This ensures deletion proceeds even if the original request context is cancelled
+		deleteCtx := context.Background()
+
+		// Wait for the delay - no need to check for context cancellation
+		time.Sleep(deletionDelay)
+
+		// Attempt to delete the IPFS file
+		if err := tm.ipfsClient.Delete(deleteCtx, ipfsCID); err != nil {
+			tm.logger.Error(deleteCtx, "Failed to delete IPFS file",
+				observability.String("ipfs_cid", ipfsCID),
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+		} else {
+			tm.logger.Info(deleteCtx, "Successfully deleted IPFS file",
+				observability.String("ipfs_cid", ipfsCID),
+				observability.Int64("task_id", taskID))
 		}
-	}
-
-	// Get stream information
-	if tm.taskStreamManager != nil {
-		healthStatus["task_streams"] = tm.taskStreamManager.GetStreamInfo(tm.ctx)
-	}
-
-	return healthStatus
+	}()
 }
 
 // Close gracefully shuts down the TaskManager

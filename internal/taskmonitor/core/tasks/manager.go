@@ -9,7 +9,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/database/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/redis"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -17,7 +16,6 @@ import (
 type TaskStreamManager struct {
 	redisClient       *redis.Client
 	taskRepo          repository.TaskRepository
-	notifier          notify.Notifier
 	logger            observability.Logger
 	tracer            observability.Tracer
 	consumerGroups    map[string]bool
@@ -37,7 +35,6 @@ func NewTaskStreamManager(ctx context.Context, redisClient *redis.Client, taskRe
 	tsm := &TaskStreamManager{
 		redisClient:    redisClient,
 		taskRepo:       taskRepo,
-		notifier:       notify.NewCompositeNotifier(logger, notify.NewWebhookNotifier(logger), notify.NewSMTPNotifier(logger)),
 		logger:         logger,
 		tracer:         tracer,
 		consumerGroups: make(map[string]bool),
@@ -275,19 +272,85 @@ func (tsm *TaskStreamManager) CleanupPendingEntries(ctx context.Context) error {
 	return nil
 }
 
-// FindTaskInDispatched finds a specific task in the dispatched stream
-func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*types.TaskStreamData, error) {
-	ctx := context.Background()
-	task, _, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
-	if err != nil {
-		return nil, err
-	}
-	return task, nil
-}
-
 // FindTaskByIDInStream finds a task by ID in a specific stream
 func (tsm *TaskStreamManager) FindTaskByIDInStream(ctx context.Context, taskID int64, stream string) (*types.TaskStreamData, string, error) {
 	return tsm.taskIndex.FindTaskByIDInStream(ctx, taskID, stream)
+}
+
+// MoveTaskToCompleted moves a task from executed (or dispatched) to validated stream
+func (tsm *TaskStreamManager) MoveTaskToCompleted(ctx context.Context, taskID int64) error {
+	tsm.logger.Info(ctx, "Moving task to validated stream", observability.Int64("task_id", taskID))
+
+	// Try to find task in executed stream first (most common case after execution)
+	var task *types.TaskStreamData
+	var messageID string
+	var sourceStream string
+	var err error
+	task, messageID, err = tsm.FindTaskByIDInStream(ctx, taskID, types.StreamTaskExecuted)
+	if err != nil {
+		// Fallback to dispatched stream (for tasks that were validated before execution completed)
+		tsm.logger.Debug(ctx, "Task not found in executed stream, checking dispatched stream",
+			observability.Int64("task_id", taskID))
+		task, messageID, err = tsm.FindTaskByIDInStream(ctx, taskID, types.StreamTaskDispatched)
+		if err != nil {
+			tsm.logger.Error(ctx, "Failed to find task in executed or dispatched stream",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+			return err
+		}
+		sourceStream = types.StreamTaskDispatched
+	} else {
+		sourceStream = types.StreamTaskExecuted
+	}
+
+	// Mark task as validated
+	now := time.Now()
+	task.ValidatedAt = &now
+
+	// Add to validated stream
+	err = tsm.AddTaskToStream(ctx, types.StreamTaskValidated, task)
+	if err != nil {
+		tsm.logger.Error(ctx, "Failed to add task to validated stream", observability.Int64("task_id", taskID), observability.Error(err))
+		return err
+	}
+
+	// Remove from the appropriate stream (acknowledge)
+	if messageID != "" {
+		if err := tsm.AckTaskProcessed(ctx, sourceStream, "task-processors", messageID); err != nil {
+			tsm.logger.Warn(ctx, "Failed to acknowledge task from stream",
+				observability.Int64("task_id", taskID),
+				observability.String("stream", sourceStream),
+				observability.String("message_id", messageID),
+				observability.Error(err))
+		}
+
+		// Always remove from task index and timeout tracking, even if ack failed
+		// The task is already validated, so it should not be in timeout tracking
+		if err := tsm.RemoveTaskIndex(ctx, taskID); err != nil {
+			tsm.logger.Warn(ctx, "Failed to remove task from index after validation",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
+		}
+
+		// CRITICAL: Always remove from timeout tracking if it was in executed stream - task is validated, don't rebroadcast
+		if sourceStream == types.StreamTaskExecuted {
+			if err := tsm.RemoveExecutedTaskTimeout(ctx, taskID); err != nil {
+				tsm.logger.Warn(ctx, "Failed to remove task from timeout tracking after validation",
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
+			}
+		}
+	} else {
+		// Task was in dispatched stream (no messageID), but still clean up index if present
+		if err := tsm.RemoveTaskIndex(ctx, taskID); err != nil {
+			tsm.logger.Debug(ctx, "Task index not found (expected for dispatched stream tasks)",
+				observability.Int64("task_id", taskID))
+		}
+	}
+
+	tsm.logger.Info(ctx, "Task moved to validated stream successfully", observability.Int64("task_id", taskID))
+
+	return nil
 }
 
 // RemoveTaskIndex removes a task from the index
@@ -316,71 +379,6 @@ func (tsm *TaskStreamManager) Close(ctx context.Context) error {
 
 	tsm.logger.Info(ctx, "TaskStreamManager closed successfully")
 	return nil
-}
-
-// startStreamHealthMonitor monitors the health of Redis streams
-func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
-	tsm.logger.Info(ctx, "Starting stream health monitor")
-
-	ticker := time.NewTicker(30 * time.Second)          // Check health every 30 seconds
-	cleanupTicker := time.NewTicker(5 * time.Minute)    // Cleanup every 5 minutes
-	trimTicker := time.NewTicker(10 * time.Minute)      // Trim streams every 10 minutes
-	expirationTicker := time.NewTicker(1 * time.Minute) // Check for expired entries every minute
-	defer ticker.Stop()
-	defer cleanupTicker.Stop()
-	defer trimTicker.Stop()
-	defer expirationTicker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			tsm.logger.Info(ctx, "Stream health monitor shutting down")
-			return
-		case <-ticker.C:
-			// Get stream information
-			taskInfo := tsm.GetStreamInfo(ctx)
-
-			// Log warnings for high stream lengths
-			if taskLengths, ok := taskInfo["stream_lengths"].(map[string]int64); ok {
-				for stream, length := range taskLengths {
-					if length > 50 { // Warn if more than 50 tasks in any stream
-						tsm.logger.Warn(ctx, "High task stream length detected",
-							observability.String("stream", stream),
-							observability.Int64("length", length))
-					}
-				}
-			}
-
-			// Check pending entries
-			pendingInfo := tsm.GetPendingEntriesInfo(ctx)
-			for group, info := range pendingInfo {
-				if infoMap, ok := info.(map[string]interface{}); ok {
-					if count, exists := infoMap["count"]; exists {
-						if countInt, ok := count.(int64); ok && countInt > 50 {
-							tsm.logger.Warn(ctx, "High number of pending entries detected",
-								observability.String("consumer_group", group),
-								observability.Int64("pending_count", countInt))
-						}
-					}
-				}
-			}
-		case <-cleanupTicker.C:
-			// Periodic cleanup of old pending entries
-			if err := tsm.CleanupPendingEntries(ctx); err != nil {
-				tsm.logger.Error(ctx, "Failed to cleanup pending entries", observability.Error(err))
-			}
-		case <-trimTicker.C:
-			// Periodic trimming of streams to remove old messages
-			if err := tsm.TrimStreams(ctx); err != nil {
-				tsm.logger.Error(ctx, "Failed to trim streams", observability.Error(err))
-			}
-		case <-expirationTicker.C:
-			// Periodic cleanup of expired stream entries
-			if err := tsm.CleanupExpiredStreamEntries(ctx); err != nil {
-				tsm.logger.Error(ctx, "Failed to cleanup expired stream entries", observability.Error(err))
-			}
-		}
-	}
 }
 
 // TrimStreams periodically trims old messages from streams to prevent unbounded growth

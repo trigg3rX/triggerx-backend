@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -43,7 +42,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 	defer span.End()
 
 	// Get expired tasks efficiently using sorted set
-	expiredTaskIDs, err := tsm.expirationManager.GetExpiredTasks(ctx)
+	expiredTaskIDs, err := tsm.expirationManager.GetExpiredExecutedTasks(ctx)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to get expired tasks")
@@ -81,7 +80,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 			tsm.logger.Debug(taskCtx, "Expired task was already validated, cleaning up timeout tracking (should not rebroadcast)",
 				observability.Int64("task_id", taskID))
 			// Remove from timeout tracking since task is validated
-			if err := tsm.expirationManager.RemoveTaskTimeout(taskCtx, taskID); err != nil {
+			if err := tsm.expirationManager.RemoveExecutedTaskTimeout(taskCtx, taskID); err != nil {
 				tsm.logger.Warn(taskCtx, "Failed to remove validated task from timeout tracking",
 					observability.Int64("task_id", taskID),
 					observability.Error(err))
@@ -250,7 +249,7 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 		processedCount++
 		processedTaskIDs = append(processedTaskIDs, taskID)
 
-		err = tsm.taskRepo.UpdateTaskFailed(taskCtx, taskID)
+		err = tsm.taskRepo.UpdateTaskAttestationTimeoutFailure(taskCtx, taskID, "validation timeout - task not confirmed on-chain")
 		if err != nil {
 			taskSpan.RecordError(err)
 			tsm.logger.Error(taskCtx, "Failed to update task failed",
@@ -260,32 +259,6 @@ func (tsm *TaskStreamManager) checkExecutedTimeouts(ctx context.Context) {
 			taskSpan.AddEvent("db.updated")
 		}
 
-		// Notify user on failure
-		if tsm.notifier != nil {
-			email, e := tsm.taskRepo.GetUserEmailByTaskID(taskCtx, taskID)
-			if e != nil {
-				tsm.logger.Warn(taskCtx, "Could not fetch user email for task failure",
-					observability.Int64("task_id", taskID),
-					observability.Error(e))
-			} else if email != "" {
-				payload := notify.TaskStatusPayload{
-					TaskID:     taskID,
-					JobID:      0,
-					Status:     "failed",
-					IsAccepted: false,
-					Error:      "validation timeout - task not confirmed on-chain",
-					OccurredAt: time.Now(),
-				}
-				if err := tsm.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
-					tsm.logger.Warn(taskCtx, "Failed to notify user for task failure",
-						observability.String("email", email),
-						observability.Int64("task_id", taskID),
-						observability.Error(err))
-				} else {
-					taskSpan.AddEvent("user.notified")
-				}
-			}
-		}
 
 		taskSpan.SetStatus(codes.Ok, "")
 		taskSpan.End()
@@ -386,7 +359,7 @@ func (tsm *TaskStreamManager) moveTaskToFailed(ctx context.Context, task types.T
 	}
 
 	tsm.logger.Error(ctx, "Task permanently failed",
-		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID),
 		observability.Int("retry_count", task.RetryCount),
 		observability.String("error", errorMsg))
 	if metrics.TasksAddedToStreamTotal != nil {

@@ -15,7 +15,7 @@ type MockTaskMonitor struct {
 	mock.Mock
 }
 
-func (m *MockTaskMonitor) ReportTaskStatus(ctx context.Context, req *types.ReportTaskExecutionStatusRequest) (*types.ReportTaskExecutionStatusResponse, error) {
+func (m *MockTaskMonitor) ReportTaskExecutionStatus(ctx context.Context, req *types.ReportTaskExecutionStatusRequest) (*types.ReportTaskExecutionStatusResponse, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -23,7 +23,7 @@ func (m *MockTaskMonitor) ReportTaskStatus(ctx context.Context, req *types.Repor
 	return args.Get(0).(*types.ReportTaskExecutionStatusResponse), args.Error(1)
 }
 
-func (m *MockTaskMonitor) ReportConsensusEvent(ctx context.Context, req *types.ReportTaskConsensusStatusRequest) (*types.ReportTaskConsensusStatusResponse, error) {
+func (m *MockTaskMonitor) ReportTaskConsensusStatus(ctx context.Context, req *types.ReportTaskConsensusStatusRequest) (*types.ReportTaskConsensusStatusResponse, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -34,7 +34,7 @@ func (m *MockTaskMonitor) ReportConsensusEvent(ctx context.Context, req *types.R
 func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
+	handler := NewTaskMonitorHandler(logger, mockMonitor)
 
 	tests := []struct {
 		name          string
@@ -54,12 +54,12 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 				ExecutionSuccessful: true,
 				AggregatorSubmitted: true,
 				ExecutionTxHash:     "0xabc123",
-				ProofCID:            "QmTestCID123",
+				IPFSDataCID:         "QmTestCID123",
 				Error:               "",
 				Signature:           "valid_signature",
 			},
 			setupMock: func() {
-				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
+				mockMonitor.On("ReportTaskExecutionStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
 					return req.TaskID == 123 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == true
 				})).Return(&types.ReportTaskExecutionStatusResponse{
 					Success: true,
@@ -81,12 +81,12 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 				ExecutionSuccessful: true,
 				AggregatorSubmitted: false,
 				ExecutionTxHash:     "0xdef456",
-				ProofCID:            "QmTestCID456",
+				IPFSDataCID:         "QmTestCID456",
 				Error:               "aggregator submission failed",
 				Signature:           "valid_signature",
 			},
 			setupMock: func() {
-				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
+				mockMonitor.On("ReportTaskExecutionStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
 					return req.TaskID == 456 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == false
 				})).Return(&types.ReportTaskExecutionStatusResponse{
 					Success: true,
@@ -110,19 +110,19 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 		},
 		{
 			name:   "Success - Request from map (JSON decoded)",
-			method: "report-task-status",
+			method: "report-task-execution-status",
 			request: map[string]interface{}{
 				"task_id":              float64(789), // JSON numbers are float64
 				"keeper_address":       "0x9876543210fedcba",
 				"execution_successful": true,
 				"aggregator_submitted": true,
 				"execution_tx_hash":    "0x789abc",
-				"proof_cid":            "QmTestCID789",
+				"ipfs_data_cid":        "QmTestCID789",
 				"error":                "",
 				"signature":            "valid_signature",
 			},
 			setupMock: func() {
-				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
+				mockMonitor.On("ReportTaskExecutionStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskExecutionStatusRequest) bool {
 					return req.TaskID == 789 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == true
 				})).Return(&types.ReportTaskExecutionStatusResponse{
 					Success: true,
@@ -170,7 +170,7 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
+	handler := NewTaskMonitorHandler(logger, mockMonitor)
 
 	methods := handler.GetMethods()
 
@@ -183,7 +183,7 @@ func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 func TestConvertMapToStatusRequest(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
+	handler := NewTaskMonitorHandler(logger, mockMonitor)
 
 	tests := []struct {
 		name        string
@@ -199,7 +199,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				"execution_successful": true,
 				"aggregator_submitted": true,
 				"execution_tx_hash":    "0xabc123",
-				"proof_cid":            "QmTest",
+				"ipfs_data_cid":        "QmTest",
 				"error":                "",
 				"signature":            "sig123",
 			},
@@ -209,7 +209,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				ExecutionSuccessful: true,
 				AggregatorSubmitted: true,
 				ExecutionTxHash:     "0xabc123",
-				ProofCID:            "QmTest",
+				IPFSDataCID:         "QmTest",
 				Error:               "",
 				Signature:           "sig123",
 			},
@@ -223,7 +223,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				"execution_successful": true,
 				"aggregator_submitted": false,
 				"execution_tx_hash":    "0xdef456",
-				"proof_cid":            "",
+				"ipfs_data_cid":        "",
 				"error":                "aggregator submission failed",
 				"signature":            "sig456",
 			},
@@ -233,7 +233,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				ExecutionSuccessful: true,
 				AggregatorSubmitted: false,
 				ExecutionTxHash:     "0xdef456",
-				ProofCID:            "",
+				IPFSDataCID:         "",
 				Error:               "aggregator submission failed",
 				Signature:           "sig456",
 			},
@@ -254,7 +254,7 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				assert.Equal(t, tt.expected.ExecutionSuccessful, result.ExecutionSuccessful)
 				assert.Equal(t, tt.expected.AggregatorSubmitted, result.AggregatorSubmitted)
 				assert.Equal(t, tt.expected.ExecutionTxHash, result.ExecutionTxHash)
-				assert.Equal(t, tt.expected.ProofCID, result.ProofCID)
+				assert.Equal(t, tt.expected.IPFSDataCID, result.IPFSDataCID)
 				assert.Equal(t, tt.expected.Error, result.Error)
 				assert.Equal(t, tt.expected.Signature, result.Signature)
 			}

@@ -14,6 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/core/manager"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc"
+	notify "github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
@@ -55,8 +56,11 @@ func main() {
 	ctx := context.Background()
 	logger.Info(ctx, "[1/4] Dependency: Observability Module Initialised")
 
+	// Initialize notifier
+	notifier := notify.NewCompositeNotifier(logger, notify.NewWebhookNotifier(logger), notify.NewSMTPNotifier(logger))
+
 	// Initialize TaskManager (handles Redis, Database, IPFS, Event Listener, and Task Stream Manager)
-	taskManager, err := manager.NewTaskManager(ctx, logger, tracer)
+	taskManager, err := manager.NewTaskManager(ctx, logger, tracer, notifier)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create TaskManager", observability.Error(err))
 	}
@@ -75,13 +79,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Get database client for handler
-	taskRepo := taskManager.GetTaskRepository()
-
 	// Initialize gRPC server
 	rpcDeps := &rpc.Dependencies{
 		Monitor:  taskManager,
-		DBClient: taskRepo,
 	}
 	rpcSrv, err := rpc.NewServer(logger, tracer, rpcDeps)
 	if err != nil {
