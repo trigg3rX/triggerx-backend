@@ -18,8 +18,23 @@ const (
 		FROM triggerx.job_data
 		WHERE job_id = ?`
 
+	getUserAddressByJobIDQuery = `
+		SELECT user_address
+		FROM triggerx.job_data
+		WHERE job_id = ?`
+
+	getUserTotalTasksQuery = `
+		SELECT total_tasks
+		FROM triggerx.user_data
+		WHERE user_address = ?`
+
 	addTaskIDToJobQuery = `
 		UPDATE triggerx.job_data
 		SET task_ids = ?
 		WHERE job_id = ?`
+
+	incrementUserTotalTasksQuery = `
+		UPDATE triggerx.user_data
+		SET total_tasks = ?, last_updated_at = ?
+		WHERE user_address = ?`
 )

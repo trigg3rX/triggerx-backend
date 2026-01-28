@@ -43,8 +43,8 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 	for iter.Scan(
 		&timeJobData.JobID, &timeJobData.TaskDefinitionID, &timeJobData.Network, &timeJobData.ScheduleType, &timeJobData.TimeInterval,
 		&timeJobData.CronExpression, &timeJobData.SpecificSchedule, &timeJobData.Timezone, &timeJobData.NextExecutionTimestamp,
-		&timeJobData.TargetChainID, &timeJobData.TargetContractAddress, &timeJobData.TargetFunction, &timeJobData.ABI, 
-		&timeJobData.ArgType, &timeJobData.Arguments, &timeJobData.ExecutionScriptURL, &timeJobData.ExecutionScriptLanguage, 
+		&timeJobData.TargetChainID, &timeJobData.TargetContractAddress, &timeJobData.TargetFunction, &timeJobData.ABI,
+		&timeJobData.ArgType, &timeJobData.Arguments, &timeJobData.ExecutionScriptURL, &timeJobData.ExecutionScriptLanguage,
 		&timeJobData.ExecutionScriptHash, &timeJobData.MaxExecutionTime, &timeJobData.ChallengePeriod,
 		&timeJobData.IsActive, &timeJobData.LastExecutedAt, &timeJobData.ExpirationTime,
 	) {
@@ -62,14 +62,9 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 		if err != nil {
 			return nil, err
 		}
-
-		// Update the DB with the next execution time
-		err = r.updateTimeJobNextExecutionTimestamp(timeJobData.JobID, nextExecutionTime)
-		if err != nil {
-			return nil, err
-		}
 		
-		// Create the task for this job
+		// Create the task for this job FIRST (before updating next_execution_timestamp)
+		// This ensures that if task creation fails, the job can still be picked up in the next poll
 		taskID, err := r.createTaskDataInDB(&types.CreateTaskDataRequest{
 			JobID:            timeJobData.JobID,
 			TaskDefinitionID: timeJobData.TaskDefinitionID,
@@ -81,6 +76,13 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 
 		// Add the task ID to the job
 		err = r.addTaskIDToJob(timeJobData.JobID, taskID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Update the DB with the next execution time AFTER task creation succeeds
+		// This prevents the job from being picked up again in the same or next poll cycle
+		err = r.updateTimeJobNextExecutionTimestamp(timeJobData.JobID, nextExecutionTime)
 		if err != nil {
 			return nil, err
 		}
@@ -97,27 +99,27 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 		}
 
 		targetData := types.TaskTargetData{
-			JobID:            timeJobData.JobID,
-			TaskID:           taskID,
-			TaskDefinitionID: timeJobData.TaskDefinitionID,
-			TargetChainID:    timeJobData.TargetChainID,
-			TargetContractAddress: timeJobData.TargetContractAddress,
-			TargetFunction: timeJobData.TargetFunction,
-			ABI: timeJobData.ABI,
-			ArgType: timeJobData.ArgType,
-			Arguments: timeJobData.Arguments,
-			ExecutionScriptURL: timeJobData.ExecutionScriptURL,
+			JobID:                   timeJobData.JobID,
+			TaskID:                  taskID,
+			TaskDefinitionID:        timeJobData.TaskDefinitionID,
+			TargetChainID:           timeJobData.TargetChainID,
+			TargetContractAddress:   timeJobData.TargetContractAddress,
+			TargetFunction:          timeJobData.TargetFunction,
+			ABI:                     timeJobData.ABI,
+			ArgType:                 timeJobData.ArgType,
+			Arguments:               timeJobData.Arguments,
+			ExecutionScriptURL:      timeJobData.ExecutionScriptURL,
 			ExecutionScriptLanguage: timeJobData.ExecutionScriptLanguage,
-			ExecutionScriptHash: timeJobData.ExecutionScriptHash,
-			MaxExecutionTime: timeJobData.MaxExecutionTime,
-			ChallengePeriod: timeJobData.ChallengePeriod,
-			ScriptStorage: scriptStorage,
+			ExecutionScriptHash:     timeJobData.ExecutionScriptHash,
+			MaxExecutionTime:        timeJobData.MaxExecutionTime,
+			ChallengePeriod:         timeJobData.ChallengePeriod,
+			ScriptStorage:           scriptStorage,
 		}
 
 		triggerData := types.TaskTriggerData{
 			TaskID:                  taskID,
 			TaskDefinitionID:        timeJobData.TaskDefinitionID,
-			Recurring: false,
+			Recurring:               false,
 			ExpirationTime:          timeJobData.ExpirationTime,
 			CurrentTriggerTimestamp: timeJobData.LastExecutedAt,
 			NextTriggerTimestamp:    timeJobData.NextExecutionTimestamp, // the original one, not the calculated one
@@ -165,6 +167,7 @@ func (r *timeJobRepository) updateTimeJobNextExecutionTimestamp(jobID string, ne
 // createTaskDataInDB creates a new task record in the database.
 // It generates a new task ID by getting the max task ID and incrementing it.
 // It also fetches the job_cost_prediction from job_data and sets it as task_opx_predicted_cost.
+// After creating the task, it increments the user's total_tasks counter.
 func (r *timeJobRepository) createTaskDataInDB(task *types.CreateTaskDataRequest) (int64, error) {
 	var maxTaskID int64
 	err := r.db.Session().Query(getMaxTaskIDQuery).Scan(&maxTaskID)
@@ -183,6 +186,31 @@ func (r *timeJobRepository) createTaskDataInDB(task *types.CreateTaskDataRequest
 	err = r.db.Session().Query(createTaskDataQuery, taskID, task.JobID, task.TaskDefinitionID, task.Network, string(types.TaskStatusCreated), time.Now().UTC(), jobCostPrediction).Exec()
 	if err != nil {
 		return -1, errors.New("error creating task data")
+	}
+
+	// Increment user total_tasks after task creation
+	var userAddress string
+	err = r.db.Session().Query(getUserAddressByJobIDQuery, task.JobID).Scan(&userAddress)
+	if err != nil {
+		// Log error but don't fail task creation if user address lookup fails
+		// This is a non-critical operation
+		return taskID, nil
+	}
+
+	var userTotalTasks int64
+	err = r.db.Session().Query(getUserTotalTasksQuery, userAddress).Scan(&userTotalTasks)
+	if err != nil {
+		// Log error but don't fail task creation if user total tasks lookup fails
+		// This is a non-critical operation
+		return taskID, nil
+	}
+
+	// Increment total_tasks for the user
+	err = r.db.Session().Query(incrementUserTotalTasksQuery, userTotalTasks+1, time.Now().UTC(), userAddress).Exec()
+	if err != nil {
+		// Log error but don't fail task creation if increment fails
+		// This is a non-critical operation
+		return taskID, nil
 	}
 
 	return taskID, nil
