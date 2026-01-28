@@ -71,7 +71,6 @@ func JobDataEntityToDTO(entity *JobDataEntity) *JobDataDTO {
 		TaskIDs:           entity.TaskIDs,
 		CreatedAt:         entity.CreatedAt,
 		UpdatedAt:         entity.UpdatedAt,
-		LastExecutedAt:    entity.LastExecutedAt,
 	}
 }
 

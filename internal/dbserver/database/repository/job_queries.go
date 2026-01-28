@@ -29,7 +29,7 @@ const (
 	GetJobDataByJobIDQuery = `
 		SELECT job_id, job_title, task_definition_id, created_chain_id, user_address, link_job_id, chain_status,
 			safe_address, timezone, job_type, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-			task_ids, created_at, updated_at, last_executed_at
+			task_ids, created_at, updated_at
 		FROM triggerx.job_data 
 		WHERE job_id = ?`
 
@@ -44,14 +44,14 @@ const (
 	GetJobsByUserAddressAndChainIDQuery = `
 		SELECT job_id, job_title, task_definition_id, created_chain_id, user_address, link_job_id, chain_status,
 			safe_address, timezone, job_type, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-			task_ids, created_at, updated_at, last_executed_at
+			task_ids, created_at, updated_at
 		FROM triggerx.job_data
 		WHERE user_address = ? AND created_chain_id = ? ALLOW FILTERING`
 
 	GetJobsBySafeAddressQuery = `
 		SELECT job_id, job_title, task_definition_id, created_chain_id, user_address, link_job_id, chain_status,
 			safe_address, timezone, job_type, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-			task_ids, created_at, updated_at, last_executed_at
+			task_ids, created_at, updated_at
 		FROM triggerx.job_data
 		WHERE safe_address = ? ALLOW FILTERING`
 )

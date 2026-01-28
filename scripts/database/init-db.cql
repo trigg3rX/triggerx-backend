@@ -70,7 +70,6 @@ CREATE TABLE IF NOT EXISTS job_data (
     task_ids set<bigint>,
     created_at timestamp,
     updated_at timestamp,
-    last_executed_at timestamp,
     PRIMARY KEY (job_id)
 );
 
@@ -265,7 +264,6 @@ CREATE TABLE IF NOT EXISTS triggerx.execution_challenges (
 CREATE INDEX IF NOT EXISTS job_data_status_idx ON triggerx.job_data (status);
 CREATE INDEX IF NOT EXISTS job_data_created_at_idx ON triggerx.job_data (created_at);
 CREATE INDEX IF NOT EXISTS job_data_updated_at_idx ON triggerx.job_data (updated_at);
-CREATE INDEX IF NOT EXISTS job_data_last_executed_at_idx ON triggerx.job_data (last_executed_at);
 CREATE INDEX IF NOT EXISTS job_data_safe_address_idx ON triggerx.job_data (safe_address);
 
 CREATE INDEX IF NOT EXISTS time_job_data_last_executed_at_idx ON triggerx.time_job_data (last_executed_at);

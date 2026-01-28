@@ -58,7 +58,6 @@ type JobDataEntity struct {
 	TaskIDs           []int64   `cql:"task_ids"`            // Tasks executed for this job
 	CreatedAt         time.Time `cql:"created_at"`          // Job creation time
 	UpdatedAt         time.Time `cql:"updated_at"`          // Last update time
-	LastExecutedAt    time.Time `cql:"last_executed_at"`    // Last task execution time
 }
 
 // TimeJobDataEntity represents the time_job_data table for time-based scheduled jobs.

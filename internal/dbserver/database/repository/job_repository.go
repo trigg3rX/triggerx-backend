@@ -65,7 +65,7 @@ func (r *jobRepository) GetJobByID(jobID string) (*types.JobDataDTO, error) {
 		&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
 		&entity.Timezone, &entity.JobType, &entity.TimeFrame,
 		&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
-		&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt)
+		&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt)
 
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func (r *jobRepository) GetJobsByUserAddressAndChainID(userAddress string, creat
 			&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
 			&entity.Timezone, &entity.JobType, &entity.TimeFrame,
 			&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
-			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt,
+			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt,
 		) {
 			break
 		}
@@ -122,7 +122,7 @@ func (r *jobRepository) GetJobsBySafeAddress(safeAddress string) ([]types.JobDat
 			&entity.UserAddress, &entity.LinkJobID, &entity.ChainStatus, &entity.SafeAddress,
 			&entity.Timezone, &entity.JobType, &entity.TimeFrame,
 			&entity.Recurring, &entity.Status, &entity.JobCostPrediction, &entity.JobCostActual,
-			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt, &entity.LastExecutedAt,
+			&entity.TaskIDs, &entity.CreatedAt, &entity.UpdatedAt,
 		) {
 			break
 		}

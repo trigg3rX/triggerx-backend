@@ -58,7 +58,6 @@ type JobDataDTO struct {
 	TaskIDs           []int64   `json:"task_ids"`            // Tasks executed for this job
 	CreatedAt         time.Time `json:"created_at"`          // Job creation time
 	UpdatedAt         time.Time `json:"updated_at"`          // Last update time
-	LastExecutedAt    time.Time `json:"last_executed_at"`    // Last task execution time
 }
 
 // TimeJobDataDTO represents the time job data transfer object.
