@@ -74,6 +74,7 @@ type YAMLConfig struct {
 	Metrics            yaml.MetricsConfig            `yaml:"metrics"`
 	Shutdown           yaml.ShutdownConfig           `yaml:"shutdown"`
 	Version            yaml.VersionConfig            `yaml:"version"`
+	SignatureDeadlineBuffer int64                    `yaml:"signature_deadline_buffer"`
 }
 
 var cfg Config
@@ -106,6 +107,7 @@ func Init(configPath string) error {
 		signingAddress:       env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
 		upstashURL:           env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		signatureDeadlineBuffer: yamlConfig.SignatureDeadlineBuffer,
 		redis:                yamlConfig.Redis,
 		databaseOperations:   yamlConfig.DatabaseOperations,
 		metrics:              yamlConfig.Metrics,
