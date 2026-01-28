@@ -1,0 +1,120 @@
+x-dev: &dev
+  env_file:
+    - ../.env
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.dev
+
+services:
+  dbserver:
+    <<: *dev
+    container_name: dbsrv
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 0 go run /app/cmd/dbserver/main.go" ]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/cache:/app/data/cache
+  
+  health:
+    <<: *dev
+    container_name: healt
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/health/main.go" ]
+    depends_on:
+      - dbserver
+
+  time-scheduler:
+    <<: *dev
+    container_name: t-sch
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/schedulers/time/main.go" ]
+    depends_on:
+      - health
+
+  condition-scheduler:
+    <<: *dev
+    container_name: c-sch
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/schedulers/condition/main.go" ]
+    depends_on:
+      - time-scheduler
+
+  taskdispatcher:
+    <<: *dev
+    container_name: taskd
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/taskdispatcher/main.go" ]
+    depends_on:
+      - condition-scheduler
+  
+  taskmonitor:
+    <<: *dev
+    container_name: taskm
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/taskmonitor/main.go" ]
+    depends_on:
+      - taskdispatcher
+
+  eventmonitor:
+    <<: *dev
+    container_name: evntm
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/eventmonitor/main.go" ]
+    depends_on:
+      - taskmonitor
+
+  logwatcher:
+    <<: *dev
+    container_name: logwr
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/aggregator-logwatcher/main.go" ]
+    depends_on:
+      - eventmonitor
+
+  performer:
+    <<: *dev
+    container_name: perfo
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/keeper/main.go" ]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/cache:/app/data/cache
+    environment:
+      - PRIVATE_KEY=${PERFORMER_PRIVATE_KEY}
+      - OPERATOR_ADDRESS=${PERFORMER_OPERATOR_ADDRESS}
+      - OPERATOR_PRIVATE_KEY=${PERFORMER_OPERATOR_PRIVATE_KEY}
+      - PEER_ID=${PERFORMER_PEER_ID}
+      - OPERATOR_RPC_PORT=${PERFORMER_OPERATOR_RPC_PORT}
+      - OPERATOR_P2P_PORT=${PERFORMER_OPERATOR_P2P_PORT}
+      - OPERATOR_METRICS_PORT=${PERFORMER_OPERATOR_METRICS_PORT}
+    depends_on:
+      - logwatcher
+
+  validator:
+    <<: *dev
+    container_name: valdr
+    network_mode: host
+    entrypoint: []
+    command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/keeper/main.go" ]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/cache:/app/data/cache
+    environment:
+      - PRIVATE_KEY=${VALIDATOR_PRIVATE_KEY}
+      - OPERATOR_ADDRESS=${VALIDATOR_OPERATOR_ADDRESS}
+      - OPERATOR_PRIVATE_KEY=${VALIDATOR_OPERATOR_PRIVATE_KEY}
+      - PEER_ID=${VALIDATOR_PEER_ID}
+      - OPERATOR_RPC_PORT=${VALIDATOR_OPERATOR_RPC_PORT}
+      - OPERATOR_P2P_PORT=${VALIDATOR_OPERATOR_P2P_PORT}
+      - OPERATOR_METRICS_PORT=${VALIDATOR_OPERATOR_METRICS_PORT}
+    depends_on:
+      - performer

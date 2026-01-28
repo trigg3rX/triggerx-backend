@@ -1,0 +1,21 @@
+# Main Dockerfile for the development environment
+FROM golang:1.25.5-alpine
+
+# Install ca-certificates and bash
+RUN apk --no-cache add ca-certificates bash
+
+# Copy the entire codebase into the container
+COPY . /app/
+
+# Copy the delayed start script
+COPY scripts/docker/dev/delayed-start.sh /usr/local/bin/delayed-start.sh
+RUN chmod +x /usr/local/bin/delayed-start.sh
+
+# Run go mod tidy to ensure all imports are accounted for
+WORKDIR /app
+RUN go mod tidy
+
+# Set working directory
+WORKDIR /app
+
+ENTRYPOINT [ "go", "run" ]

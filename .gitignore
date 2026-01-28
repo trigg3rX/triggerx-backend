@@ -1,6 +1,7 @@
 # env files
 .env
 othentic/.env
+docker/.env
 
 # release
 release/*

@@ -52,9 +52,23 @@ stop-observability:
 
 ############################# SERVICES #############################
 
-# Start the Othentic Node
+start-dev:
+    docker compose -f docker/docker-compose.dev.yaml up --build -d
+
+stop-dev:
+    docker compose -f docker/docker-compose.dev.yaml down
+
 start-othentic:
-    ./scripts/services/start-othentic.sh
+    docker compose -f othentic/docker-compose.yaml up -d
+
+stop-othentic:
+    docker compose -f othentic/docker-compose.yaml down
+
+logs-dev:
+    docker compose -f docker/docker-compose.dev.yaml logs -f
+
+logs-othentic:
+    docker compose -f othentic/docker-compose.yaml logs -f
 
 # Start the Database Server
 start-db-server args="":

@@ -23,12 +23,3 @@ Thumbs.db
 
 # Documentation
 docs/
-
-# Repos (not needed for backend builds)
-v_collect_data/
-w_keeper_setup/
-x_frontend/
-y_contracts/
-z_sdk/
-othentic/
-ssl/

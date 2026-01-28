@@ -2,13 +2,12 @@ x-otnode: &otnode
   env_file:
     - .env
   build:
-    context: .
-    dockerfile: ./Dockerfile
+    context: ..
+    dockerfile: ./othentic/Dockerfile
     no_cache: true
 
 services:
   aggregator:
-    profiles: [agg]
     container_name: aggregator
     <<: *otnode
     network_mode: host
@@ -39,24 +38,15 @@ services:
       - ./data/logs/aggregator:/data/logs/aggregator
 
   performer:
-    profiles: [node]
     container_name: performer
     <<: *otnode
     network_mode: host
     env_file:
       - .env
+    entrypoint: []
     command: [
-      "run",
-      "attester",
-      "/ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
-      "--avs-webapi", "http://127.0.0.1",
-      "--avs-webapi-port", "9021",
-      "--l1-chain", "sepolia:nightly",
-      "--l2-chain", "base-sepolia:nightly",
-      "--json-rpc",
-      "--json-rpc.port", "9022",
-      "--json-rpc.custom-message-enabled",
-      "--p2p.port", "9875"
+      "sh", "-c",
+      "/usr/local/bin/delayed-start.sh 3 otnode run attester /ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB --avs-webapi http://127.0.0.1 --avs-webapi-port 9021 --l1-chain sepolia:nightly --l2-chain base-sepolia:nightly --json-rpc --json-rpc.port 9022 --json-rpc.custom-message-enabled --p2p.port 9875"
     ]
     environment:
       - PRIVATE_KEY=${PERFORMER_BLS_PRIVATE_KEY}
@@ -67,26 +57,19 @@ services:
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
     volumes:
       - ../data/logs/performer:/data/logs
+    depends_on:
+      - aggregator
 
   attester:
-    profiles: [node]
     container_name: attester
     <<: *otnode
     network_mode: host
     env_file:
       - .env
+    entrypoint: []
     command: [
-      "run",
-      "attester",
-      "/ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
-      "--avs-webapi", "http://127.0.0.1",
-      "--avs-webapi-port", "9031",
-      "--l1-chain", "sepolia:nightly",
-      "--l2-chain", "base-sepolia:nightly",
-      "--json-rpc",
-      "--json-rpc.port", "9032",
-      "--json-rpc.custom-message-enabled",
-      "--p2p.port", "9874"
+      "sh", "-c",
+      "/usr/local/bin/delayed-start.sh 3 otnode run attester /ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB --avs-webapi http://127.0.0.1 --avs-webapi-port 9031 --l1-chain sepolia:nightly --l2-chain base-sepolia:nightly --json-rpc --json-rpc.port 9032 --json-rpc.custom-message-enabled --p2p.port 9874"
     ]
     environment:
       - PRIVATE_KEY=${ATTESTER_BLS_PRIVATE_KEY}
@@ -97,3 +80,5 @@ services:
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
     volumes:
       - ../data/logs/attester:/data/logs
+    depends_on:
+      - aggregator
