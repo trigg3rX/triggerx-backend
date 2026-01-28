@@ -196,7 +196,10 @@ func (s *Service) Unregister(requestID string) error {
 	// Get entry to check if we need to stop worker
 	entry, key, exists := s.registryManager.GetEntryByRequestID(requestID)
 	if !exists {
-		return fmt.Errorf("request ID not found: %s", requestID)
+		// Already unregistered or never existed - this is fine (idempotent)
+		s.logger.Debug(s.ctx, "Request ID already unregistered or not found",
+			observability.String("request_id", requestID))
+		return nil
 	}
 
 	// Unregister from registry

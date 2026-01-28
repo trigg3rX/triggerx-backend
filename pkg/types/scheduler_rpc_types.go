@@ -87,6 +87,9 @@ type TaskTargetData struct {
 	MaxExecutionTime        int               `json:"max_execution_time,omitempty"`        // Script timeout in seconds (default 60)
 	ChallengePeriod         int64             `json:"challenge_period,omitempty"`          // Challenge period in seconds (default 21600 = 6 hours)
 	ScriptStorage           []ScriptStorageDTO `json:"script_storage,omitempty"`            // Storage passed from scheduler (for agent jobs)
+	// Contract execution signature fields (for security verification)
+	Deadline          string `json:"deadline,omitempty"`           // Unix timestamp when signature expires
+	ContractSignature []byte  `json:"contract_signature,omitempty"` // Dispatcher signature for contract verification
 }
 
 // TaskTriggerData represents trigger data from schedulers to keepers for validation

@@ -104,12 +104,23 @@ func (h *Handler) GetRecentTasks(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"tasks": tasks,
-		"count": len(tasks),
-		"limit": limit,
+	// Fetch global statistics
+	trackStatsOp := metrics.TrackDBOperation("read", "statistics")
+	statistics, err := h.taskRepository.GetGlobalStatistics()
+	trackStatsOp(err)
+	if err != nil {
+		h.logger.Warn(c.Request.Context(), "[GetRecentTasks] Failed to retrieve statistics", observability.Error(err))
+		// Continue without statistics rather than failing the entire request
+		statistics = nil
+	}
+
+	c.JSON(http.StatusOK, types.RecentTasksResponse{
+		Tasks:      tasks,
+		Count:      len(tasks),
+		Limit:      limit,
+		Statistics: statistics,
 	})
-	h.logger.Debug(c.Request.Context(), "[GetRecentTasks] Retrieved recent tasks", observability.Int("tasks_count", len(tasks)), observability.Int("limit", limit))
+	h.logger.Debug(c.Request.Context(), "[GetRecentTasks] Retrieved recent tasks with statistics", observability.Int("tasks_count", len(tasks)), observability.Int("limit", limit))
 }
 
 func (h *Handler) GetTasksByUserAddress(c *gin.Context) {

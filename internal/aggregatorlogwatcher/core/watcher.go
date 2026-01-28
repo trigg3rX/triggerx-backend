@@ -141,7 +141,13 @@ func (w *LogWatcher) processLogFile(filePath string, filePositions map[string]in
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			w.logger.Error(w.ctx, "Failed to close log file",
+				observability.Error(err),
+				observability.String("file_path", filePath))
+		}
+	}()
 
 	// Get current file size
 	stat, err := file.Stat()

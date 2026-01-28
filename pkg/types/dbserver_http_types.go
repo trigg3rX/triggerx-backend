@@ -178,3 +178,19 @@ type RecentTaskResponse struct {
 	TaskError             string    `json:"task_error"`
 	Network               string    `json:"network"`
 }
+
+// GlobalStatistics contains aggregate counts for the TriggerX platform
+type GlobalStatistics struct {
+	TotalTasks   int64 `json:"total_tasks"`
+	TotalUsers   int64 `json:"total_users"`
+	TotalKeepers int64 `json:"total_keepers"`
+	TotalJobs    int64 `json:"total_jobs"`
+}
+
+// RecentTasksResponse is the response structure for the GetRecentTasks endpoint
+type RecentTasksResponse struct {
+	Tasks      []RecentTaskResponse `json:"tasks"`
+	Count      int                  `json:"count"`
+	Limit      int                  `json:"limit"`
+	Statistics *GlobalStatistics    `json:"statistics,omitempty"`
+}

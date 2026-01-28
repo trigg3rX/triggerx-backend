@@ -55,9 +55,11 @@ func NewWorker(
 
 // Start starts the worker polling loop
 func (w *Worker) Start() {
-	w.logger.Debug(w.ctx, "Starting event worker",
+	w.logger.Info(w.ctx, "Started event worker",
 		observability.String("key", w.entry.Key),
-		observability.String("chain_id", w.entry.ChainID))
+		observability.String("chain_id", w.entry.ChainID),
+		observability.String("contract_address", w.entry.ContractAddr.Hex()),
+		observability.String("event_sig", w.entry.EventSig.Hex()))
 
 	// Initialize last block if needed
 	if w.entry.LastBlock == 0 {
@@ -154,6 +156,15 @@ func (w *Worker) pollEvents() error {
 		// Track events detected
 		for range logs {
 			metrics.TrackEventDetected(w.entry.ChainID, w.entry.EventSig.Hex())
+		}
+
+		// Log detected events at INFO level
+		if len(logs) > 0 {
+			w.logger.Info(w.ctx, "Detected blockchain events",
+				observability.String("key", w.entry.Key),
+				observability.Int("event_count", len(logs)),
+				observability.Uint64("from_block", fromBlock),
+				observability.Uint64("to_block", toBlock))
 		}
 
 		// Process logs and notify subscribers

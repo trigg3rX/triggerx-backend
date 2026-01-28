@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	// "github.com/ethereum/go-ethereum"
@@ -34,9 +33,6 @@ type PermanentPoller struct {
 	ipfsClient        ipfs.IPFSClient
 	ctx               context.Context
 	cancel            context.CancelFunc
-	wg                sync.WaitGroup
-	mu                sync.RWMutex
-	isRunning         bool
 	lastBlocks        map[string]uint64 // chainID -> lastBlock
 }
 
@@ -707,14 +703,13 @@ func (p *PermanentPoller) ProcessTransaction(ctx context.Context, txHash, chainI
 			if err == nil {
 				eventName = "TaskSubmitted"
 				eventLog = log
-				event = taskSubmittedEvent
 				p.logger.Info(ctx, "Found TaskSubmitted event",
 					observability.String("tx_hash", txHash),
-					observability.Int("log_index", i))
+					observability.Int64("log_index", int64(i)))
 				break
 			}
 			p.logger.Debug(ctx, "Topic matched but parsing failed for TaskSubmitted",
-				observability.Int("log_index", i),
+				observability.Int64("log_index", int64(i)),
 				observability.Error(err))
 		}
 
@@ -725,14 +720,13 @@ func (p *PermanentPoller) ProcessTransaction(ctx context.Context, txHash, chainI
 			if err == nil {
 				eventName = "TaskRejected"
 				eventLog = log
-				event = taskRejectedEvent
 				p.logger.Info(ctx, "Found TaskRejected event",
 					observability.String("tx_hash", txHash),
-					observability.Int("log_index", i))
+					observability.Int64("log_index", int64(i)))
 				break
 			}
 			p.logger.Debug(ctx, "Topic matched but parsing failed for TaskRejected",
-				observability.Int("log_index", i),
+				observability.Int64("log_index", int64(i)),
 				observability.Error(err))
 		}
 
@@ -747,10 +741,9 @@ func (p *PermanentPoller) ProcessTransaction(ctx context.Context, txHash, chainI
 				if actualTopic == topic0Lower {
 					eventName = "TaskSubmitted"
 					eventLog = log
-					event = taskSubmittedEvent
 					p.logger.Info(ctx, "Found TaskSubmitted event (via parsing fallback)",
 						observability.String("tx_hash", txHash),
-						observability.Int("log_index", i),
+						observability.Int64("log_index", int64(i)),
 						observability.String("actual_topic", actualTopic),
 						observability.String("expected_topic", taskSubmittedEventID))
 					break
@@ -764,10 +757,9 @@ func (p *PermanentPoller) ProcessTransaction(ctx context.Context, txHash, chainI
 				if actualTopic == topic0Lower {
 					eventName = "TaskRejected"
 					eventLog = log
-					event = taskRejectedEvent
 					p.logger.Info(ctx, "Found TaskRejected event (via parsing fallback)",
 						observability.String("tx_hash", txHash),
-						observability.Int("log_index", i),
+						observability.Int64("log_index", int64(i)),
 						observability.String("actual_topic", actualTopic),
 						observability.String("expected_topic", taskRejectedEventID))
 					break

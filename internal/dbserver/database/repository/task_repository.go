@@ -15,6 +15,7 @@ type TaskRepository interface {
 	GetTasksByJobID(jobID string) ([]types.TasksByJobIDResponse, error)
 	GetRecentTasks(limit int) ([]types.RecentTaskResponse, error)
 	GetCreatedChainIDByJobID(jobID string) (string, error)
+	GetGlobalStatistics() (*types.GlobalStatistics, error)
 }
 
 type taskRepository struct {
@@ -126,6 +127,34 @@ func (r *taskRepository) GetCreatedChainIDByJobID(jobID string) (string, error) 
 		return "", fmt.Errorf("error getting created chain ID by job ID: %w", err)
 	}
 	return createdChainID, nil
+}
+
+
+// GetGlobalStatistics retrieves aggregate statistics across the TriggerX platform
+func (r *taskRepository) GetGlobalStatistics() (*types.GlobalStatistics, error) {
+	stats := &types.GlobalStatistics{}
+
+	// Get total tasks count
+	if err := r.db.Session().Query(GetTotalTasksCountQuery).Scan(&stats.TotalTasks); err != nil {
+		return nil, fmt.Errorf("error getting total tasks count: %w", err)
+	}
+
+	// Get total users count
+	if err := r.db.Session().Query(GetTotalUsersCountQuery).Scan(&stats.TotalUsers); err != nil {
+		return nil, fmt.Errorf("error getting total users count: %w", err)
+	}
+
+	// Get total keepers count (only whitelisted and registered)
+	if err := r.db.Session().Query(GetTotalKeepersCountQuery).Scan(&stats.TotalKeepers); err != nil {
+		return nil, fmt.Errorf("error getting total keepers count: %w", err)
+	}
+
+	// Get total jobs count
+	if err := r.db.Session().Query(GetTotalJobsCountQuery).Scan(&stats.TotalJobs); err != nil {
+		return nil, fmt.Errorf("error getting total jobs count: %w", err)
+	}
+
+	return stats, nil
 }
 
 // getExplorerBaseURL is a helper to get explorer URL - mirrors the one in handlers

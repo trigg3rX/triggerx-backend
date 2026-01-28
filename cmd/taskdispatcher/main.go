@@ -128,6 +128,7 @@ func main() {
 		performerFetcher,
 		config.GetTaskDispatcherSigningKey(),
 		config.GetTaskDispatcherSigningAddress(),
+		config.GetSignatureDeadlineBuffer(),
 	)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskDispatcher", observability.Error(err))

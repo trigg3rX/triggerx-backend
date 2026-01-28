@@ -17,17 +17,37 @@ const TraceIDHeader = "X-Trace-ID"
 const TraceIDKey = "trace_id"
 
 // TraceMiddleware creates a gin middleware for OpenTelemetry tracing
-// It requires the X-Trace-ID header to be present in the request and rejects requests without it
+// It requires the X-Trace-ID header only for the create-job handler (/api/jobs POST)
+// All other endpoints are allowed without traces and will have trace IDs generated if not provided
 func TraceMiddleware(tracer observability.Tracer) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Require X-Trace-ID header
+		// Health check endpoints don't require X-Trace-ID header
+		healthCheckPaths := []string{"/status", "/api/health", "/metrics"}
+		for _, path := range healthCheckPaths {
+			if c.Request.URL.Path == path {
+				break
+			}
+		}
+
+		// Require X-Trace-ID for specific endpoints
+		isCreateJob := c.Request.URL.Path == "/api/jobs" && c.Request.Method == http.MethodPost
+		isGetFees := c.Request.URL.Path == "/api/fees" && c.Request.Method == http.MethodGet
+
 		traceID := c.GetHeader(TraceIDHeader)
-		if traceID == "" {
+
+		// Require X-Trace-ID header for create-job and get-fees endpoints
+		if traceID == "" && (isCreateJob || isGetFees) {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "X-Trace-ID header is required",
 			})
 			c.Abort()
 			return
+		}
+
+		// Generate a trace ID if not provided (for non-create-job endpoints)
+		if traceID == "" {
+			// Generate a simple trace ID based on client IP and timestamp
+			traceID = "auto-" + c.ClientIP() + "-" + c.Request.URL.Path
 		}
 
 		// Extract trace context from HTTP headers using OpenTelemetry propagator

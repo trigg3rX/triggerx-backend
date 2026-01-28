@@ -28,4 +28,13 @@ const (
 		       task_attester_address, task_status, task_error, network
 		FROM triggerx.task_data
 		LIMIT ?`
+
+	// Statistics Queries for Global Counts
+	GetTotalTasksCountQuery = `SELECT COUNT(*) FROM triggerx.task_data`
+
+	GetTotalUsersCountQuery = `SELECT COUNT(*) FROM triggerx.user_data`
+
+	GetTotalKeepersCountQuery = `SELECT COUNT(*) FROM triggerx.keeper_data WHERE whitelisted = true AND registered = true ALLOW FILTERING`
+
+	GetTotalJobsCountQuery = `SELECT COUNT(*) FROM triggerx.job_data`
 )

@@ -38,8 +38,9 @@ type Config struct {
 	testPerformerAPIUrl string
 
 	// Task Dispatcher signing key
-	signingKey     string
-	signingAddress string
+	signingKey              string
+	signingAddress          string
+	signatureDeadlineBuffer int64 // Deadline buffer in seconds for contract signatures
 
 	// Redis (Upstash) connection settings
 	upstashURL   string
@@ -256,6 +257,11 @@ func GetTaskDispatcherSigningKey() string {
 
 func GetTaskDispatcherSigningAddress() string {
 	return cfg.signingAddress
+}
+
+// GetSignatureDeadlineBuffer returns the deadline buffer in seconds for contract signatures
+func GetSignatureDeadlineBuffer() int64 {
+	return cfg.signatureDeadlineBuffer
 }
 
 func GetUpstashURL() string {

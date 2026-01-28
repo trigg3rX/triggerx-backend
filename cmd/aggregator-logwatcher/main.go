@@ -14,7 +14,10 @@ import (
 
 func main() {
 	// Initialize configuration
-	config.Init()
+	err := config.Init()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize configuration: %v", err))
+	}
 
 	// Create observability configuration
 	obsConfig := observability.NewConfig(
