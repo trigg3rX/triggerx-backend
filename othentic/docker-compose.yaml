@@ -17,8 +17,8 @@ services:
     command: [
       "run",
       "aggregator",
-      "--l1-chain", "sepolia",
-      "--l2-chain", "base-sepolia",
+      "--l1-chain", "sepolia:nightly",
+      "--l2-chain", "base-sepolia:nightly",
       "--json-rpc",
       "--json-rpc.port", "9001",
       "--json-rpc.custom-message-enabled",
@@ -34,8 +34,9 @@ services:
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
       - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
       - OTHENTIC_BOOTSTRAP_SEED=${OTHENTIC_BOOTSTRAP_SEED}
+      - LOG_DIR=/data/logs/aggregator
     volumes:
-      - ../data/logs/aggregator:/data/logs
+      - ./data/logs/aggregator:/data/logs/aggregator
 
   performer:
     profiles: [node]
@@ -49,16 +50,16 @@ services:
       "attester",
       "/ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
       "--avs-webapi", "http://127.0.0.1",
-      "--avs-webapi-port", "9008",
-      "--l1-chain", "sepolia",
-      "--l2-chain", "base-sepolia",
+      "--avs-webapi-port", "9021",
+      "--l1-chain", "sepolia:nightly",
+      "--l2-chain", "base-sepolia:nightly",
       "--json-rpc",
-      "--json-rpc.port", "9010",
+      "--json-rpc.port", "9022",
       "--json-rpc.custom-message-enabled",
       "--p2p.port", "9875"
     ]
     environment:
-      - PRIVATE_KEY=${PERFORMER_PRIVATE_KEY}
+      - PRIVATE_KEY=${PERFORMER_BLS_PRIVATE_KEY}
       - OPERATOR_ADDRESS=${PERFORMER_OPERATOR_ADDRESS}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
@@ -66,3 +67,33 @@ services:
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
     volumes:
       - ../data/logs/performer:/data/logs
+
+  attester:
+    profiles: [node]
+    container_name: attester
+    <<: *otnode
+    network_mode: host
+    env_file:
+      - .env
+    command: [
+      "run",
+      "attester",
+      "/ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
+      "--avs-webapi", "http://127.0.0.1",
+      "--avs-webapi-port", "9031",
+      "--l1-chain", "sepolia:nightly",
+      "--l2-chain", "base-sepolia:nightly",
+      "--json-rpc",
+      "--json-rpc.port", "9032",
+      "--json-rpc.custom-message-enabled",
+      "--p2p.port", "9874"
+    ]
+    environment:
+      - PRIVATE_KEY=${ATTESTER_BLS_PRIVATE_KEY}
+      - OPERATOR_ADDRESS=${ATTESTER_OPERATOR_ADDRESS}
+      - L1_RPC=${L1_RPC}
+      - L2_RPC=${L2_RPC}
+      - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
+      - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
+    volumes:
+      - ../data/logs/attester:/data/logs
