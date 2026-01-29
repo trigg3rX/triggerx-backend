@@ -14,9 +14,9 @@ import (
 
 // SignContractExecution creates a signature that the TaskExecutionHub contract can verify.
 // This signature authorizes a specific keeper to execute a specific job with specific parameters.
-// The hash is constructed to match the contract's verification:
+// The hash is constructed to match TaskExecutionSpoke._verifyTaskDispatcherSignature:
 //
-//	keccak256(abi.encode(jobId, target, keccak256(data), deadline, keeperAddress, chainId))
+//	keccak256(abi.encode(jobId, target, deadline, keeperAddress, chainId))
 //
 // Parameters:
 //   - privateKey: hex-encoded private key (without 0x prefix)
@@ -43,28 +43,31 @@ func SignContractExecution(
 	}
 
 	// Hash the calldata first (matching contract's keccak256(data))
-	dataHash := crypto.Keccak256(data)
+	// dataHash := crypto.Keccak256(data)
 
 	// Define ABI types for encoding
 	uint256Ty, _ := abi.NewType("uint256", "", nil)
 	addressTy, _ := abi.NewType("address", "", nil)
-	bytes32Ty, _ := abi.NewType("bytes32", "", nil)
+	// bytes32Ty, _ := abi.NewType("bytes32", "", nil)
 
 	// ABI encode the parameters in the exact order the contract expects
 	arguments := abi.Arguments{
 		{Type: uint256Ty}, // jobId
 		{Type: addressTy}, // target
-		{Type: bytes32Ty}, // dataHash (keccak256 of data)
+		// {Type: bytes32Ty}, // dataHash (keccak256 of data)
 		{Type: uint256Ty}, // deadline
 		{Type: addressTy}, // keeperAddress
 		{Type: uint256Ty}, // chainId
 	}
 
 	// Convert dataHash to [32]byte for bytes32 type
-	var dataHashBytes32 [32]byte
-	copy(dataHashBytes32[:], dataHash)
+	// var dataHashBytes32 [32]byte
+	// copy(dataHashBytes32[:], dataHash)
+	// NOTE: `data` is currently ignored in the signature, matching the Solidity
+	// implementation which does not include calldata in the signed payload.
 
-	packed, err := arguments.Pack(jobId, target, dataHashBytes32, deadline, keeperAddress, chainId)
+	// packed, err := arguments.Pack(jobId, target, dataHashBytes32, deadline, keeperAddress, chainId)
+	packed, err := arguments.Pack(jobId, target, deadline, keeperAddress, chainId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ABI encode parameters: %w", err)
 	}
@@ -72,8 +75,12 @@ func SignContractExecution(
 	// Hash the packed data
 	hash := crypto.Keccak256(packed)
 
-	// Apply Ethereum signed message prefix (matching toEthSignedMessageHash in contract)
-	prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(hash), string(hash))))
+	// Apply Ethereum signed message prefix, matching
+	// MessageHashUtils.toEthSignedMessageHash in Solidity:
+	// keccak256("\x19Ethereum Signed Message:\n32" ++ hash)
+	prefix := []byte("\x19Ethereum Signed Message:\n32")
+	prefixed := append(prefix, hash...)
+	prefixedHash := crypto.Keccak256(prefixed)
 
 	// Sign the prefixed hash
 	signature, err := crypto.Sign(prefixedHash, privateKeyECDSA)

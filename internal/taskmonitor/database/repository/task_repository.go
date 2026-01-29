@@ -90,7 +90,7 @@ func (r *taskRepository) UpdateTaskExecutionData(ctx context.Context, req *types
 			// Update each storage key-value pair
 			for key, value := range ipfsData.ActionData.StorageUpdates {
 				if err := r.db.NewQuery(UpdateScriptStorageQuery,
-					ipfsData.TaskData.TargetData.JobID, key, value, time.Now().UTC()).Exec(); err != nil {
+					value, time.Now().UTC(), ipfsData.TaskData.TargetData.JobID, key).Exec(); err != nil {
 					r.logger.Error(ctx, "Failed to update storage key for job", observability.String("key", key), observability.String("job_id", ipfsData.TaskData.TargetData.JobID), observability.Error(err))
 					return fmt.Errorf("failed to update storage: %w", err)
 				}

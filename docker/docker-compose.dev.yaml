@@ -14,7 +14,7 @@ services:
     command: [ "sh", "-c", "delayed-start.sh 0 go run /app/cmd/dbserver/main.go" ]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./data/cache:/app/data/cache
+      - ../data/cache:/app/data/cache
   
   health:
     <<: *dev
@@ -87,7 +87,7 @@ services:
     command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/keeper/main.go" ]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./data/cache:/app/data/cache
+      - ../data/cache:/app/data/cache
     environment:
       - PRIVATE_KEY=${PERFORMER_PRIVATE_KEY}
       - OPERATOR_ADDRESS=${PERFORMER_OPERATOR_ADDRESS}
@@ -107,7 +107,7 @@ services:
     command: [ "sh", "-c", "delayed-start.sh 1 go run /app/cmd/keeper/main.go" ]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./data/cache:/app/data/cache
+      - ../data/cache:/app/data/cache
     environment:
       - PRIVATE_KEY=${VALIDATOR_PRIVATE_KEY}
       - OPERATOR_ADDRESS=${VALIDATOR_OPERATOR_ADDRESS}

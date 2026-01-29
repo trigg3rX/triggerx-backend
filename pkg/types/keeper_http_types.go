@@ -12,6 +12,12 @@ type PerformerActionData struct {
 	GasUsed      string `json:"gas_used"`
 	Status       bool   `json:"status"`
 
+	// TransactionSubmitted indicates whether an on-chain transaction was actually
+	// broadcast for this action. For agent jobs (TDI 7/8/9), scripts can decide
+	// not to execute on-chain (shouldExecute=false); in that case this will be false
+	// and validators must not expect an on-chain transaction/receipt.
+	TransactionSubmitted bool `json:"transaction_submitted"`
+
 	MemoryUsage   uint64  `json:"memory_usage"`
 	CPUPercentage float64 `json:"cpu_percentage"`
 	NetworkRx     uint64  `json:"network_rx"`

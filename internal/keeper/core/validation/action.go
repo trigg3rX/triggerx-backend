@@ -72,8 +72,15 @@ func shouldRetryReceiptError(err error, attempt int) bool {
 }
 
 func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
-	// v.logger.Debug(ctx, "txHash", observability.String("txHash", actionData.ActionTxHash))
-	// time.Sleep(10 * time.Second)
+	// If no transaction was submitted (e.g. agent script decided shouldExecute=false),
+	// there is nothing to validate on-chain. Treat this as a valid "no-op" action.
+	if actionData == nil {
+		return false, fmt.Errorf("action data is missing")
+	}
+	if !actionData.TransactionSubmitted || actionData.ActionTxHash == "" {
+		return true, nil
+	}
+
 	// Fetch the tx details from the action data
 	txHash := common.HexToHash(actionData.ActionTxHash)
 

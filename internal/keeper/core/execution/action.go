@@ -80,9 +80,10 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		if !customScriptOutput.ShouldExecute {
 			e.logger.Debug(ctx, "[AgentScript] Script returned shouldExecute=false, skipping execution")
 			return types.PerformerActionData{
-				TaskID:         targetData.TaskID,
-				Status:         true,
-				StorageUpdates: storageUpdates,
+				TaskID:               targetData.TaskID,
+				Status:               true,
+				StorageUpdates:       storageUpdates,
+				TransactionSubmitted: false,
 			}, false, nil // false = no transaction submitted
 		}
 
@@ -248,6 +249,7 @@ skipArgumentProcessing:
 		ActionTxHash:       finalTxHash,
 		GasUsed:            strconv.FormatUint(receipt.GasUsed, 10),
 		Status:             receipt.Status == ethtypes.ReceiptStatusSuccessful,
+		TransactionSubmitted: true,
 		MemoryUsage:        result.Stats.MemoryUsage,
 		CPUPercentage:      result.Stats.CPUPercentage,
 		NetworkRx:          result.Stats.RxBytes,

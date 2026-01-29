@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
-
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/core/scheduler/worker"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/database/repository"
@@ -30,7 +28,6 @@ type ConditionBasedScheduler struct {
 	lastTriggerTime      map[string]time.Time                       // jobID -> last trigger timestamp for cooldown
 	workersMutex         sync.RWMutex
 	notificationMutex    sync.Mutex                        // Protect job data during notification processing
-	chainClients         map[string]*nodeclient.NodeClient // chainID -> client
 	HTTPClient           *httppkg.HTTPClient
 	taskRepository       repository.TaskRepository
 	jobRepository   repository.JobRepository
@@ -75,7 +72,6 @@ func NewConditionBasedScheduler(
 		conditionWorkers:     make(map[string]*worker.ConditionWorker),
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
 		lastTriggerTime:      make(map[string]time.Time),
-		chainClients:         make(map[string]*nodeclient.NodeClient),
 		HTTPClient:           httpClient,
 		taskRepository:       taskRepo,
 		jobRepository:   jobRepo,
@@ -98,7 +94,6 @@ func NewConditionBasedScheduler(
 		observability.Int("max_workers", scheduler.maxWorkers),
 		observability.String("scheduler_id", scheduler.schedulerID),
 		observability.String("task_dispatcher_url", config.GetTaskDispatcherRPCUrl()),
-		observability.Int("connected_chains", len(scheduler.chainClients)),
 	)
 
 	return scheduler, nil
@@ -137,13 +132,6 @@ func (s *ConditionBasedScheduler) Stop(ctx context.Context) {
 	s.conditionWorkers = make(map[string]*worker.ConditionWorker)
 	s.jobDataStore = make(map[string]*types.ScheduleConditionJobData)
 	s.workersMutex.Unlock()
-
-	// Close chain clients
-	for chainID, client := range s.chainClients {
-		client.Close()
-		s.logger.Info(ctx, "Closed chain client", observability.String("chain_id", chainID))
-	}
-	s.chainClients = make(map[string]*nodeclient.NodeClient)
 
 	// Close task dispatcher RPC client
 	if err := s.taskDispatcherClient.Close(ctx); err != nil {
