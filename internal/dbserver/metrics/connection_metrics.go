@@ -9,11 +9,6 @@ var (
 	dbHealthy = true
 )
 
-// SetDBConnectionHealth sets the database connection health status
-func SetDBConnectionHealth(healthy bool) {
-	dbHealthy = healthy
-}
-
 // TrackDBConnections tracks database connection health
 func TrackDBConnections() {
 	// Update connection health every 10 seconds

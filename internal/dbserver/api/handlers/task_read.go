@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -270,33 +269,6 @@ func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 	h.logger.Debug(c.Request.Context(), "[GetTasksBySafeAddress] Retrieved tasks", observability.String("safe_address", safeAddress), observability.Int("task_groups_count", len(taskGroups)))
 }
 
-// Helper function to get Explorer base URL from chain ID
-func getExplorerBaseURL(chainID string) string {
-	switch chainID {
-	// Testnets
-	case "11155111":
-		return "https://eth-sepolia.blockscout.com/tx/"
-	case "11155420": // OP Sepolia
-		return "https://testnet-explorer.optimism.io/tx/"
-	case "84532": // Base Sepolia
-		return "https://base-sepolia.blockscout.com/tx/"
-	case "421614": // Arbitrum Sepolia
-		return "https://arbitrum-sepolia.blockscout.com/tx/"
-
-	// Mainnets
-	case "1": // Ethereum Mainnet
-		return "https://eth.blockscout.com/tx/"
-	case "10": // Optimism Mainnet
-		return "https://explorer.optimism.io/tx/"
-	case "8453": // Base Mainnet
-		return "https://base.blockscout.com/tx/"
-	case "42161": // Arbitrum Mainnet
-		return "https://arbitrum.blockscout.com/tx/"
-	default:
-		return "https://sepolia.etherscan.io/tx/"
-	}
-}
-
 func (h *Handler) getTasksGroupedByJob(jobIDs []string) ([]types.TasksByJobGroupResponse, error) {
 	taskGroups := make([]types.TasksByJobGroupResponse, 0, len(jobIDs))
 	seen := make(map[string]struct{})
@@ -332,20 +304,5 @@ func (h *Handler) fetchTasksForJob(jobID string) ([]types.TasksByJobIDResponse, 
 	if err != nil {
 		return nil, err
 	}
-
-	trackChainOp := metrics.TrackDBOperation("read", "job_data")
-	createdChainID, err := h.taskRepository.GetCreatedChainIDByJobID(jobID)
-	trackChainOp(err)
-	if err != nil {
-		return nil, err
-	}
-
-	explorerBaseURL := getExplorerBaseURL(createdChainID)
-	for i := range tasks {
-		if tasks[i].ExecutionTxHash != "" {
-			tasks[i].TxURL = fmt.Sprintf("%s%s", explorerBaseURL, tasks[i].ExecutionTxHash)
-		}
-	}
-
 	return tasks, nil
 }

@@ -70,12 +70,6 @@ func NewCollector(metrics observability.Metrics, logger observability.Logger) *C
 	}
 }
 
-// NewCollectorWithoutLogger creates a new metrics collector without a logger
-// Deprecated: Use NewCollector with a logger for proper error handling
-func NewCollectorWithoutLogger(metrics observability.Metrics) *Collector {
-	return NewCollector(metrics, observability.NewNoOpLogger())
-}
-
 // Handler returns the HTTP handler for metrics endpoint
 func (c *Collector) Handler() http.Handler {
 	return c.handler

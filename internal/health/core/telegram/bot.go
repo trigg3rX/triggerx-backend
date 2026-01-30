@@ -4,8 +4,10 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
@@ -103,8 +105,59 @@ func (b *Bot) updateKeeperChatID(ctx context.Context, keeperAddress string, chat
 	return nil
 }
 
+// SendMessage sends a message to a Telegram chat with timeout and retry logic
 func (b *Bot) SendMessage(chatID int64, message string) error {
+	timeout := config.GetNotificationTimeout()
+	retryAttempts := config.GetNotificationRetryAttempts()
+
 	msg := tgbotapi.NewMessage(chatID, message)
-	_, err := b.api.Send(msg)
-	return err
+
+	var lastErr error
+	for attempt := 0; attempt <= retryAttempts; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		
+		// Create a channel to signal completion
+		done := make(chan error, 1)
+		go func() {
+			_, err := b.api.Send(msg)
+			done <- err
+		}()
+
+		select {
+		case err := <-done:
+			cancel()
+			if err == nil {
+				if attempt > 0 {
+					b.logger.Debug(context.Background(), "Telegram message sent successfully after retry",
+						observability.Int("attempt", attempt+1),
+						observability.Int64("chat_id", chatID),
+					)
+				}
+				return nil
+			}
+			lastErr = err
+		case <-ctx.Done():
+			cancel()
+			lastErr = ctx.Err()
+		}
+
+		if attempt < retryAttempts {
+			// Wait before retrying (exponential backoff)
+			backoff := time.Duration(attempt+1) * time.Second
+			b.logger.Warn(context.Background(), "Telegram message send failed, retrying",
+				observability.Error(lastErr),
+				observability.Int("attempt", attempt+1),
+				observability.Int("max_attempts", retryAttempts+1),
+				observability.Duration("backoff", backoff),
+			)
+			time.Sleep(backoff)
+		}
+	}
+
+	b.logger.Error(context.Background(), "Failed to send Telegram message after all retries",
+		observability.Error(lastErr),
+		observability.Int("total_attempts", retryAttempts+1),
+		observability.Int64("chat_id", chatID),
+	)
+	return lastErr
 }

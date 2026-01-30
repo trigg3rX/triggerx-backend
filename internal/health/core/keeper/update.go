@@ -2,7 +2,6 @@ package keeper
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,11 +11,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-)
-
-// Custom error types
-var (
-	ErrKeeperNotVerified = errors.New("keeper not verified")
 )
 
 // UpdateKeeperHealth updates the health status of a keeper
@@ -32,7 +26,7 @@ func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth typ
 		sm.logger.Warn(ctx, "Received health check-in from unverified keeper",
 			observability.String("keeper", address),
 		)
-		return ErrKeeperNotVerified
+		return fmt.Errorf("keeper not verified")
 	}
 
 	// Update the state with new health check-in data

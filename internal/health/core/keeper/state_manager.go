@@ -38,6 +38,7 @@ func InitializeStateManager(ctx context.Context, logger observability.Logger, tr
 			keeperRepo:  keeperRepo,
 		}
 		go stateManager.startCleanupRoutine(ctx)
+		go stateManager.startPeriodicSync(ctx)
 	})
 	return stateManager
 }

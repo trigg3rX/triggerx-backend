@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -70,9 +69,26 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
 
-	// Update keeper state for all versions
+	// Check if keeper version is in the latest versions list
+	latestVersions := config.GetKeeperLatestVersions()
+	if !config.IsKeeperVersionInList(keeperHealth.Version, latestVersions) {
+		upgradeMessage := config.GetKeeperUpgradeMessage()
+		h.logger.Warn(ctx, "Keeper check-in rejected - version not in latest versions list",
+			observability.String("keeper", keeperHealth.KeeperAddress),
+			observability.String("version", keeperHealth.Version),
+			observability.String("latest_versions", strings.Join(latestVersions, ", ")),
+		)
+		c.JSON(http.StatusUpgradeRequired, gin.H{
+			"error":   "Keeper version not supported",
+			"code":    "VERSION_NOT_SUPPORTED",
+			"message": upgradeMessage,
+		})
+		return
+	}
+
+	// Update keeper state for verified versions
 	if err := h.stateManager.UpdateKeeperHealth(ctx, keeperHealth); err != nil {
-		if errors.Is(err, keeper.ErrKeeperNotVerified) {
+		if strings.Contains(err.Error(), "keeper not verified") {
 			h.logger.Warn(ctx, "Unverified keeper attempted health check-in",
 				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
@@ -105,7 +121,6 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		observability.String("network", string(keeperHealth.Network)),
 	)
 
-	// All versions are allowed to check-in and receive encrypted data
 	// Use network field to decide which task execution address to use
 	var taskExecutionAddress string
 	switch keeperHealth.Network {

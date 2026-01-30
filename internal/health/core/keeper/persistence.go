@@ -99,6 +99,77 @@ func (sm *StateManager) DumpState(ctx context.Context) error {
 	return nil
 }
 
+// startPeriodicSync starts a goroutine that periodically syncs keeper state to database
+func (sm *StateManager) startPeriodicSync(ctx context.Context) {
+	ticker := time.NewTicker(config.GetHealthCheckSyncInterval())
+	defer ticker.Stop()
+
+	sm.logger.Info(ctx, "Starting periodic state sync",
+		observability.String("interval", config.GetHealthCheckSyncInterval().String()),
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			sm.logger.Info(ctx, "Stopping periodic state sync")
+			return
+		case <-ticker.C:
+			sm.syncStateToDatabase(ctx)
+		}
+	}
+}
+
+// syncStateToDatabase syncs all keeper states (uptime, last_checked_in, online status) to database
+func (sm *StateManager) syncStateToDatabase(ctx context.Context) {
+	ctx, span := sm.tracer.Start(ctx, "state_manager.sync_state_to_database",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
+	sm.mu.RLock()
+	keepersToSync := make([]types.KeeperHealthCheckInRequest, 0, len(sm.keepers))
+	for address, state := range sm.keepers {
+		keepersToSync = append(keepersToSync, types.KeeperHealthCheckInRequest{
+			KeeperAddress:    address,
+			Version:          state.Version,
+			PeerID:           state.PeerID,
+			Network:          state.Network,
+			ConsensusAddress: state.ConsensusAddress,
+		})
+	}
+	sm.mu.RUnlock()
+
+	sm.logger.Debug(ctx, "Syncing keeper state to database",
+		observability.Int("keepers_count", len(keepersToSync)),
+	)
+
+	syncedCount := 0
+	for _, keeperHealth := range keepersToSync {
+		sm.mu.RLock()
+		state, exists := sm.keepers[keeperHealth.KeeperAddress]
+		isActive := exists && state != nil && state.IsActive
+		sm.mu.RUnlock()
+
+		if err := sm.retryWithBackoff(ctx, func() error {
+			return sm.updateKeeperStatusInDatabase(ctx, keeperHealth, isActive)
+		}, config.GetHealthCheckMaxRetries()); err != nil {
+			sm.logger.Error(ctx, "Failed to sync keeper state",
+				observability.Error(err),
+				observability.String("keeper", keeperHealth.KeeperAddress),
+			)
+			continue
+		}
+		syncedCount++
+	}
+
+	span.SetAttributes(attribute.Int("keepers.synced", syncedCount))
+	span.SetStatus(codes.Ok, "")
+	sm.logger.Debug(ctx, "Completed periodic state sync",
+		observability.Int("synced", syncedCount),
+		observability.Int("total", len(keepersToSync)),
+	)
+}
+
 // RetryWithBackoff retries a database operation with exponential backoff
 func (sm *StateManager) retryWithBackoff(ctx context.Context, operation func() error, maxRetries int) error {
 	var err error

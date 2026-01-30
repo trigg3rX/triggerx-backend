@@ -49,7 +49,6 @@ type Config struct {
 	// Task Execution Address
 	taskExecutionAddress     string
 	testTaskExecutionAddress string
-	imuaTaskExecutionAddress string
 
 	// YAML-loaded settings
 	databaseOperations   yaml.DatabaseOperationsConfig
@@ -98,7 +97,6 @@ func Init(configPath string) error {
 		upstashRedisRestToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		taskExecutionAddress:          env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
 		testTaskExecutionAddress:      env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
-		imuaTaskExecutionAddress:      env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
 		databaseOperations:            yamlConfig.DatabaseOperations,
 		metrics:                       yamlConfig.Metrics,
 		shutdown:                      yamlConfig.Shutdown,
@@ -146,9 +144,6 @@ func validateConfig(cfg Config) error {
 	}
 	if !env.IsValidEthAddress(cfg.testTaskExecutionAddress) {
 		return fmt.Errorf("invalid test task execution address: %s", cfg.testTaskExecutionAddress)
-	}
-	if !env.IsValidEthAddress(cfg.imuaTaskExecutionAddress) {
-		return fmt.Errorf("invalid Imua task execution address: %s", cfg.imuaTaskExecutionAddress)
 	}
 	if env.IsEmpty(cfg.upstashRedisUrl) {
 		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
@@ -296,8 +291,4 @@ func GetTaskExecutionAddress() string {
 
 func GetTestTaskExecutionAddress() string {
 	return cfg.testTaskExecutionAddress
-}
-
-func GetImuaTaskExecutionAddress() string {
-	return cfg.imuaTaskExecutionAddress
 }

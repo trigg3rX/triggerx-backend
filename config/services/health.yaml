@@ -48,12 +48,5 @@ keeper_versions:
     - "0.3.5"
     - "0.3.6"
   
-  # Versions that use TaskExecutionAddress instead of TestTaskExecutionAddress
-  use_task_execution_address:
-    - "1.0.0"
-    - "1.0.1"
-    - "1.1.1"
-    - "1.1.2"
-  
   # Default upgrade message for very old versions
   upgrade_message: "UPGRADE TO v1.1.1 for full functionality"

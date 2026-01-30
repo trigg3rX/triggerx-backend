@@ -85,9 +85,8 @@ type RPCConfig struct {
 }
 
 type KeeperVersionsConfig struct {
-	Latest                  []string `yaml:"latest"`
-	UseTaskExecutionAddress []string `yaml:"use_task_execution_address"`
-	UpgradeMessage          string   `yaml:"upgrade_message"`
+	Latest         []string `yaml:"latest"`
+	UpgradeMessage string   `yaml:"upgrade_message"`
 }
 
 type YAMLConfig struct {
@@ -377,10 +376,6 @@ func GetRPCHealthTimeout() time.Duration {
 // Keeper version configuration getters
 func GetKeeperLatestVersions() []string {
 	return cfg.keeperVersions.Latest
-}
-
-func GetKeeperVersionsWithTaskExecutionAddress() []string {
-	return cfg.keeperVersions.UseTaskExecutionAddress
 }
 
 func GetKeeperUpgradeMessage() string {

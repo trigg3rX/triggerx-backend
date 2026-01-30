@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/database/repository"
@@ -68,21 +67,6 @@ func (h *InitialDataHandler) handleJobRoomSubscription(ctx context.Context, room
 			TaskStatus:           task.TaskStatus,
 			TaskError:            task.TaskError,
 			ConvertedArguments:   task.ConvertedArguments,
-		}
-	}
-
-	// Get the created_chain_id for the job using jobID from database
-	createdChainID, err := h.taskRepository.GetCreatedChainIDByJobID(jobID)
-	if err != nil {
-		h.logger.Error(ctx, "Error retrieving created_chain_id for jobID", observability.String("job_id", jobID), observability.Error(err))
-		return err
-	}
-
-	// Set tx_url for each task
-	explorerBaseURL := getExplorerBaseURL(createdChainID)
-	for i := range snapshotTasks {
-		if snapshotTasks[i].ExecutionTxHash != "" {
-			snapshotTasks[i].TxURL = fmt.Sprintf("%s%s", explorerBaseURL, snapshotTasks[i].ExecutionTxHash)
 		}
 	}
 
