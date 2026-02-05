@@ -169,7 +169,7 @@ update_keeper_network() {
     }
     END {
         if (!network_updated) {
-            # If network field doesn't exist, add it at the beginning after comments
+            # If network field does not exist, add it at the beginning after comments
             print "network: \"" network "\"                  # Network: mainnet, imua, or sepolia"
         }
     }' "$yaml_file" > "${yaml_file}.tmp" && mv "${yaml_file}.tmp" "$yaml_file"
