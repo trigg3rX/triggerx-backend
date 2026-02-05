@@ -63,7 +63,9 @@ func SignContractExecution(
 	hash := crypto.Keccak256(packed)
 
 	// Apply Ethereum signed message prefix (matching toEthSignedMessageHash in contract)
-	prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(hash), string(hash))))
+	// Use proper byte concatenation - string(hash) corrupts binary data
+	prefix := []byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d", len(hash)))
+	prefixedHash := crypto.Keccak256(append(prefix, hash...))
 
 	// Sign the prefixed hash
 	signature, err := crypto.Sign(prefixedHash, privateKeyECDSA)
