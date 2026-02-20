@@ -763,6 +763,13 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 					// Get from address if provided
 					fromAddress := execCtx.Metadata["from_address"]
 
+					// Prepend jobOwnerAddress for Safe module jobs if available
+					// This matches the updated TriggerXSafeModule contract which expects 6 params:
+					// (jobOwnerAddress, safeAddress, actionTarget, actionValue, actionData, operation)
+					if jobOwnerAddr, ok := execCtx.Metadata["job_owner_address"]; ok && jobOwnerAddr != "" {
+						args = append([]interface{}{jobOwnerAddr}, args...)
+					}
+
 					// Estimate gas for the on-chain transaction
 					gasLimit, gasPrice, currentGasPrice, err := ep.gasEstimator.EstimateGasForFunction(
 						ctx,
@@ -782,8 +789,8 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 						defaultOnChainFee.Mul(defaultOnChainFee, weiMultiplier)
 						onChainFeeWei, _ = defaultOnChainFee.Int(nil)
 						// Also set currentOnChainFeeWei to the same default to prevent nil pointer dereference
-				currentOnChainFeeWei, _ = defaultOnChainFee.Int(nil)
-			} else {
+						currentOnChainFeeWei, _ = defaultOnChainFee.Int(nil)
+					} else {
 						// Calculate gas cost in Wei
 						onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
 						currentOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)

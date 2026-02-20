@@ -356,8 +356,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
+			var eventJobOwnerAddress string
+			if tempJobs[i].IsSafe {
+				eventJobOwnerAddress = strings.ToLower(tempJobs[i].UserAddress)
+			}
 			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
 				JobID:                     commonTypes.NewBigInt(jobID),
+				JobOwnerAddress:           eventJobOwnerAddress,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
@@ -424,8 +429,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
+			var condJobOwnerAddress string
+			if tempJobs[i].IsSafe {
+				condJobOwnerAddress = strings.ToLower(tempJobs[i].UserAddress)
+			}
 			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
 				JobID:                     commonTypes.NewBigInt(jobID),
+				JobOwnerAddress:           condJobOwnerAddress,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,

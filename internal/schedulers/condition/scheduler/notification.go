@@ -158,6 +158,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(ctx contex
 	// Create single task data (not batch like time scheduler)
 	targetData := types.TaskTargetData{
 		JobID:                     jobData.JobID,
+		JobOwnerAddress:           jobData.TaskTargetData.JobOwnerAddress,
 		TaskID:                    jobData.TaskTargetData.TaskID,
 		TaskDefinitionID:          jobData.TaskDefinitionID,
 		TargetChainID:             jobData.TaskTargetData.TargetChainID,

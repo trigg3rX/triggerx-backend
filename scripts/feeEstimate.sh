@@ -1,6 +1,7 @@
 ABI='[
                 {
                   "inputs": [
+                    { "internalType": "address", "name": "jobOwnerAddress", "type": "address" },
                     { "internalType": "address", "name": "safeAddress", "type": "address" },
                     { "internalType": "address", "name": "actionTarget", "type": "address" },
                     { "internalType": "uint256", "name": "actionValue", "type": "uint256" },

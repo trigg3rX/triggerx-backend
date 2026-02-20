@@ -39,6 +39,7 @@ func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.Sch
 		// Generate the task data to send to the performer
 		targetData := types.TaskTargetData{
 			JobID:                     task.TaskTargetData.JobID,
+			JobOwnerAddress:           task.TaskTargetData.JobOwnerAddress,
 			TaskID:                    task.TaskID,
 			TaskDefinitionID:          task.TaskDefinitionID,
 			TargetChainID:             task.TaskTargetData.TargetChainID,

@@ -110,6 +110,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 			"target_function":         targetData.TargetFunction,
 			"abi":                     targetData.ABI,
 			"from_address":            config.GetTaskExecutionAddress(),
+			"job_owner_address":       targetData.JobOwnerAddress,
 		}
 		if targetData.TaskDefinitionID == 1 || targetData.TaskDefinitionID == 3 || targetData.TaskDefinitionID == 5 {
 			argData = e.parseStaticArgs(targetData.Arguments)

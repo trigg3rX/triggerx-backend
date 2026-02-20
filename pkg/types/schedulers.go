@@ -11,6 +11,7 @@ import (
 // DEVNOTE: I separated this from all schedule data types to accomodate multiple target calls on same trigger in future
 type TaskTargetData struct {
 	JobID                     *BigInt  `json:"job_id"`
+	JobOwnerAddress           string   `json:"job_owner_address,omitempty"`
 	TaskID                    int64    `json:"task_id"`
 	TaskDefinitionID          int      `json:"task_definition_id"`
 	TargetChainID             string   `json:"target_chain_id"`
