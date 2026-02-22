@@ -142,6 +142,13 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		return types.PerformerActionData{}, false, fmt.Errorf("unsupported task definition id: %d", targetData.TaskDefinitionID)
 	}
 
+	// Append jobOwnerAddress as the last parameter for Safe module jobs
+	// This matches the TriggerXSafeModule contract which expects 6 params:
+	// (safeAddress, actionTarget, actionValue, actionData, operation, jobOwnerAddress)
+	if targetData.JobOwnerAddress != "" {
+		argData = append(argData, targetData.JobOwnerAddress)
+	}
+
 	// Handle args as potentially structured data
 	convertedArgs, err = e.processArguments(ctx, argData, method.Inputs)
 	if err != nil {

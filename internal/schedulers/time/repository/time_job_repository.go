@@ -63,11 +63,22 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 		}
 
 		var isImua bool
-		err := r.db.Session().Query(isJobImuaQuery, jobIDBigInt).Scan(&isImua)
+		var userID int64
+		var safeAddress string
+		err := r.db.Session().Query(getJobOwnerInfoQuery, jobIDBigInt).Scan(&isImua, &userID, &safeAddress)
 		if err != nil {
 			return nil, err
 		}
 		timeJob.IsImua = isImua
+
+		// If safe_address is set, this is a safe job — look up the user's wallet address
+		if safeAddress != "" {
+			var userAddress string
+			err := r.db.Session().Query(getUserAddressByIDQuery, userID).Scan(&userAddress)
+			if err == nil && userAddress != "" {
+				timeJob.TaskTargetData.JobOwnerAddress = userAddress
+			}
+		}
 
 		// Calculate next execution time after the current execution time
 		nextExecutionTime, err := parser.CalculateNextExecutionTime(timeJob.NextExecutionTimestamp, timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule)
@@ -168,10 +179,15 @@ const (
 			AND expiration_time >= ? AND is_active = true
 		ALLOW FILTERING`
 
-	isJobImuaQuery = `
-		SELECT is_imua
+	getJobOwnerInfoQuery = `
+		SELECT is_imua, user_id, safe_address
 		FROM triggerx.job_data
 		WHERE job_id = ?`
+
+	getUserAddressByIDQuery = `
+		SELECT user_address
+		FROM triggerx.user_data
+		WHERE user_id = ?`
 
 	completeTimeJobStatusQuery = `
 		UPDATE triggerx.time_job_data

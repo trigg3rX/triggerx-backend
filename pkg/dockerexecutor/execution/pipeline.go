@@ -763,11 +763,11 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 					// Get from address if provided
 					fromAddress := execCtx.Metadata["from_address"]
 
-					// Prepend jobOwnerAddress for Safe module jobs if available
-					// This matches the updated TriggerXSafeModule contract which expects 6 params:
-					// (jobOwnerAddress, safeAddress, actionTarget, actionValue, actionData, operation)
+					// Append jobOwnerAddress as the last parameter for Safe module jobs if available
+					// This matches the TriggerXSafeModule contract which expects 6 params:
+					// (safeAddress, actionTarget, actionValue, actionData, operation, jobOwnerAddress)
 					if jobOwnerAddr, ok := execCtx.Metadata["job_owner_address"]; ok && jobOwnerAddr != "" {
-						args = append([]interface{}{jobOwnerAddr}, args...)
+						args = append(args, jobOwnerAddr)
 					}
 
 					// Estimate gas for the on-chain transaction

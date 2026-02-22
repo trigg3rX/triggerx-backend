@@ -19,7 +19,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDefinitionID int, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress string) (*big.Int, *big.Int, error) {
+func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDefinitionID int, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress, jobOwnerAddress string) (*big.Int, *big.Int, error) {
 	// Span: Fee calculation
 	ctx, calcSpan := h.tracer.Start(ctx, "fee.calculate",
 		observability.WithSpanKind(trace.SpanKindInternal),
@@ -79,6 +79,7 @@ func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDe
 					"abi":                     abi,
 					"on_chain_args":           args,
 					"from_address":            from,
+					"job_owner_address":       jobOwnerAddress,
 				}
 
 				// Dynamic argument scripts (2, 4, 6) use Go
@@ -126,6 +127,7 @@ func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDe
 			"abi":                     abi,
 			"on_chain_args":           args,
 			"from_address":            fromAddress,
+			"job_owner_address":       jobOwnerAddress,
 		}
 		result, err := h.dockerExecutor.Execute(ctx, "", string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 		if err != nil {
@@ -165,6 +167,7 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 	abi := c.Query("abi")
 
 	args := c.Query("args")
+	jobOwnerAddress := c.Query("job_owner_address")
 
 	// Default to testnet address unless targetChainID is 42161 or 8453 (mainnet/arbitrum)
 	fromAddress := config.GetTestTaskExecutionAddress()
@@ -178,7 +181,7 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Validation failed: Invalid task_definition_id", observability.String("task_definition_id", taskDefID))
 	}
 
-	totalFee, currentTotalFee, err := h.CalculateTaskFees(context.WithoutCancel(c.Request.Context()), ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress)
+	totalFee, currentTotalFee, err := h.CalculateTaskFees(context.WithoutCancel(c.Request.Context()), ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress, jobOwnerAddress)
 	if err != nil {
 		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Failed to calculate fees", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
