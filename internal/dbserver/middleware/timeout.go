@@ -2,55 +2,31 @@ package middleware
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
 
-// TimeoutMiddleware creates a new middleware that tracks request timeouts
+// TimeoutMiddleware creates a new middleware that applies a context deadline to each request.
+// Handlers should check c.Request.Context().Err() or use context-aware operations to
+// respect the timeout. This avoids spawning a goroutine that races on gin.Context.
 func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip timeout middleware for WebSocket connections
-		// WebSocket connections need to be handled differently as they hijack the connection
 		if c.GetHeader("Upgrade") == "websocket" || c.GetHeader("Connection") == "Upgrade" {
 			c.Next()
 			return
 		}
 
-		// Create a context with timeout
+		// Create a context with timeout and attach it to the request
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 		defer cancel()
 
-		// Create a channel to track request completion
-		done := make(chan struct{})
+		// Replace the request context so downstream handlers/DB calls respect the deadline
+		c.Request = c.Request.WithContext(ctx)
 
-		// Start a goroutine to process the request
-		go func() {
-			c.Next()
-			close(done)
-		}()
-
-		// Wait for either the request to complete or timeout
-		select {
-		case <-done:
-			// Request completed successfully
-			return
-		case <-ctx.Done():
-			// Request timed out
-			endpoint := c.FullPath()
-			if endpoint == "" {
-				endpoint = c.Request.URL.Path
-			}
-
-			// Record timeout
-			metrics.RequestTimeoutsTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
-
-			// Abort the request
-			c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
-				"error": "Request timeout",
-			})
-		}
+		// Process request synchronously — context cancellation will propagate
+		// to any context-aware operation (DB queries, HTTP calls, etc.)
+		c.Next()
 	}
 }

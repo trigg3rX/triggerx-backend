@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -130,6 +131,7 @@ type WebSocketRateLimiter struct {
 	rateLimiter *middleware.RateLimiter
 	maxConns    int
 	connections map[string]int
+	mu          sync.Mutex
 	logger      observability.Logger
 }
 
@@ -145,6 +147,9 @@ func NewWebSocketRateLimiter(rateLimiter *middleware.RateLimiter, maxConns int, 
 
 // CheckRateLimit checks if the client has exceeded rate limits
 func (wrl *WebSocketRateLimiter) CheckRateLimit(ctx context.Context, clientIP string, apiKey *types.ApiKey) bool {
+	wrl.mu.Lock()
+	defer wrl.mu.Unlock()
+
 	// Check connection limit per IP (simple in-memory tracking)
 	if wrl.connections[clientIP] >= wrl.maxConns {
 		wrl.logger.Warn(ctx, "Connection limit exceeded for IP", observability.String("client_ip", clientIP))
@@ -165,6 +170,9 @@ func (wrl *WebSocketRateLimiter) CheckRateLimit(ctx context.Context, clientIP st
 
 // ReleaseConnection releases a connection for rate limiting
 func (wrl *WebSocketRateLimiter) ReleaseConnection(clientIP string) {
+	wrl.mu.Lock()
+	defer wrl.mu.Unlock()
+
 	if wrl.connections[clientIP] > 0 {
 		wrl.connections[clientIP]--
 		if wrl.connections[clientIP] == 0 {

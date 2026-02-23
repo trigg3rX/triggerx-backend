@@ -11,18 +11,19 @@ import (
 
 // Client represents a WebSocket client connection
 type Client struct {
-	ID       string
-	Conn     *websocket.Conn
-	Hub      *Hub
-	Send     chan *Message
-	Rooms    map[string]bool // Track which rooms this client is subscribed to
-	UserID   string          // Associated user ID for authentication
-	APIKey   string          // API key for authentication
-	LastPing time.Time
-	mu       sync.RWMutex
-	logger   observability.Logger
-	ctx      context.Context
-	cancel   context.CancelFunc
+	ID        string
+	Conn      *websocket.Conn
+	Hub       *Hub
+	Send      chan *Message
+	Rooms     map[string]bool // Track which rooms this client is subscribed to
+	UserID    string          // Associated user ID for authentication
+	APIKey    string          // API key for authentication
+	LastPing  time.Time
+	mu        sync.RWMutex
+	closeOnce sync.Once
+	logger    observability.Logger
+	ctx       context.Context
+	cancel    context.CancelFunc
 	// OnClose is called once when the client disconnects (read loop exits)
 	OnClose func()
 }
@@ -290,10 +291,12 @@ func (c *Client) sendMessage(ctx context.Context, msg *Message) {
 	}
 }
 
-// Close closes the client connection
+// Close closes the client connection safely (idempotent)
 func (c *Client) Close() {
-	c.cancel()
-	close(c.Send)
+	c.closeOnce.Do(func() {
+		c.cancel()
+		close(c.Send)
+	})
 }
 
 // IsInRoom checks if the client is subscribed to a specific room

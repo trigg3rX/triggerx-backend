@@ -133,7 +133,7 @@ func (h *Hub) unregisterClient(ctx context.Context, client *Client) {
 
 	if _, ok := h.clients[client]; ok {
 		delete(h.clients, client)
-		close(client.Send)
+		client.Close() // Use Close() which is idempotent via sync.Once
 
 		// Remove client from all rooms
 		for room, clients := range h.rooms {
@@ -193,8 +193,8 @@ func (h *Hub) unsubscribeFromRoom(ctx context.Context, subscription *Subscriptio
 
 // broadcastToRooms broadcasts a message to specific rooms
 func (h *Hub) broadcastToRooms(broadcastMsg *BroadcastMessage) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	message := broadcastMsg.Message
 	rooms := broadcastMsg.Rooms
@@ -205,7 +205,7 @@ func (h *Hub) broadcastToRooms(broadcastMsg *BroadcastMessage) {
 			select {
 			case client.Send <- message:
 			default:
-				close(client.Send)
+				client.Close()
 				delete(h.clients, client)
 			}
 		}
@@ -219,7 +219,7 @@ func (h *Hub) broadcastToRooms(broadcastMsg *BroadcastMessage) {
 				select {
 				case client.Send <- message:
 				default:
-					close(client.Send)
+					client.Close()
 					delete(h.clients, client)
 					delete(clients, client)
 				}

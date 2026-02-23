@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 	otelmetric "go.opentelemetry.io/otel/metric"
@@ -31,6 +32,7 @@ func (c *counter) Inc(ctx context.Context, attrs ...attribute.KeyValue) {
 type gauge struct {
 	upDownCounter otelmetric.Float64UpDownCounter
 	lastValue     float64
+	mu            sync.Mutex
 }
 
 // Record records a value for the gauge
@@ -38,9 +40,10 @@ type gauge struct {
 // The value is treated as an absolute value, and the delta from the last value is recorded
 func (g *gauge) Record(ctx context.Context, value float64, attrs ...attribute.KeyValue) {
 	// Calculate the difference from the last value
-	// Note: This is not thread-safe. For concurrent access, use proper synchronization
+	g.mu.Lock()
 	delta := value - g.lastValue
 	g.lastValue = value
+	g.mu.Unlock()
 	g.upDownCounter.Add(ctx, delta, otelmetric.WithAttributes(attrs...))
 }
 
@@ -140,6 +143,7 @@ type GaugeVec struct {
 	labelKeys []string
 	opts      []InstrumentOption
 	cache     map[string]Gauge // Cache gauge instances per label combination
+	mu        sync.RWMutex
 }
 
 // NewGaugeVec creates a new GaugeVec with the given label names
@@ -163,9 +167,12 @@ func (gv *GaugeVec) WithLabelValues(labelValues ...string) Gauge {
 	cacheKey := strings.Join(labelValues, "\x00") // Use null byte as separator
 
 	// Return cached gauge if it exists
+	gv.mu.RLock()
 	if cached, ok := gv.cache[cacheKey]; ok {
+		gv.mu.RUnlock()
 		return cached
 	}
+	gv.mu.RUnlock()
 
 	attrs := make([]attribute.KeyValue, len(gv.labelKeys))
 	for i, key := range gv.labelKeys {
@@ -179,7 +186,13 @@ func (gv *GaugeVec) WithLabelValues(labelValues ...string) Gauge {
 	}
 
 	// Cache the gauge instance
+	gv.mu.Lock()
+	if cached, ok := gv.cache[cacheKey]; ok {
+		gv.mu.Unlock()
+		return cached
+	}
 	gv.cache[cacheKey] = labeledGauge
+	gv.mu.Unlock()
 
 	return labeledGauge
 }

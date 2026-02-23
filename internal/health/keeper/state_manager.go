@@ -42,11 +42,9 @@ func InitializeStateManager(ctx context.Context, logger observability.Logger, tr
 	return stateManager
 }
 
-// GetStateManager returns the singleton instance of StateManager
+// GetStateManager returns the singleton instance of StateManager.
+// Returns nil if InitializeStateManager has not been called yet.
 func GetStateManager() *StateManager {
-	if stateManager == nil {
-		panic("state manager not initialized")
-	}
 	return stateManager
 }
 

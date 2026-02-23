@@ -5,6 +5,9 @@ othentic/.env
 # release
 release/*
 
+# build output
+dbserver
+
 scripts/tests/*.html
 
 # cursor
