@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
-
-	// "strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -332,11 +331,14 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			)
 			defer aggSpan.End()
 
+			targetChainIDInt, _ := strconv.Atoi(task.TargetData[idx].TargetChainID)
+
 			aggregatorData := types.BroadcastDataForValidators{
 				ProofOfTask:      proofData.ProofOfTask,
 				Data:             []byte(cid),
 				TaskDefinitionID: task.TargetData[idx].TaskDefinitionID,
 				PerformerAddress: config.GetConsensusAddress(),
+				TargetChainID:    targetChainIDInt,
 			}
 
 			// Get trace context for aggregator span event
