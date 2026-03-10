@@ -37,7 +37,7 @@ func Init() error {
 		devMode:                      env.GetEnvBool("DEV_MODE", false),
 		otelExporterEndpoint:         env.GetOTELExporterEndpoint(),
 		serviceID:                    env.GetEnvString("AGGREGATOR_LOG_WATCHER_SERVICE_ID", "1"),
-		aggregatorLogDir:             env.GetEnvString("AGGREGATOR_LOG_DIR", "othentic/data/logs/aggregator"),
+		aggregatorLogDir:             env.GetEnvString("AGGREGATOR_LOG_DIR", "data/logs/aggregator"),
 		eventMonitorRPCUrl:           env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9018"),
 	}
 	if err := validateConfig(); err != nil {

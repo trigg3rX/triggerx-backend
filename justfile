@@ -59,16 +59,16 @@ stop-dev:
     docker compose -f docker/docker-compose.dev.yaml down
 
 start-othentic:
-    docker compose -f othentic/docker-compose.yaml up -d
+    docker compose -f docker/docker-compose.othentic.yaml up -d
 
 stop-othentic:
-    docker compose -f othentic/docker-compose.yaml down
+    docker compose -f docker/docker-compose.othentic.yaml down
 
 logs-dev:
     docker compose -f docker/docker-compose.dev.yaml logs -f
 
 logs-othentic:
-    docker compose -f othentic/docker-compose.yaml logs -f
+    docker compose -f docker/docker-compose.othentic.yaml logs -f
 
 # Start the Database Server
 start-db-server args="":

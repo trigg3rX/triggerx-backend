@@ -3,7 +3,7 @@ x-otnode: &otnode
     - .env
   build:
     context: ..
-    dockerfile: ./othentic/Dockerfile
+    dockerfile: ./docker/Dockerfile.othentic
     no_cache: true
 
 services:
@@ -35,7 +35,7 @@ services:
       - OTHENTIC_BOOTSTRAP_SEED=${OTHENTIC_BOOTSTRAP_SEED}
       - LOG_DIR=/data/logs/aggregator
     volumes:
-      - ./data/logs/aggregator:/data/logs/aggregator
+      - ./../data/logs/aggregator:/data/logs/aggregator
 
   performer:
     container_name: performer
@@ -56,12 +56,12 @@ services:
       - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
     volumes:
-      - ../data/logs/performer:/data/logs
+      - ./../data/logs/performer:/data/logs
     depends_on:
       - aggregator
 
-  attester:
-    container_name: attester
+  validator:
+    container_name: validator
     <<: *otnode
     network_mode: host
     env_file:
@@ -72,13 +72,13 @@ services:
       "/usr/local/bin/delayed-start.sh 3 otnode run attester /ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB --avs-webapi http://127.0.0.1 --avs-webapi-port 9031 --l1-chain sepolia:nightly --l2-chain base-sepolia:nightly --json-rpc --json-rpc.port 9032 --json-rpc.custom-message-enabled --p2p.port 9874"
     ]
     environment:
-      - PRIVATE_KEY=${ATTESTER_BLS_PRIVATE_KEY}
-      - OPERATOR_ADDRESS=${ATTESTER_OPERATOR_ADDRESS}
+      - PRIVATE_KEY=${VALIDATOR_BLS_PRIVATE_KEY}
+      - OPERATOR_ADDRESS=${VALIDATOR_OPERATOR_ADDRESS}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
       - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
     volumes:
-      - ../data/logs/attester:/data/logs
+      - ./../data/logs/validator:/data/logs
     depends_on:
       - aggregator
